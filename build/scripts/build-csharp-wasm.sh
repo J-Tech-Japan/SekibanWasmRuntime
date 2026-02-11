@@ -17,7 +17,7 @@ echo "[build-csharp-wasm]   publish-dir: $PUBLISH_DIR"
 if ! dotnet publish "$WASM_PROJ" -c Release -r wasi-wasm -o "$PUBLISH_DIR"; then
   echo "[build-csharp-wasm] ERROR: dotnet publish failed." >&2
   echo "[build-csharp-wasm] Check the following in SekibanWasm.Wasm.csproj:" >&2
-  echo "[build-csharp-wasm]   - PublishTrimmed should be false" >&2
+  echo "[build-csharp-wasm]   - PublishTrimmed must not be set to false (NativeAOT implies trimming)" >&2
   echo "[build-csharp-wasm]   - IlcTrimMetadata should be false" >&2
   echo "[build-csharp-wasm]   - RuntimeIdentifier should be wasi-wasm" >&2
   exit 1
