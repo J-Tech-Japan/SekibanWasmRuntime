@@ -2,4 +2,9 @@
   <PropertyGroup>
     <WasmtimeDotnetPath>$(MSBuildThisFileDirectory)external/wasmtime-dotnet/src</WasmtimeDotnetPath>
   </PropertyGroup>
+
+  <!-- Silence warnings originating from submodule code so solution builds stay clean. -->
+  <PropertyGroup Condition="$([System.String]::Copy('$(MSBuildProjectFullPath)').Contains('/external/wasmtime-dotnet/'))">
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
 </Project>

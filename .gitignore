@@ -11,6 +11,7 @@
 *.sln.docstates
 *.env
 .DS_Store
+.idea/
 **/target/
 
 # User-specific files (MonoDevelop/Xamarin Studio)

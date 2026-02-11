@@ -32,8 +32,19 @@ app.MapDefaultEndpoints();
 app.MapOpenApi();
 
 // WeatherForecast API endpoints
-app.MapPost("/api/weatherforecast", async (CreateWeatherForecast command, ISekibanExecutor executor) =>
+// Resolve ISekibanExecutor at request-time so missing wiring doesn't break endpoint-table initialization
+// (otherwise all routes can fail with "Failure to infer one or more parameters").
+app.MapPost("/api/weatherforecast", async (HttpContext http, CreateWeatherForecast command) =>
 {
+    var executor = http.RequestServices.GetService<ISekibanExecutor>();
+    if (executor is null)
+    {
+        return Results.Problem(
+            title: "Sekiban is not configured",
+            detail: "ISekibanExecutor is not registered. Configure Sekiban DCB executor wiring before using this endpoint.",
+            statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+
     var result = await executor.ExecuteAsync(command);
     return Results.Ok(result);
 });
