@@ -1,0 +1,7 @@
+[submodule "submodules/Sekiban"]
+	path = submodules/Sekiban
+	url = https://github.com/J-Tech-Japan/Sekiban
+[submodule "external/wasmtime-dotnet"]
+	path = external/wasmtime-dotnet
+	url = https://github.com/J-Tech-Japan/wasmtime-dotnet.git
+	branch = feature/component-model

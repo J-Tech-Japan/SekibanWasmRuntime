@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RuntimeIdentifier>wasi-wasm</RuntimeIdentifier>
+    <OutputType>library</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <PublishTrimmed>true</PublishTrimmed>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <IsAotCompatible>true</IsAotCompatible>
+    <WASI_SDK_PATH Condition="'$(WASI_SDK_PATH)' == ''">/opt/wasi-sdk</WASI_SDK_PATH>
+    <SelfContained>true</SelfContained>
+    <MSBuildEnableWorkloadResolver>false</MSBuildEnableWorkloadResolver>
+    <IlcExportUnmanagedEntrypoints>true</IlcExportUnmanagedEntrypoints>
+    <NativeLib>Shared</NativeLib>
+    <WasmEnableThreads>false</WasmEnableThreads>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'wasi-wasm' and $([MSBuild]::IsOsPlatform('OSX')) and '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)'=='Arm64'">
+    <IlcHostPackagePath>$(Pkgruntime_osx-arm64_Microsoft_DotNet_ILCompiler)</IlcHostPackagePath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'wasi-wasm' and '$(IlcHostPackagePath)' == ''">
+    <IlcHostPackagePath>$(PkgMicrosoft_DotNet_ILCompiler_LLVM)</IlcHostPackagePath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <LinkerArg Include="-mexec-model=reactor" />
+    <LinkerArg Include="-Wl,--export,_initialize" />
+    <LinkerArg Include="-Wl,--export,alloc" />
+    <LinkerArg Include="-Wl,--export,dealloc" />
+    <LinkerArg Include="-Wl,--export,create_instance" />
+    <LinkerArg Include="-Wl,--export,apply_event" />
+    <LinkerArg Include="-Wl,--export,apply_events_batch" />
+    <LinkerArg Include="-Wl,--export,execute_query" />
+    <LinkerArg Include="-Wl,--export,execute_list_query" />
+    <LinkerArg Include="-Wl,--export,serialize_state" />
+    <LinkerArg Include="-Wl,--export,restore_state" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.DotNet.ILCompiler.LLVM" Version="10.0.0-*" />
+    <PackageReference Include="runtime.linux-x64.microsoft.dotnet.ilcompiler.llvm" Version="10.0.0-*"
+                      Condition="$([MSBuild]::IsOsPlatform('Linux'))" />
+    <PackageReference Include="runtime.osx-arm64.microsoft.dotnet.ilcompiler" Version="10.0.0"
+                      Condition="$([MSBuild]::IsOsPlatform('OSX')) and '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)'=='Arm64'" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SekibanWasm.Domain\SekibanWasm.Domain.csproj" />
+  </ItemGroup>
+</Project>

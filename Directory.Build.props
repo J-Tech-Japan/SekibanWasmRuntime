@@ -1,0 +1,5 @@
+<Project>
+  <PropertyGroup>
+    <WasmtimeDotnetPath>$(MSBuildThisFileDirectory)external/wasmtime-dotnet/src</WasmtimeDotnetPath>
+  </PropertyGroup>
+</Project>
