@@ -1,0 +1,9 @@
+[workspace]
+members = [
+  "sekiban-core",
+  "sekiban-derive",
+  "sekiban-wasm",
+  "domain",
+  "wasm-projector",
+]
+resolver = "2"

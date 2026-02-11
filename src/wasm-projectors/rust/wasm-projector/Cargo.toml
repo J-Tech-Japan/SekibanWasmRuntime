@@ -1,0 +1,12 @@
+[package]
+name = "sekiban-wasm-projector"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+sekiban-core = { path = "../sekiban-core" }
+sekiban-wasm = { path = "../sekiban-wasm" }
+sekiban-wasm-domain = { path = "../domain" }

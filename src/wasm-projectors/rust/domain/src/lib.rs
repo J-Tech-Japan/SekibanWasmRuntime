@@ -1,0 +1,36 @@
+pub mod events;
+pub mod projectors;
+pub mod queries;
+pub mod states;
+pub mod tags;
+
+pub use events::*;
+pub use projectors::*;
+pub use queries::*;
+pub use states::*;
+pub use tags::*;
+
+use sekiban_core::prelude::*;
+
+domain_types!(WeatherForecastDomain {
+    events: [
+        WeatherForecastCreated,
+        WeatherForecastLocationUpdated,
+        WeatherForecastDeleted,
+    ],
+    tags: [
+        WeatherForecastTag,
+    ],
+    tag_projectors: [
+        WeatherForecastProjector,
+    ],
+    multi_projectors: [
+        WeatherForecastListProjector,
+    ],
+    queries: [
+        GetWeatherForecastCountQuery,
+    ],
+    list_queries: [
+        GetWeatherForecastListQuery,
+    ],
+});
