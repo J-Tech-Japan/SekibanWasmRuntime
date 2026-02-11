@@ -1,0 +1,16 @@
+<Solution>
+  <Folder Name="/internalUsage/">
+    <Project Path="internalUsage/SekibanWasm.ApiService/SekibanWasm.ApiService.csproj" />
+    <Project Path="internalUsage/SekibanWasm.AppHost/SekibanWasm.AppHost.csproj" />
+    <Project Path="internalUsage/SekibanWasm.Domain/SekibanWasm.Domain.csproj" />
+    <Project Path="internalUsage/SekibanWasm.ServiceDefaults/SekibanWasm.ServiceDefaults.csproj" />
+    <Project Path="internalUsage/SekibanWasm.Tests/SekibanWasm.Tests.csproj" />
+    <Project Path="internalUsage/SekibanWasm.Wasm/SekibanWasm.Wasm.csproj" />
+  </Folder>
+  <Folder Name="/lib/">
+    <Project Path="lib/Sekiban.Dcb.WasmRuntime.Remote/Sekiban.Dcb.WasmRuntime.Remote.csproj" />
+    <Project Path="lib/Sekiban.Dcb.WasmRuntime.Wasmtime/Sekiban.Dcb.WasmRuntime.Wasmtime.csproj" />
+    <Project Path="lib/Sekiban.Dcb.WasmRuntime/Sekiban.Dcb.WasmRuntime.csproj" />
+  </Folder>
+  <Project Path="../external/wasmtime-dotnet/src/Wasmtime.csproj" />
+</Solution>
