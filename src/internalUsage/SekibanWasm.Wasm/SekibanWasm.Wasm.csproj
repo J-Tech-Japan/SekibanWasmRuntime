@@ -11,16 +11,9 @@
     <IsAotCompatible>true</IsAotCompatible>
     <WASI_SDK_PATH Condition="'$(WASI_SDK_PATH)' == ''">/opt/wasi-sdk</WASI_SDK_PATH>
     <SelfContained>true</SelfContained>
-    <MSBuildEnableWorkloadResolver>false</MSBuildEnableWorkloadResolver>
     <IlcExportUnmanagedEntrypoints>true</IlcExportUnmanagedEntrypoints>
     <NativeLib>Shared</NativeLib>
     <WasmEnableThreads>false</WasmEnableThreads>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'wasi-wasm' and $([MSBuild]::IsOsPlatform('OSX')) and '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)'=='Arm64'">
-    <IlcHostPackagePath>$(Pkgruntime_osx-arm64_Microsoft_DotNet_ILCompiler)</IlcHostPackagePath>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'wasi-wasm' and '$(IlcHostPackagePath)' == ''">
-    <IlcHostPackagePath>$(PkgMicrosoft_DotNet_ILCompiler_LLVM)</IlcHostPackagePath>
   </PropertyGroup>
 
   <ItemGroup>
@@ -38,7 +31,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.DotNet.ILCompiler.LLVM" Version="10.0.0-*" />
     <PackageReference Include="runtime.linux-x64.microsoft.dotnet.ilcompiler.llvm" Version="10.0.0-*"
                       Condition="$([MSBuild]::IsOsPlatform('Linux'))" />
     <PackageReference Include="runtime.osx-arm64.microsoft.dotnet.ilcompiler" Version="10.0.0"
