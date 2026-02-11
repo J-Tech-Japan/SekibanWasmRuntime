@@ -16,10 +16,10 @@ jobs:
           dotnet-version: '10.0.x'
           dotnet-quality: 'preview'
       - name: Restore
-        run: dotnet restore src/SekibanWasmRuntime.slnx
+        run: dotnet restore src/SekibanWasmRuntime.ci.slnx
       - name: Build
-        run: dotnet build src/SekibanWasmRuntime.slnx -c Release --no-restore
+        run: dotnet build src/SekibanWasmRuntime.ci.slnx -c Release --no-restore
       - name: Test
-        run: dotnet test src/SekibanWasmRuntime.slnx -c Release --no-build
+        run: dotnet test src/SekibanWasmRuntime.ci.slnx -c Release --no-build
       - name: Pack
-        run: dotnet pack src/SekibanWasmRuntime.slnx -c Release -o artifacts/nuget
+        run: dotnet pack src/SekibanWasmRuntime.ci.slnx -c Release -o artifacts/nuget
