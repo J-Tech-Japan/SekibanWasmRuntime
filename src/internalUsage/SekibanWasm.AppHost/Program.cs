@@ -37,4 +37,17 @@ if (e2eApiPort is > 0 and < 65536)
     apiService = apiService.WithEnvironment("ASPNETCORE_URLS", "http://127.0.0.1:" + e2eApiPort.ToString());
 }
 
+// Forward projection runtime configuration to ApiService
+var projectionRuntime = Environment.GetEnvironmentVariable("SEKIBAN_PROJECTION_RUNTIME");
+if (!string.IsNullOrEmpty(projectionRuntime))
+{
+    apiService = apiService.WithEnvironment("SEKIBAN_PROJECTION_RUNTIME", projectionRuntime);
+}
+
+var wasmModulePath = Environment.GetEnvironmentVariable("WASM_MODULE_PATH");
+if (!string.IsNullOrEmpty(wasmModulePath))
+{
+    apiService = apiService.WithEnvironment("Wasm__DefaultModulePath", wasmModulePath);
+}
+
 builder.Build().Run();
