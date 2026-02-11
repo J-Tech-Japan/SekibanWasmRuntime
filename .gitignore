@@ -12,8 +12,8 @@
 *.env
 .DS_Store
 .idea/
+.takt/
 **/target/
-.idea/
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
