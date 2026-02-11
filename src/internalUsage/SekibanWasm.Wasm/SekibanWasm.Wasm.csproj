@@ -6,7 +6,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <PublishTrimmed>true</PublishTrimmed>
+    <PublishTrimmed>false</PublishTrimmed>
+    <IlcTrimMetadata>false</IlcTrimMetadata>
     <InvariantGlobalization>true</InvariantGlobalization>
     <IsAotCompatible>true</IsAotCompatible>
     <WASI_SDK_PATH Condition="'$(WASI_SDK_PATH)' == ''">/opt/wasi-sdk</WASI_SDK_PATH>
@@ -31,9 +32,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="runtime.linux-x64.microsoft.dotnet.ilcompiler.llvm" Version="10.0.0-*"
+    <PackageReference Include="runtime.linux-x64.microsoft.dotnet.ilcompiler.llvm"
                       Condition="$([MSBuild]::IsOsPlatform('Linux'))" />
-    <PackageReference Include="runtime.osx-arm64.microsoft.dotnet.ilcompiler" Version="10.0.0"
+    <PackageReference Include="runtime.osx-arm64.microsoft.dotnet.ilcompiler"
                       Condition="$([MSBuild]::IsOsPlatform('OSX')) and '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)'=='Arm64'" />
   </ItemGroup>
 

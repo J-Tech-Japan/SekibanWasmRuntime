@@ -19,6 +19,16 @@ jobs:
         run: dotnet restore src/SekibanWasmRuntime.ci.slnx
       - name: Build
         run: dotnet build src/SekibanWasmRuntime.ci.slnx -c Release --no-restore
+
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Add Rust wasm32-wasip1 target
+        run: rustup target add wasm32-wasip1
+
+      - name: Build C# WASM module
+        run: ./build/scripts/build-csharp-wasm.sh
+      - name: Build Rust WASM module
+        run: ./build/scripts/build-rust-wasm.sh
+
       - name: Test
         run: dotnet test src/SekibanWasmRuntime.ci.slnx -c Release --no-build
       - name: Pack

@@ -12,9 +12,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Sekiban.Dcb.Core.Model" Version="10.1.0-preview02" />
-    <PackageReference Include="Sekiban.Dcb.Orleans.Core" Version="10.1.0-preview02" />
-    <PackageReference Include="Sekiban.Dcb.Core" Version="10.1.0-preview02" />
+    <PackageReference Include="Sekiban.Dcb.Core.Model" />
+    <PackageReference Include="Sekiban.Dcb.Orleans.Core" />
+    <PackageReference Include="Sekiban.Dcb.Core" />
   </ItemGroup>
 
 </Project>
