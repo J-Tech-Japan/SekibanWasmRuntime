@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using Sekiban.Dcb.Primitives;
 
@@ -34,7 +35,7 @@ public class RemotePrimitiveProjectionInstance : IPrimitiveProjectionInstance
             }
         };
         var response = _httpClient
-            .PostAsJsonAsync($"{_endpoint}/v1/instances/{_instanceId}/apply-events", request)
+            .PostAsJsonAsync($"{_endpoint}/v1/instances/{_instanceId}/events", request)
             .GetAwaiter().GetResult();
         response.EnsureSuccessStatusCode();
     }
@@ -47,7 +48,9 @@ public class RemotePrimitiveProjectionInstance : IPrimitiveProjectionInstance
             .GetAwaiter().GetResult();
         response.EnsureSuccessStatusCode();
 
-        return response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        var body = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        using var doc = JsonDocument.Parse(body);
+        return doc.RootElement.GetProperty("resultJson").GetString()!;
     }
 
     public string ExecuteListQuery(string queryType, string queryParamsJson)
@@ -58,7 +61,9 @@ public class RemotePrimitiveProjectionInstance : IPrimitiveProjectionInstance
             .GetAwaiter().GetResult();
         response.EnsureSuccessStatusCode();
 
-        return response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        var body = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        using var doc = JsonDocument.Parse(body);
+        return doc.RootElement.GetProperty("resultJson").GetString()!;
     }
 
     public string SerializeState()
@@ -68,12 +73,15 @@ public class RemotePrimitiveProjectionInstance : IPrimitiveProjectionInstance
             .GetAwaiter().GetResult();
         response.EnsureSuccessStatusCode();
 
-        return response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        var body = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        using var doc = JsonDocument.Parse(body);
+        return doc.RootElement.GetProperty("stateJson").GetString()!;
     }
 
     public void RestoreState(string stateJson)
     {
-        var content = new StringContent(stateJson, System.Text.Encoding.UTF8, "application/json");
+        var envelope = JsonSerializer.Serialize(new { stateJson });
+        var content = new StringContent(envelope, Encoding.UTF8, "application/json");
         var response = _httpClient
             .PutAsync($"{_endpoint}/v1/instances/{_instanceId}/snapshot", content)
             .GetAwaiter().GetResult();

@@ -5,6 +5,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>Sekiban.Dcb.WasmRuntime.Remote</RootNamespace>
+    <IsPackable>true</IsPackable>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <PackageId>Sekiban.Dcb.WasmRuntime.Remote</PackageId>
+    <Description>Sekiban DCB WASM runtime remote HTTP runner client</Description>
   </PropertyGroup>
 
   <ItemGroup>

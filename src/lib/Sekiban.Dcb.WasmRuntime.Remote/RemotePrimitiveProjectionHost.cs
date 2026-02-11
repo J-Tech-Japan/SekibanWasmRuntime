@@ -18,11 +18,7 @@ public class RemotePrimitiveProjectionHost : IPrimitiveProjectionHost
     public IPrimitiveProjectionInstance CreateInstance(string projectorName)
     {
         var endpoint = _options.Endpoint.TrimEnd('/');
-        var request = new
-        {
-            projectorName,
-            instanceKey = $"{projectorName}/{Guid.NewGuid()}"
-        };
+        var request = new { projectorName };
 
         var response = _httpClient
             .PostAsJsonAsync($"{endpoint}/v1/instances", request)

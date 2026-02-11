@@ -19,6 +19,4 @@ public class FakePrimitiveProjectionHost : IPrimitiveProjectionHost
         }
         throw new InvalidOperationException($"No factory registered for projector '{projectorName}'");
     }
-
-    public List<string> CreatedInstances { get; } = [];
 }

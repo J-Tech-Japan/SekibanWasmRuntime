@@ -6,6 +6,7 @@
     <Project Path="internalUsage/SekibanWasm.ServiceDefaults/SekibanWasm.ServiceDefaults.csproj" />
     <Project Path="internalUsage/SekibanWasm.Tests/SekibanWasm.Tests.csproj" />
     <Project Path="internalUsage/SekibanWasm.Wasm/SekibanWasm.Wasm.csproj" />
+    <Project Path="internalUsage/DcbRuntime.WasmRunner/DcbRuntime.WasmRunner.csproj" />
   </Folder>
   <Folder Name="/lib/">
     <Project Path="lib/Sekiban.Dcb.WasmRuntime.Remote/Sekiban.Dcb.WasmRuntime.Remote.csproj" />

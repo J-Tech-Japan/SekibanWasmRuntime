@@ -4,9 +4,11 @@ using SekibanWasm.Domain.Weather;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Orleans;
 using Sekiban.Dcb.Postgres;
+using Sekiban.Dcb.Primitives;
 using Sekiban.Dcb.Runtime;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.WasmRuntime;
+using Sekiban.Dcb.WasmRuntime.Remote;
 using Sekiban.Dcb.WasmRuntime.Wasmtime;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -48,9 +50,7 @@ if (projectionRuntime.Equals("wasm", StringComparison.OrdinalIgnoreCase))
         ModuleVersion: "1.0.0",
         ProjectorVersion: "1.0.0"));
 
-    registry.MapQueryToProjector("GetWeatherForecastCountQuery", "WeatherForecastMultiProjection");
-    registry.MapQueryToProjector("GetWeatherForecastListQuery", "WeatherForecastMultiProjection");
-    registry.MapQueryToProjector("WeatherForecastListQuery", "WeatherForecastMultiProjection");
+    RegisterWeatherQueryMappings(registry);
 
     builder.Services.AddSingleton(registry);
 
@@ -61,6 +61,71 @@ if (projectionRuntime.Equals("wasm", StringComparison.OrdinalIgnoreCase))
 
     builder.Services.AddSingleton<JsonSerializerOptions>(_ => DomainJsonContext.Default.Options);
 
+    builder.Services.AddSingleton<IProjectionRuntime, WasmProjectionRuntime>();
+}
+else if (projectionRuntime.Equals("hybrid", StringComparison.OrdinalIgnoreCase))
+{
+    var wasmModulePath = builder.Configuration["Wasm:DefaultModulePath"]
+        ?? throw new InvalidOperationException(
+            "Wasm:DefaultModulePath configuration is required when SEKIBAN_PROJECTION_RUNTIME=hybrid. " +
+            "Set the Wasm__DefaultModulePath environment variable to the absolute path of the .wasm module.");
+
+    var registry = new WasmProjectorRegistry();
+    registry.Register(new WasmModuleRef(
+        ProjectorName: "WeatherForecastMultiProjection",
+        ModulePath: wasmModulePath,
+        AbiKind: "wasi-preview1",
+        ModuleVersion: "1.0.0",
+        ProjectorVersion: "1.0.0"));
+
+    RegisterWeatherQueryMappings(registry);
+
+    builder.Services.AddSingleton(registry);
+
+    builder.Services.AddWasmtimeProjectionHost(opt =>
+    {
+        opt.DefaultModulePath = wasmModulePath;
+    });
+
+    builder.Services.AddSingleton<JsonSerializerOptions>(_ => DomainJsonContext.Default.Options);
+
+    var nativeRuntime = builder.Services
+        .BuildServiceProvider()
+        .GetRequiredService<IProjectionRuntime>();
+
+    builder.Services.AddSingleton<WasmProjectionRuntime>();
+    builder.Services.AddSingleton<Sekiban.Dcb.WasmRuntime.IProjectorRuntimeResolver>(sp =>
+        new ProjectorRuntimeResolver(
+            defaultRuntime: nativeRuntime,
+            runtimeMap: new Dictionary<string, IProjectionRuntime>
+            {
+                ["WeatherForecastMultiProjection"] = sp.GetRequiredService<WasmProjectionRuntime>()
+            }));
+
+    builder.Services.AddSingleton<IProjectionRuntime, CompositeProjectionRuntime>();
+}
+else if (projectionRuntime.Equals("remote", StringComparison.OrdinalIgnoreCase))
+{
+    var remoteEndpoint = builder.Configuration["RemoteRunner:Endpoint"]
+        ?? throw new InvalidOperationException(
+            "RemoteRunner:Endpoint configuration is required when SEKIBAN_PROJECTION_RUNTIME=remote. " +
+            "Set the RemoteRunner__Endpoint environment variable.");
+
+    var registry = new WasmProjectorRegistry();
+    registry.Register(new WasmModuleRef(
+        ProjectorName: "WeatherForecastMultiProjection",
+        ModulePath: "remote",
+        AbiKind: "remote",
+        ModuleVersion: "1.0.0",
+        ProjectorVersion: "1.0.0"));
+
+    RegisterWeatherQueryMappings(registry);
+
+    builder.Services.AddSingleton(registry);
+    builder.Services.AddHttpClient();
+    builder.Services.AddSingleton(new RemoteRunnerOptions { Endpoint = remoteEndpoint });
+    builder.Services.AddSingleton<IPrimitiveProjectionHost, RemotePrimitiveProjectionHost>();
+    builder.Services.AddSingleton<JsonSerializerOptions>(_ => DomainJsonContext.Default.Options);
     builder.Services.AddSingleton<IProjectionRuntime, WasmProjectionRuntime>();
 }
 
@@ -96,3 +161,10 @@ app.MapGet("/api/weatherforecast", () =>
 });
 
 app.Run();
+
+static void RegisterWeatherQueryMappings(WasmProjectorRegistry registry)
+{
+    registry.MapQueryToProjector("GetWeatherForecastCountQuery", "WeatherForecastMultiProjection");
+    registry.MapQueryToProjector("GetWeatherForecastListQuery", "WeatherForecastMultiProjection");
+    registry.MapQueryToProjector("WeatherForecastListQuery", "WeatherForecastMultiProjection");
+}

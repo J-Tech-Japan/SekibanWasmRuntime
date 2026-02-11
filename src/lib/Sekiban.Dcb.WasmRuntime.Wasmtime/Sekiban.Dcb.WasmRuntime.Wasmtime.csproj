@@ -5,6 +5,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>Sekiban.Dcb.WasmRuntime.Wasmtime</RootNamespace>
+    <IsPackable>true</IsPackable>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <PackageId>Sekiban.Dcb.WasmRuntime.Wasmtime</PackageId>
+    <Description>Sekiban DCB WASM runtime Wasmtime in-process host</Description>
   </PropertyGroup>
 
   <ItemGroup>

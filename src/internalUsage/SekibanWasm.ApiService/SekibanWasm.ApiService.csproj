@@ -30,6 +30,7 @@
     <ProjectReference Include="..\SekibanWasm.Domain\SekibanWasm.Domain.csproj" />
     <ProjectReference Include="..\..\lib\Sekiban.Dcb.WasmRuntime\Sekiban.Dcb.WasmRuntime.csproj" />
     <ProjectReference Include="..\..\lib\Sekiban.Dcb.WasmRuntime.Wasmtime\Sekiban.Dcb.WasmRuntime.Wasmtime.csproj" />
+    <ProjectReference Include="..\..\lib\Sekiban.Dcb.WasmRuntime.Remote\Sekiban.Dcb.WasmRuntime.Remote.csproj" />
   </ItemGroup>
 
 </Project>
