@@ -16,9 +16,10 @@ mkdir -p "$MODULES_DIR"
 echo "[build-rust-wasm] Building Rust WASM module..."
 cargo build --manifest-path "$RUST_DIR/Cargo.toml" --target wasm32-wasip1 --release
 
-WASM_FILE="$ROOT/target/wasm32-wasip1/release/weather_projector.wasm"
+RUST_TARGET_DIR="$RUST_DIR/target"
+WASM_FILE="$RUST_TARGET_DIR/wasm32-wasip1/release/weather_projector.wasm"
 if [[ ! -f "$WASM_FILE" ]]; then
-  WASM_FILE=$(find "$ROOT/target/wasm32-wasip1/release" -maxdepth 1 -name '*.wasm' -type f | head -n 1)
+  WASM_FILE=$(find "$RUST_TARGET_DIR/wasm32-wasip1/release" -maxdepth 1 -name '*.wasm' -type f | head -n 1)
 fi
 
 if [[ -z "$WASM_FILE" || ! -f "$WASM_FILE" ]]; then

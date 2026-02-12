@@ -238,6 +238,21 @@ This repo already has a starter script shape at `scripts/e2e-aspire-smoke.sh` th
 - Whether `ITagProjectionRuntime` also needs a WASM implementation (depends on DCB runtime behavior).
 - Whether we want to adopt the POC “WasmServer” split (remote execution) or keep “in-process Wasmtime”.
 
+## Guide-vs-Implementation Differences
+
+The original guide (`IMPLEMENTATION_GUIDE.md`) proposed creating separate projects
+(`DcbRuntime.WasmOnly.ApiService`, etc.) for each runtime mode. The actual implementation
+diverges from this approach for the following reasons:
+
+| Guide Proposal | Actual Implementation | Reason |
+|---|---|---|
+| Separate `DcbRuntime.WasmOnly.ApiService` project | Runtime switching via `SEKIBAN_PROJECTION_RUNTIME` env var in `SekibanWasm.ApiService` | Avoids project proliferation; a single entry-point with config-driven behaviour is simpler to maintain and deploy |
+| `AddSekibanDcbNativeRuntime()` removed in WASM mode | `AddSekibanDcbNativeRuntime()` always called; WASM/hybrid/remote overrides `IProjectionRuntime` afterward | Native runtime also registers `IEventRuntime` and `ITagProjectionRuntime`, which remain needed regardless of projection mode |
+| `BuildServiceProvider()` for hybrid runtime resolution | Factory delegate pattern resolving NativeProjectionRuntime by concrete type | Eliminates `ASP0000` warning; avoids creating a second service provider and circular dependency |
+| `PublishTrimmed=true` in WASM csproj | `PublishTrimmed=false` + `IlcTrimMetadata=false` | Required to avoid IL1034 errors with the current NativeAOT-WASI toolchain for library outputs |
+| No `global.json` / `Directory.Packages.props` | Both files added at repository root | Ensures SDK version pinning and central package version management for reproducible builds |
+| WASM build not in CI | CI runs both `build-csharp-wasm.sh` and `build-rust-wasm.sh` between Build and Test | Catches WASM build regressions automatically |
+
 ## Reference: POC patterns
 
 If you need an example of port pinning and E2E orchestration, see:

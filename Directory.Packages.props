@@ -1,0 +1,66 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageFloatingVersionsEnabled>true</CentralPackageFloatingVersionsEnabled>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Aspire -->
+    <PackageVersion Include="Aspire.Azure.Data.Tables" Version="13.1.0" />
+    <PackageVersion Include="Aspire.Azure.Storage.Blobs" Version="13.1.0" />
+    <PackageVersion Include="Aspire.Azure.Storage.Queues" Version="13.1.0" />
+    <PackageVersion Include="Aspire.Hosting" Version="13.1.0" />
+    <PackageVersion Include="Aspire.Hosting.AppHost" Version="13.1.0" />
+    <PackageVersion Include="Aspire.Hosting.Azure.Storage" Version="13.1.0" />
+    <PackageVersion Include="Aspire.Hosting.Orleans" Version="13.1.0" />
+    <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="13.1.0" />
+    <PackageVersion Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.1.0" />
+
+    <!-- Microsoft ASP.NET / EF Core -->
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.2" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.2" />
+
+    <!-- Microsoft Extensions -->
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.2" />
+    <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.2.0" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.2" />
+    <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.2" />
+    <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.2.0" />
+
+    <!-- Microsoft Orleans -->
+    <PackageVersion Include="Microsoft.Orleans.Clustering.AzureStorage" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Orleans.Persistence.AzureStorage" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Orleans.Persistence.Memory" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Orleans.Server" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Orleans.Streaming" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Orleans.Streaming.AzureStorage" Version="10.0.0" />
+
+    <!-- OpenTelemetry -->
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.0" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.15.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.14.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.14.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.14.0" />
+
+    <!-- Sekiban DCB -->
+    <PackageVersion Include="Sekiban.Dcb.Core" Version="10.1.0-preview02" />
+    <PackageVersion Include="Sekiban.Dcb.Core.Model" Version="10.1.0-preview02" />
+    <PackageVersion Include="Sekiban.Dcb.Orleans.Core" Version="10.1.0-preview02" />
+    <PackageVersion Include="Sekiban.Dcb.Orleans.WithoutResult" Version="10.1.0-preview02" />
+    <PackageVersion Include="Sekiban.Dcb.Postgres" Version="10.1.0-preview02" />
+    <PackageVersion Include="Sekiban.Dcb.WithoutResult" Version="10.1.0-preview02" />
+
+    <!-- Testing -->
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.0" />
+
+    <!-- Wasmtime -->
+    <PackageVersion Include="Wasmtime" Version="14.0.0" />
+
+    <!-- ILCompiler (WASM publish) -->
+    <PackageVersion Include="Microsoft.DotNet.ILCompiler.LLVM" Version="10.0.0-*" />
+    <PackageVersion Include="runtime.linux-x64.microsoft.dotnet.ilcompiler.llvm" Version="10.0.0-*" />
+    <PackageVersion Include="runtime.osx-arm64.microsoft.dotnet.ilcompiler.llvm" Version="10.0.0-*" />
+  </ItemGroup>
+</Project>

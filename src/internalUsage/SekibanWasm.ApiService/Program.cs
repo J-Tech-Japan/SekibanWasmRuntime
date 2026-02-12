@@ -89,18 +89,21 @@ else if (projectionRuntime.Equals("hybrid", StringComparison.OrdinalIgnoreCase))
 
     builder.Services.AddSingleton<JsonSerializerOptions>(_ => DomainJsonContext.Default.Options);
 
-    var nativeRuntime = builder.Services
-        .BuildServiceProvider()
-        .GetRequiredService<IProjectionRuntime>();
+    // Register concrete NativeProjectionRuntime so the resolver factory can resolve it
+    // directly without triggering circular dependency via GetServices<IProjectionRuntime>().
+    // (GetServices would try to resolve CompositeProjectionRuntime which needs the resolver.)
+    builder.Services.AddSingleton<Sekiban.Dcb.Runtime.Native.NativeProjectionRuntime>();
 
     builder.Services.AddSingleton<WasmProjectionRuntime>();
     builder.Services.AddSingleton<Sekiban.Dcb.WasmRuntime.IProjectorRuntimeResolver>(sp =>
-        new ProjectorRuntimeResolver(
-            defaultRuntime: nativeRuntime,
+    {
+        return new ProjectorRuntimeResolver(
+            defaultRuntime: sp.GetRequiredService<Sekiban.Dcb.Runtime.Native.NativeProjectionRuntime>(),
             runtimeMap: new Dictionary<string, IProjectionRuntime>
             {
                 ["WeatherForecastMultiProjection"] = sp.GetRequiredService<WasmProjectionRuntime>()
-            }));
+            });
+    });
 
     builder.Services.AddSingleton<IProjectionRuntime, CompositeProjectionRuntime>();
 }
