@@ -253,6 +253,38 @@ diverges from this approach for the following reasons:
 | No `global.json` / `Directory.Packages.props` | Both files added at repository root | Ensures SDK version pinning and central package version management for reproducible builds |
 | WASM build not in CI | CI runs both `build-csharp-wasm.sh` and `build-rust-wasm.sh` between Build and Test | Catches WASM build regressions automatically |
 
+## GUIDE3: Reproducible C# WASM Build Policy
+
+### Linux-fixed build
+
+The `runtime.osx-arm64.microsoft.dotnet.ilcompiler.llvm` NuGet package is unavailable or
+unstable for macOS arm64, causing `NU1101` build failures. To guarantee reproducibility
+across local development and CI:
+
+- The C# WASM build always targets the **Linux x64 ILCompiler toolchain**.
+- On Linux hosts (including CI), `dotnet publish` runs natively.
+- On non-Linux hosts (macOS), `build-csharp-wasm.sh` runs `dotnet publish` inside a
+  Docker container (`mcr.microsoft.com/dotnet/sdk:10.0-preview`) with WASI SDK installed
+  at runtime.
+
+This ensures CI and local builds produce identical artifacts regardless of the host OS.
+
+### NuGet package source mapping
+
+Multiple NuGet feeds (`nuget.org`, `dotnet10`, `dotnet-experimental`) without explicit
+mapping caused `NU1507` warnings, making dependency resolution non-deterministic.
+
+`NuGet.config` now includes `<packageSourceMapping>`:
+
+- `nuget.org` is the default source for all packages.
+- `dotnet10` and `dotnet-experimental` are restricted to `Microsoft.DotNet.ILCompiler.*`
+  and `runtime.*.microsoft.dotnet.ilcompiler.*` patterns only.
+
+### Local prerequisites
+
+- **Docker** is required on non-Linux hosts to build the C# WASM module.
+- WASI SDK is installed automatically inside the Docker container; no manual setup needed.
+
 ## Reference: POC patterns
 
 If you need an example of port pinning and E2E orchestration, see:

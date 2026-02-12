@@ -33,10 +33,8 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.DotNet.ILCompiler.LLVM" />
-    <PackageReference Include="runtime.linux-x64.microsoft.dotnet.ilcompiler.llvm"
-                      Condition="$([MSBuild]::IsOsPlatform('Linux'))" />
-    <PackageReference Include="runtime.osx-arm64.microsoft.dotnet.ilcompiler.llvm"
-                      Condition="$([MSBuild]::IsOsPlatform('OSX')) and '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)'=='Arm64'" />
+    <!-- Always target Linux: builds run natively on Linux CI or inside a Docker container on macOS -->
+    <PackageReference Include="runtime.linux-x64.microsoft.dotnet.ilcompiler.llvm" />
   </ItemGroup>
 
   <ItemGroup>
