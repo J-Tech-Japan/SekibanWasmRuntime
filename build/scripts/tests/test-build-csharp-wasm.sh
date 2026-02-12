@@ -63,41 +63,58 @@ echo "[Test: build mode selection]"
 assert_contains "native mode for Linux" "$SCRIPT_CONTENT" 'BUILD_MODE="native"'
 assert_contains "docker mode for non-Linux" "$SCRIPT_CONTENT" 'BUILD_MODE="docker"'
 
-# Test 5: Docker image reference matches CI
+# Test 5: Docker image uses GA tag (not preview)
 echo "[Test: Docker image]"
-assert_contains "uses dotnet SDK 10.0 preview image" "$SCRIPT_CONTENT" "mcr.microsoft.com/dotnet/sdk:10.0-preview"
+assert_contains "DOTNET_IMAGE variable defined" "$SCRIPT_CONTENT" 'DOTNET_IMAGE="mcr.microsoft.com/dotnet/sdk:10.0"'
+assert_not_contains "no preview image reference" "$SCRIPT_CONTENT" "mcr.microsoft.com/dotnet/sdk:10.0-preview"
+assert_contains "docker run uses DOTNET_IMAGE variable" "$SCRIPT_CONTENT" '"$DOTNET_IMAGE"'
 
-# Test 6: WASI SDK version matches CI (v29)
+# Test 5b: Docker platform forced to linux/amd64
+echo "[Test: Docker platform]"
+assert_contains "docker run uses --platform linux/amd64" "$SCRIPT_CONTENT" "--platform linux/amd64"
+
+# Test 6: SDK version validation in Docker
+echo "[Test: SDK version validation]"
+assert_contains "REQUIRED_SDK_PREFIX defined" "$SCRIPT_CONTENT" 'REQUIRED_SDK_PREFIX="10.0.1"'
+assert_contains "dotnet --info in container" "$SCRIPT_CONTENT" "dotnet --info"
+assert_contains "dotnet --list-sdks validation" "$SCRIPT_CONTENT" "dotnet --list-sdks"
+
+# Test 7: WASI SDK version matches CI (v29)
 echo "[Test: WASI SDK version]"
 assert_contains "wasi-sdk version 29" "$SCRIPT_CONTENT" "wasi_sdk_version=29"
 
-# Test 7: Docker availability check
+# Test 8: Docker availability check
 echo "[Test: Docker availability check]"
 assert_contains "checks for docker command" "$SCRIPT_CONTENT" "command -v docker"
 
-# Test 8: Relative paths for Docker container
+# Test 9: Relative paths for Docker container
 echo "[Test: relative paths for container]"
 assert_contains "relative project path" "$SCRIPT_CONTENT" "WASM_PROJ_REL="
 assert_contains "relative publish dir path" "$SCRIPT_CONTENT" "PUBLISH_DIR_REL="
+assert_contains "relative NuGet wasm config path" "$SCRIPT_CONTENT" "NUGET_WASM_CONFIG_REL="
 
-# Test 9: Log output includes host OS and build mode
+# Test 10: Log output includes host OS and build mode
 echo "[Test: log output]"
 assert_contains "logs host OS" "$SCRIPT_CONTENT" 'host OS'
 assert_contains "logs build mode" "$SCRIPT_CONTENT" 'build mode'
 
-# Test 10: dotnet publish inside Docker uses relative path variables
+# Test 11: dotnet publish inside Docker uses relative path variables
 echo "[Test: in-container dotnet publish uses relative paths]"
-# The bash -c block should reference WASM_PROJ_REL and PUBLISH_DIR_REL
 assert_contains "WASM_PROJ_REL defined" "$SCRIPT_CONTENT" 'WASM_PROJ_REL='
 assert_contains "PUBLISH_DIR_REL defined" "$SCRIPT_CONTENT" 'PUBLISH_DIR_REL='
-# The docker bash -c block references the _REL variables for dotnet publish
 docker_publish_line=$(grep 'dotnet publish.*WASM_PROJ_REL' "$SCRIPT_UNDER_TEST" || true)
 assert_contains "docker publish uses WASM_PROJ_REL" "$docker_publish_line" 'WASM_PROJ_REL'
 assert_contains "docker publish uses PUBLISH_DIR_REL" "$docker_publish_line" 'PUBLISH_DIR_REL'
 
-# Test 11: publish_native function uses host paths
+# Test 12: publish_native function uses host paths
 echo "[Test: native function uses host paths]"
 assert_contains "native function references WASM_PROJ" "$SCRIPT_CONTENT" 'dotnet publish "$WASM_PROJ"'
+
+# Test 13: NuGet.wasm.config is used for publish
+echo "[Test: NuGet.wasm.config usage]"
+assert_contains "NUGET_WASM_CONFIG host path defined" "$SCRIPT_CONTENT" 'NUGET_WASM_CONFIG="$ROOT/NuGet.wasm.config"'
+assert_contains "native publish uses --configfile" "$SCRIPT_CONTENT" '--configfile "$NUGET_WASM_CONFIG"'
+assert_contains "docker publish uses --configfile" "$SCRIPT_CONTENT" '--configfile ${NUGET_WASM_CONFIG_REL}'
 
 # Summary
 echo ""

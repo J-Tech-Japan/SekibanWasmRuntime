@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Tests for NuGet.config packageSourceMapping — validates the XML structure
-# ensures all required feeds and patterns are present.
+# Tests for NuGet.config — validates that it contains only nuget.org
+# (ILCompiler feeds are in NuGet.wasm.config to avoid NU1507).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -20,6 +20,17 @@ assert_contains() {
   fi
 }
 
+assert_not_contains() {
+  local test_name="$1" haystack="$2" needle="$3"
+  if [[ "$haystack" != *"$needle"* ]]; then
+    echo "  PASS: $test_name"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL: $test_name (expected NOT to contain '$needle')" >&2
+    FAIL=$((FAIL + 1))
+  fi
+}
+
 assert_eq() {
   local test_name="$1" expected="$2" actual="$3"
   if [[ "$expected" == "$actual" ]]; then
@@ -31,31 +42,34 @@ assert_eq() {
   fi
 }
 
-echo "=== NuGet.config source mapping tests ==="
+echo "=== NuGet.config tests (nuget.org only) ==="
 
 CONTENT=$(cat "$NUGET_CONFIG")
 
-# Test 1: packageSourceMapping section exists
-echo "[Test: packageSourceMapping section]"
-assert_contains "has packageSourceMapping" "$CONTENT" "<packageSourceMapping>"
-assert_contains "has closing tag" "$CONTENT" "</packageSourceMapping>"
+# Test 1: nuget.org feed is present
+echo "[Test: nuget.org feed]"
+assert_contains "nuget.org source" "$CONTENT" 'key="nuget.org"'
+assert_contains "nuget.org URL" "$CONTENT" 'https://api.nuget.org/v3/index.json'
 
-# Test 2: nuget.org is default with wildcard
-echo "[Test: nuget.org default source]"
-assert_contains "nuget.org source key" "$CONTENT" 'key="nuget.org"'
-assert_contains "nuget.org wildcard pattern" "$CONTENT" 'pattern="*"'
+# Test 2: No extra feeds (dotnet10, dotnet-experimental must be absent)
+echo "[Test: no ILCompiler feeds]"
+assert_not_contains "no dotnet10 feed" "$CONTENT" 'key="dotnet10"'
+assert_not_contains "no dotnet-experimental feed" "$CONTENT" 'key="dotnet-experimental"'
 
-# Test 3: dotnet10 feed maps ILCompiler packages
-echo "[Test: dotnet10 feed mapping]"
-assert_contains "dotnet10 source key" "$CONTENT" 'key="dotnet10"'
-assert_contains "dotnet10 ILCompiler pattern" "$CONTENT" 'pattern="Microsoft.DotNet.ILCompiler.*"'
-assert_contains "dotnet10 runtime pattern" "$CONTENT" 'pattern="runtime.*.microsoft.dotnet.ilcompiler.*"'
+# Test 3: No packageSourceMapping section (single source does not need it)
+echo "[Test: no packageSourceMapping]"
+assert_not_contains "no packageSourceMapping" "$CONTENT" "<packageSourceMapping>"
 
-# Test 4: dotnet-experimental feed maps ILCompiler packages
-echo "[Test: dotnet-experimental feed mapping]"
-assert_contains "dotnet-experimental source key" "$CONTENT" 'key="dotnet-experimental"'
+# Test 4: Exactly one package source defined
+echo "[Test: single package source]"
+source_count=$(grep -c '<add key=' "$NUGET_CONFIG" || true)
+assert_eq "one package source defined" "1" "$source_count"
 
-# Test 5: Valid XML (basic well-formedness check)
+# Test 5: <clear /> is present to reset inherited sources
+echo "[Test: clear directive]"
+assert_contains "clear directive present" "$CONTENT" "<clear />"
+
+# Test 6: Valid XML (basic well-formedness check)
 echo "[Test: XML well-formedness]"
 if command -v xmllint &>/dev/null; then
   if xmllint --noout "$NUGET_CONFIG" 2>/dev/null; then
@@ -68,11 +82,6 @@ if command -v xmllint &>/dev/null; then
 else
   echo "  SKIP: xmllint not available"
 fi
-
-# Test 6: Three package sources defined
-echo "[Test: package sources]"
-source_count=$(grep -c '<add key=' "$NUGET_CONFIG" || true)
-assert_eq "three package sources defined" "3" "$source_count"
 
 # Summary
 echo ""
