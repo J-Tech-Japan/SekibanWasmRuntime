@@ -3,14 +3,14 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
-WASM_PROJ="$ROOT/src/internalUsage/SekibanWasm.Wasm/SekibanWasm.Wasm.csproj"
+WASM_PROJ="$ROOT/src/internalUsages/cs/SekibanWasm.Cs.Wasm/SekibanWasm.Cs.Wasm.csproj"
 PUBLISH_DIR="$ROOT/artifacts/csharp-wasm"
-MODULES_DIR="$ROOT/src/internalUsage/modules"
-EXPECTED_WASM_NAME="SekibanWasm.Wasm.wasm"
+MODULES_DIR="$ROOT/src/internalUsages/cs/modules"
+EXPECTED_WASM_NAME="SekibanWasm.Cs.Wasm.wasm"
 NUGET_WASM_CONFIG="$ROOT/NuGet.wasm.config"
 
 # Relative paths for use inside Docker container (mounted at /work)
-WASM_PROJ_REL="src/internalUsage/SekibanWasm.Wasm/SekibanWasm.Wasm.csproj"
+WASM_PROJ_REL="src/internalUsages/cs/SekibanWasm.Cs.Wasm/SekibanWasm.Cs.Wasm.csproj"
 PUBLISH_DIR_REL="artifacts/csharp-wasm"
 NUGET_WASM_CONFIG_REL="NuGet.wasm.config"
 DOTNET_IMAGE="mcr.microsoft.com/dotnet/sdk:10.0"

@@ -5,7 +5,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-CSPROJ="$ROOT/src/internalUsage/SekibanWasm.Wasm/SekibanWasm.Wasm.csproj"
+CSPROJ="$ROOT/src/internalUsages/cs/SekibanWasm.Cs.Wasm/SekibanWasm.Cs.Wasm.csproj"
 PASS=0
 FAIL=0
 

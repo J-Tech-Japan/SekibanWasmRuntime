@@ -1,11 +1,19 @@
 <Solution>
-  <Folder Name="/internalUsage/">
-    <Project Path="internalUsage/SekibanWasm.ApiService/SekibanWasm.ApiService.csproj" />
-    <Project Path="internalUsage/SekibanWasm.AppHost/SekibanWasm.AppHost.csproj" />
-    <Project Path="internalUsage/SekibanWasm.Domain/SekibanWasm.Domain.csproj" />
-    <Project Path="internalUsage/SekibanWasm.ServiceDefaults/SekibanWasm.ServiceDefaults.csproj" />
-    <Project Path="internalUsage/SekibanWasm.Tests/SekibanWasm.Tests.csproj" />
-    <Project Path="internalUsage/DcbRuntime.WasmRunner/DcbRuntime.WasmRunner.csproj" />
+  <Folder Name="/internalUsages/cs/">
+    <Project Path="internalUsages/cs/SekibanWasm.Cs.ApiService/SekibanWasm.Cs.ApiService.csproj" />
+    <Project Path="internalUsages/cs/SekibanWasm.Cs.AppHost/SekibanWasm.Cs.AppHost.csproj" />
+    <Project Path="internalUsages/cs/SekibanWasm.Cs.Domain/SekibanWasm.Cs.Domain.csproj" />
+    <Project Path="internalUsages/cs/SekibanWasm.Cs.ServiceDefaults/SekibanWasm.Cs.ServiceDefaults.csproj" />
+    <Project Path="internalUsages/cs/SekibanWasm.Cs.Tests/SekibanWasm.Cs.Tests.csproj" />
+    <Project Path="internalUsages/cs/SekibanWasm.Cs.Web/SekibanWasm.Cs.Web.csproj" />
+  </Folder>
+  <Folder Name="/internalUsages/rust/">
+    <Project Path="internalUsages/rust/SekibanWasm.Rust.ApiService/SekibanWasm.Rust.ApiService.csproj" />
+    <Project Path="internalUsages/rust/SekibanWasm.Rust.AppHost/SekibanWasm.Rust.AppHost.csproj" />
+    <Project Path="internalUsages/rust/SekibanWasm.Rust.Domain/SekibanWasm.Rust.Domain.csproj" />
+    <Project Path="internalUsages/rust/SekibanWasm.Rust.ServiceDefaults/SekibanWasm.Rust.ServiceDefaults.csproj" />
+    <Project Path="internalUsages/rust/SekibanWasm.Rust.Tests/SekibanWasm.Rust.Tests.csproj" />
+    <Project Path="internalUsages/rust/SekibanWasm.Rust.Web/SekibanWasm.Rust.Web.csproj" />
   </Folder>
   <Folder Name="/lib/">
     <Project Path="lib/Sekiban.Dcb.WasmRuntime.Remote/Sekiban.Dcb.WasmRuntime.Remote.csproj" />

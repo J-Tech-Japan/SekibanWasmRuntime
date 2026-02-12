@@ -3,7 +3,19 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-APPHOST_PROJ="$ROOT/src/internalUsage/SekibanWasm.AppHost/SekibanWasm.AppHost.csproj"
+E2E_SAMPLE="${E2E_SAMPLE:-cs}"
+case "$E2E_SAMPLE" in
+  cs)
+    APPHOST_PROJ="$ROOT/src/internalUsages/cs/SekibanWasm.Cs.AppHost/SekibanWasm.Cs.AppHost.csproj"
+    ;;
+  rust)
+    APPHOST_PROJ="$ROOT/src/internalUsages/rust/SekibanWasm.Rust.AppHost/SekibanWasm.Rust.AppHost.csproj"
+    ;;
+  *)
+    echo "[e2e] ERROR: unknown E2E_SAMPLE='$E2E_SAMPLE' (expected: cs|rust)" >&2
+    exit 2
+    ;;
+esac
 READY_URL_PATH="${READY_URL_PATH:-/api/weatherforecast}"
 E2E_TIMEOUT_SECONDS="${E2E_TIMEOUT_SECONDS:-180}"
 E2E_REQUIRE_POST="${E2E_REQUIRE_POST:-0}"
@@ -20,6 +32,9 @@ PY
 
 E2E_API_PORT="${E2E_API_PORT:-$(pick_free_port)}"
 API_BASE_URL="${API_BASE_URL:-http://127.0.0.1:${E2E_API_PORT}}"
+APPHOST_PORT="${APPHOST_PORT:-$(pick_free_port)}"
+RESOURCE_SERVICE_PORT="${RESOURCE_SERVICE_PORT:-$(pick_free_port)}"
+OTLP_PORT="${OTLP_PORT:-$(pick_free_port)}"
 
 TS="$(date +%Y%m%d-%H%M%S)"
 ARTIFACT_DIR="$ROOT/artifacts/e2e/$TS"
@@ -28,13 +43,21 @@ mkdir -p "$ARTIFACT_DIR"
 APPHOST_LOG="$ARTIFACT_DIR/apphost.log"
 API_HEALTH_LOG="$ARTIFACT_DIR/api-curl.log"
 
-# Build WASM module if WASM mode is requested and module does not exist
-WASM_MODULE="$ROOT/artifacts/wasm/sekibanwasm.wasm"
-SEKIBAN_PROJECTION_RUNTIME="${SEKIBAN_PROJECTION_RUNTIME:-native}"
+# Internal usages always run with the WASM projection runtime.
+case "$E2E_SAMPLE" in
+  cs)
+    BUILD_WASM_SCRIPT="$ROOT/build/scripts/build-csharp-wasm.sh"
+    WASM_MODULE="$ROOT/src/internalUsages/cs/modules/csharp-weather.wasm"
+    ;;
+  rust)
+    BUILD_WASM_SCRIPT="$ROOT/build/scripts/build-rust-wasm.sh"
+    WASM_MODULE="$ROOT/src/internalUsages/rust/modules/rust-weather.wasm"
+    ;;
+esac
 
-if [[ "$SEKIBAN_PROJECTION_RUNTIME" == "wasm" ]] && [[ ! -f "$WASM_MODULE" ]]; then
-  echo "[e2e] WASM mode requested but module not found. Building..."
-  "$ROOT/scripts/build-wasm.sh"
+if [[ ! -f "$WASM_MODULE" ]]; then
+  echo "[e2e] WASM module not found. Building via: $BUILD_WASM_SCRIPT"
+  "$BUILD_WASM_SCRIPT"
 fi
 
 cleanup() {
@@ -48,18 +71,21 @@ trap cleanup EXIT INT TERM
 
 # Prepare environment variables for AppHost
 APPHOST_ENV=("E2E_API_PORT=$E2E_API_PORT")
-if [[ "$SEKIBAN_PROJECTION_RUNTIME" == "wasm" ]]; then
-  echo "[e2e] Projection runtime: WASM"
-  APPHOST_ENV+=("SEKIBAN_PROJECTION_RUNTIME=wasm")
-  APPHOST_ENV+=("WASM_MODULE_PATH=$WASM_MODULE")
-else
-  echo "[e2e] Projection runtime: native"
-fi
+# Avoid port collisions between repeated E2E runs (Aspire defaults are fixed in launchSettings.json).
+APPHOST_ENV+=("ASPNETCORE_URLS=http://127.0.0.1:${APPHOST_PORT}")
+APPHOST_ENV+=("DOTNET_RESOURCE_SERVICE_ENDPOINT_URL=http://127.0.0.1:${RESOURCE_SERVICE_PORT}")
+APPHOST_ENV+=("DOTNET_DASHBOARD_OTLP_ENDPOINT_URL=http://127.0.0.1:${OTLP_PORT}")
+# Required when running without the launch profile (we use http:// endpoints).
+APPHOST_ENV+=("ASPIRE_ALLOW_UNSECURED_TRANSPORT=true")
+echo "[e2e] Projection runtime: WASM"
+APPHOST_ENV+=("SEKIBAN_PROJECTION_RUNTIME=wasm")
+APPHOST_ENV+=("WASM_MODULE_PATH=$WASM_MODULE")
 
 echo "[e2e] Starting Aspire AppHost: $APPHOST_PROJ"
 (
   cd "$ROOT"
-  env "${APPHOST_ENV[@]}" dotnet run --project "$APPHOST_PROJ"
+  # Avoid fixed ports coming from Properties/launchSettings.json.
+  env "${APPHOST_ENV[@]}" dotnet run --no-launch-profile --project "$APPHOST_PROJ"
 ) >"$APPHOST_LOG" 2>&1 &
 APPHOST_PID="$!"
 

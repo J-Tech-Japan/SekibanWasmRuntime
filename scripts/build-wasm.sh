@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-WASM_PROJ="$ROOT/src/internalUsage/SekibanWasm.Wasm/SekibanWasm.Wasm.csproj"
+WASM_PROJ="${WASM_PROJ:-$ROOT/src/internalUsages/cs/SekibanWasm.Cs.Wasm/SekibanWasm.Cs.Wasm.csproj}"
 OUT_DIR="$ROOT/artifacts/wasm"
 PUBLISH_DIR="$OUT_DIR/publish"
 

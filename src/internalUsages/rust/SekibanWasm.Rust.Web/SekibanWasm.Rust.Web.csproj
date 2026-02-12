@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SekibanWasm.Rust.ServiceDefaults\SekibanWasm.Rust.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\SekibanWasm.Rust.Domain\SekibanWasm.Rust.Domain.csproj" />
+  </ItemGroup>
+
+</Project>
