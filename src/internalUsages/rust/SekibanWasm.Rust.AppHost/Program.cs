@@ -19,10 +19,20 @@ var orleans = builder
     .WithGrainStorage("Default", grainStorage)
     .WithStreaming(queue);
 
-var wasmModulePath = Environment.GetEnvironmentVariable("WASM_MODULE_PATH")
-    ?? throw new InvalidOperationException(
-        "WASM_MODULE_PATH environment variable is required. " +
-        "Set it to the absolute path of the Rust .wasm module.");
+// Prefer explicit env var, but allow the default repo-relative path for local dev.
+var wasmModulePathRaw = Environment.GetEnvironmentVariable("WASM_MODULE_PATH");
+var wasmModulePath = string.IsNullOrWhiteSpace(wasmModulePathRaw)
+    ? Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "..", "modules", "rust-weather.wasm"))
+    : (Path.IsPathRooted(wasmModulePathRaw)
+        ? wasmModulePathRaw
+        : Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), wasmModulePathRaw)));
+
+if (!File.Exists(wasmModulePath))
+{
+    throw new InvalidOperationException(
+        $"WASM module not found at '{wasmModulePath}'. " +
+        "Set WASM_MODULE_PATH to the path of the Rust .wasm module, or build it via ./build/scripts/build-rust-wasm.sh.");
+}
 
 var apiService = builder
     .AddProject<SekibanWasm_Rust_ApiService>("apiservice")
