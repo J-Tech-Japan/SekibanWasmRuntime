@@ -61,5 +61,6 @@
     <!-- ILCompiler (WASM publish) -->
     <PackageVersion Include="Microsoft.DotNet.ILCompiler.LLVM" Version="10.0.0-*" />
     <PackageVersion Include="runtime.linux-x64.microsoft.dotnet.ilcompiler.llvm" Version="10.0.0-*" />
+    <PackageVersion Include="runtime.osx-arm64.microsoft.dotnet.ilcompiler.llvm" Version="10.0.0-*" />
   </ItemGroup>
 </Project>

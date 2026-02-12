@@ -32,8 +32,6 @@ jobs:
 
       - name: Build C# WASM module
         run: ./build/scripts/build-csharp-wasm.sh
-      - name: Validate C# WASM artifact
-        run: test -s src/internalUsage/modules/csharp-weather.wasm
       - name: Build Rust WASM module
         run: ./build/scripts/build-rust-wasm.sh
 

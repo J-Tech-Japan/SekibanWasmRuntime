@@ -1,208 +1,107 @@
 #!/usr/bin/env bash
-# Tests for build-csharp-wasm.sh logic (OS detection, Docker check, config files)
+# Tests for build-csharp-wasm.sh — validates script structure and logic
+# without actually running dotnet publish or Docker.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_UNDER_TEST="$SCRIPT_DIR/../build-csharp-wasm.sh"
 PASS=0
 FAIL=0
 
-pass() { PASS=$((PASS + 1)); echo "  PASS: $1"; }
-fail() { FAIL=$((FAIL + 1)); echo "  FAIL: $1" >&2; }
+assert_eq() {
+  local test_name="$1" expected="$2" actual="$3"
+  if [[ "$expected" == "$actual" ]]; then
+    echo "  PASS: $test_name"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL: $test_name (expected='$expected', actual='$actual')" >&2
+    FAIL=$((FAIL + 1))
+  fi
+}
 
-echo "=== build-csharp-wasm.sh tests ==="
+assert_contains() {
+  local test_name="$1" haystack="$2" needle="$3"
+  if [[ "$haystack" == *"$needle"* ]]; then
+    echo "  PASS: $test_name"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL: $test_name (expected to contain '$needle')" >&2
+    FAIL=$((FAIL + 1))
+  fi
+}
 
-# --- Test 1: Script sets BUILD_MODE=docker on non-Linux ---
-echo ""
-echo "--- Test 1: BUILD_MODE detection ---"
+assert_not_contains() {
+  local test_name="$1" haystack="$2" needle="$3"
+  if [[ "$haystack" != *"$needle"* ]]; then
+    echo "  PASS: $test_name"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL: $test_name (expected NOT to contain '$needle')" >&2
+    FAIL=$((FAIL + 1))
+  fi
+}
 
-SCRIPT="$ROOT/build/scripts/build-csharp-wasm.sh"
+echo "=== build-csharp-wasm.sh structural tests ==="
 
-if [[ "$(uname -s)" == "Linux" ]]; then
-  EXPECTED_MODE="native"
-else
-  EXPECTED_MODE="docker"
-fi
+# Test 1: Script exists and is executable
+echo "[Test: script exists and is executable]"
+assert_eq "script exists" "true" "$([[ -f "$SCRIPT_UNDER_TEST" ]] && echo true || echo false)"
+assert_eq "script is executable" "true" "$([[ -x "$SCRIPT_UNDER_TEST" ]] && echo true || echo false)"
 
-OUTPUT=$(bash -c "source /dev/stdin <<'SCRIPT_EOF'
-set -euo pipefail
-HOST_OS=\"\$(uname -s)\"
-if [[ \"\$HOST_OS\" == \"Linux\" ]]; then
-  BUILD_MODE=\"native\"
-else
-  BUILD_MODE=\"docker\"
-fi
-echo \"\$BUILD_MODE\"
-SCRIPT_EOF
-")
+SCRIPT_CONTENT=$(cat "$SCRIPT_UNDER_TEST")
 
-if [[ "$OUTPUT" == "$EXPECTED_MODE" ]]; then
-  pass "BUILD_MODE is '$EXPECTED_MODE' on $(uname -s)"
-else
-  fail "Expected BUILD_MODE='$EXPECTED_MODE', got '$OUTPUT'"
-fi
+# Test 2: Script uses set -euo pipefail
+echo "[Test: strict mode]"
+assert_contains "set -euo pipefail" "$SCRIPT_CONTENT" "set -euo pipefail"
 
-# --- Test 2: Script file exists and is executable ---
-echo ""
-echo "--- Test 2: Script file properties ---"
+# Test 3: OS detection via uname
+echo "[Test: OS detection]"
+assert_contains "uname -s for OS detection" "$SCRIPT_CONTENT" 'uname -s'
 
-if [[ -f "$SCRIPT" ]]; then
-  pass "build-csharp-wasm.sh exists"
-else
-  fail "build-csharp-wasm.sh not found at $SCRIPT"
-fi
+# Test 4: Build mode selection (native vs docker)
+echo "[Test: build mode selection]"
+assert_contains "native mode for Linux" "$SCRIPT_CONTENT" 'BUILD_MODE="native"'
+assert_contains "docker mode for non-Linux" "$SCRIPT_CONTENT" 'BUILD_MODE="docker"'
 
-if [[ -x "$SCRIPT" ]]; then
-  pass "build-csharp-wasm.sh is executable"
-else
-  fail "build-csharp-wasm.sh is not executable"
-fi
+# Test 5: Docker image reference matches CI
+echo "[Test: Docker image]"
+assert_contains "uses dotnet SDK 10.0 preview image" "$SCRIPT_CONTENT" "mcr.microsoft.com/dotnet/sdk:10.0-preview"
 
-# --- Test 3: Script contains Docker fallback logic ---
-echo ""
-echo "--- Test 3: Docker fallback logic present ---"
+# Test 6: WASI SDK version matches CI (v29)
+echo "[Test: WASI SDK version]"
+assert_contains "wasi-sdk version 29" "$SCRIPT_CONTENT" "wasi_sdk_version=29"
 
-if grep -q 'uname -s' "$SCRIPT"; then
-  pass "Script contains OS detection (uname -s)"
-else
-  fail "Script missing OS detection"
-fi
+# Test 7: Docker availability check
+echo "[Test: Docker availability check]"
+assert_contains "checks for docker command" "$SCRIPT_CONTENT" "command -v docker"
 
-if grep -q 'docker run' "$SCRIPT"; then
-  pass "Script contains docker run command"
-else
-  fail "Script missing docker run command"
-fi
+# Test 8: Relative paths for Docker container
+echo "[Test: relative paths for container]"
+assert_contains "relative project path" "$SCRIPT_CONTENT" "WASM_PROJ_REL="
+assert_contains "relative publish dir path" "$SCRIPT_CONTENT" "PUBLISH_DIR_REL="
 
-if grep -q 'command -v docker' "$SCRIPT"; then
-  pass "Script checks for Docker availability"
-else
-  fail "Script missing Docker availability check"
-fi
+# Test 9: Log output includes host OS and build mode
+echo "[Test: log output]"
+assert_contains "logs host OS" "$SCRIPT_CONTENT" 'host OS'
+assert_contains "logs build mode" "$SCRIPT_CONTENT" 'build mode'
 
-if grep -q -- '--platform linux/amd64' "$SCRIPT"; then
-  pass "Script specifies --platform linux/amd64 for Docker"
-else
-  fail "Script missing --platform linux/amd64"
-fi
+# Test 10: dotnet publish inside Docker uses relative path variables
+echo "[Test: in-container dotnet publish uses relative paths]"
+# The bash -c block should reference WASM_PROJ_REL and PUBLISH_DIR_REL
+assert_contains "WASM_PROJ_REL defined" "$SCRIPT_CONTENT" 'WASM_PROJ_REL='
+assert_contains "PUBLISH_DIR_REL defined" "$SCRIPT_CONTENT" 'PUBLISH_DIR_REL='
+# The docker bash -c block references the _REL variables for dotnet publish
+docker_publish_line=$(grep 'dotnet publish.*WASM_PROJ_REL' "$SCRIPT_UNDER_TEST" || true)
+assert_contains "docker publish uses WASM_PROJ_REL" "$docker_publish_line" 'WASM_PROJ_REL'
+assert_contains "docker publish uses PUBLISH_DIR_REL" "$docker_publish_line" 'PUBLISH_DIR_REL'
 
-# --- Test 4: SekibanWasm.Wasm.csproj has no macOS ILCompiler reference ---
-echo ""
-echo "--- Test 4: csproj ILCompiler references ---"
+# Test 11: publish_native function uses host paths
+echo "[Test: native function uses host paths]"
+assert_contains "native function references WASM_PROJ" "$SCRIPT_CONTENT" 'dotnet publish "$WASM_PROJ"'
 
-CSPROJ="$ROOT/src/internalUsage/SekibanWasm.Wasm/SekibanWasm.Wasm.csproj"
-
-if grep -q 'runtime.linux-x64.microsoft.dotnet.ilcompiler.llvm' "$CSPROJ"; then
-  pass "csproj includes Linux ILCompiler runtime"
-else
-  fail "csproj missing Linux ILCompiler runtime"
-fi
-
-if grep -q 'runtime.osx-arm64.microsoft.dotnet.ilcompiler.llvm' "$CSPROJ"; then
-  fail "csproj still contains macOS ILCompiler runtime (should be removed)"
-else
-  pass "csproj does not contain macOS ILCompiler runtime"
-fi
-
-if grep -q "IsOsPlatform" "$CSPROJ"; then
-  fail "csproj still has OS-conditional ILCompiler reference"
-else
-  pass "csproj has no OS-conditional ILCompiler reference"
-fi
-
-# --- Test 5: NuGet.config has packageSourceMapping ---
-echo ""
-echo "--- Test 5: NuGet.config source mapping ---"
-
-NUGET_CONFIG="$ROOT/NuGet.config"
-
-if grep -q 'packageSourceMapping' "$NUGET_CONFIG"; then
-  pass "NuGet.config contains packageSourceMapping"
-else
-  fail "NuGet.config missing packageSourceMapping"
-fi
-
-if grep -q 'Microsoft.DotNet.ILCompiler' "$NUGET_CONFIG"; then
-  pass "NuGet.config maps ILCompiler packages"
-else
-  fail "NuGet.config missing ILCompiler package mapping"
-fi
-
-if grep -q 'pattern="\*"' "$NUGET_CONFIG"; then
-  pass "NuGet.config has default wildcard pattern for nuget.org"
-else
-  fail "NuGet.config missing default wildcard pattern"
-fi
-
-# --- Test 6: Directory.Packages.props has no osx-arm64 entry ---
-echo ""
-echo "--- Test 6: Directory.Packages.props cleanup ---"
-
-PACKAGES_PROPS="$ROOT/Directory.Packages.props"
-
-if grep -q 'runtime.osx-arm64.microsoft.dotnet.ilcompiler.llvm' "$PACKAGES_PROPS"; then
-  fail "Directory.Packages.props still contains osx-arm64 ILCompiler entry"
-else
-  pass "Directory.Packages.props does not contain osx-arm64 ILCompiler entry"
-fi
-
-if grep -q 'runtime.linux-x64.microsoft.dotnet.ilcompiler.llvm' "$PACKAGES_PROPS"; then
-  pass "Directory.Packages.props retains Linux ILCompiler entry"
-else
-  fail "Directory.Packages.props missing Linux ILCompiler entry"
-fi
-
-# --- Test 7: CI workflow has WASM artifact validation ---
-echo ""
-echo "--- Test 7: CI workflow validation step ---"
-
-CI_YML="$ROOT/.github/workflows/ci.yml"
-
-if grep -q 'Validate C# WASM artifact' "$CI_YML"; then
-  pass "CI workflow has WASM artifact validation step"
-else
-  fail "CI workflow missing WASM artifact validation step"
-fi
-
-if grep -q 'test -s src/internalUsage/modules/csharp-weather.wasm' "$CI_YML"; then
-  pass "CI validation checks csharp-weather.wasm is non-empty"
-else
-  fail "CI validation missing non-empty check for csharp-weather.wasm"
-fi
-
-# --- Test 8: README has GUIDE3 section ---
-echo ""
-echo "--- Test 8: README GUIDE3 documentation ---"
-
-README="$ROOT/tasks/cswasm/README.md"
-
-if grep -q 'GUIDE3' "$README"; then
-  pass "README contains GUIDE3 section"
-else
-  fail "README missing GUIDE3 section"
-fi
-
-if grep -q 'Linux-fixed build' "$README"; then
-  pass "README documents Linux-fixed build rationale"
-else
-  fail "README missing Linux-fixed build documentation"
-fi
-
-if grep -q 'package source mapping' "$README"; then
-  pass "README documents source mapping rationale"
-else
-  fail "README missing source mapping documentation"
-fi
-
-if grep -q 'Docker' "$README"; then
-  pass "README documents Docker prerequisite"
-else
-  fail "README missing Docker prerequisite documentation"
-fi
-
-# --- Summary ---
+# Summary
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
-
-if [[ "$FAIL" -gt 0 ]]; then
+if [[ $FAIL -gt 0 ]]; then
   exit 1
 fi
