@@ -7,10 +7,14 @@ WASM_PROJ="$ROOT/src/internalUsage/SekibanWasm.Wasm/SekibanWasm.Wasm.csproj"
 PUBLISH_DIR="$ROOT/artifacts/csharp-wasm"
 MODULES_DIR="$ROOT/src/internalUsage/modules"
 EXPECTED_WASM_NAME="SekibanWasm.Wasm.wasm"
+NUGET_WASM_CONFIG="$ROOT/NuGet.wasm.config"
 
 # Relative paths for use inside Docker container (mounted at /work)
 WASM_PROJ_REL="src/internalUsage/SekibanWasm.Wasm/SekibanWasm.Wasm.csproj"
 PUBLISH_DIR_REL="artifacts/csharp-wasm"
+NUGET_WASM_CONFIG_REL="NuGet.wasm.config"
+DOTNET_IMAGE="mcr.microsoft.com/dotnet/sdk:10.0"
+REQUIRED_SDK_PREFIX="10.0.1"
 
 HOST_OS="$(uname -s)"
 if [[ "$HOST_OS" == "Linux" ]]; then
@@ -27,7 +31,8 @@ echo "[build-csharp-wasm] project:     $WASM_PROJ"
 echo "[build-csharp-wasm] publish-dir: $PUBLISH_DIR"
 
 publish_native() {
-  dotnet publish "$WASM_PROJ" -c Release -r wasi-wasm -o "$PUBLISH_DIR"
+  dotnet publish "$WASM_PROJ" -c Release -r wasi-wasm -o "$PUBLISH_DIR" \
+    --configfile "$NUGET_WASM_CONFIG"
 }
 
 publish_docker() {
@@ -42,14 +47,22 @@ publish_docker() {
   local wasi_sdk_url="https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${wasi_sdk_version}/wasi-sdk-${wasi_sdk_version}.0-x86_64-linux.tar.gz"
 
   docker run --rm \
+    --platform linux/amd64 \
     -v "$ROOT":/work \
     -w /work \
-    mcr.microsoft.com/dotnet/sdk:10.0-preview \
+    "$DOTNET_IMAGE" \
     bash -c "
       set -euo pipefail
+      dotnet --info
+      dotnet --list-sdks | grep -q '^${REQUIRED_SDK_PREFIX}' || {
+        echo 'ERROR: .NET SDK ${REQUIRED_SDK_PREFIX} not found in container' >&2
+        dotnet --list-sdks >&2
+        exit 1
+      }
       curl -sSfL '${wasi_sdk_url}' | tar xz -C /opt
       ln -sf /opt/wasi-sdk-${wasi_sdk_version}.0-x86_64-linux /opt/wasi-sdk
-      dotnet publish ${WASM_PROJ_REL} -c Release -r wasi-wasm -o ${PUBLISH_DIR_REL}
+      dotnet publish ${WASM_PROJ_REL} -c Release -r wasi-wasm -o ${PUBLISH_DIR_REL} \
+        --configfile ${NUGET_WASM_CONFIG_REL}
     "
 }
 

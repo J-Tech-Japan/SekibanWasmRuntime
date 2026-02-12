@@ -271,22 +271,31 @@ and Linux CI, `build-csharp-wasm.sh` now uses a single toolchain strategy:
 - **Linux (CI):** `dotnet publish` runs natively — the `runtime.linux-x64` ILCompiler package
   is always available.
 - **Non-Linux (local dev):** The script runs `dotnet publish` inside a
-  `mcr.microsoft.com/dotnet/sdk:10.0-preview` Docker container with WASI SDK v29 installed
+  `mcr.microsoft.com/dotnet/sdk:10.0` Docker container with WASI SDK v29 installed
   in-container. This matches CI exactly.
 
 The macOS ILCompiler runtime package reference in `SekibanWasm.Wasm.csproj` is retained
 behind an opt-in property (`EnableMacIlCompilerRuntime=true`) for future use, but is
 disabled by default.
 
-### NuGet package source mapping
+### NuGet configuration separation
 
-Multiple NuGet feeds (`nuget.org`, `dotnet10`, `dotnet-experimental`) without source mapping
-caused `NU1507` warnings, making dependency resolution non-deterministic. `NuGet.config` now
-includes `<packageSourceMapping>` that routes:
+NuGet configuration is split into two files to eliminate `NU1507` warnings during normal
+restore while retaining ILCompiler feed access for WASM builds:
 
-- All packages to `nuget.org` by default.
-- `Microsoft.DotNet.ILCompiler.*` and `runtime.*.microsoft.dotnet.ilcompiler.*` to
-  `dotnet10` and `dotnet-experimental`.
+- **`NuGet.config`** — Used by `dotnet restore`, `dotnet build`, `dotnet test`, `dotnet pack`.
+  Contains only the `nuget.org` feed. No `packageSourceMapping` is needed because there is
+  only a single source, which eliminates `NU1507`.
+- **`NuGet.wasm.config`** — Used exclusively by `build-csharp-wasm.sh` via `--configfile`.
+  Contains `nuget.org`, `dotnet10`, and `dotnet-experimental` feeds with
+  `packageSourceMapping` to route ILCompiler packages to the correct feed.
+
+### Docker image pinning
+
+`build-csharp-wasm.sh` uses `mcr.microsoft.com/dotnet/sdk:10.0` (GA tag, not preview).
+The script validates that the container's SDK version starts with `10.0.1` (matching
+the `10.0.1xx` feature band specified by `global.json`'s `rollForward: "latestFeature"`
+policy). If no matching SDK is found, the build fails immediately with a clear error.
 
 ### Local prerequisites
 
