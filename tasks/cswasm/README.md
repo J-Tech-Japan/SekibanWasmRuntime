@@ -260,6 +260,70 @@ If you need an example of port pinning and E2E orchestration, see:
 - `/Users/tomohisa/dev/GitHub/SekibanAsAService/src/poc/scripts/e2e-aspire-playwright.sh`
 - `/Users/tomohisa/dev/GitHub/SekibanAsAService/src/poc/SekibanWasmPoc.AppHost/Program.cs` (E2E endpoint port override)
 
+## GUIDE5: Final Operational Rules
+
+This section consolidates the operational rules established by GUIDE1-4 into a single reference
+for day-to-day use. GUIDE3 below documents _why_ these decisions were made; this section
+documents _what_ to do.
+
+### Build commands
+
+Execute in the following order for a full pipeline:
+
+```bash
+dotnet restore src/SekibanWasmRuntime.ci.slnx
+dotnet build src/SekibanWasmRuntime.ci.slnx -c Release
+./build/scripts/build-csharp-wasm.sh
+./build/scripts/build-rust-wasm.sh
+dotnet test src/SekibanWasmRuntime.ci.slnx -c Release --no-build
+dotnet pack src/SekibanWasmRuntime.ci.slnx -c Release -o artifacts/nuget
+```
+
+### NuGet configuration rules
+
+| File | Used by | Content |
+|------|---------|---------|
+| `NuGet.config` | `dotnet restore`, `dotnet build`, `dotnet test`, `dotnet pack` | `nuget.org` only (single source eliminates NU1507) |
+| `NuGet.wasm.config` | `build-csharp-wasm.sh` via `--configfile` | `nuget.org` + `dotnet10` + `dotnet-experimental` with `packageSourceMapping` for ILCompiler |
+
+Never add extra feeds to `NuGet.config`. ILCompiler feeds belong exclusively in `NuGet.wasm.config`.
+
+### Docker requirements
+
+Docker is required on non-Linux hosts to build C# WASM modules. `build-csharp-wasm.sh`
+automatically detects the host OS and switches between native (Linux) and Docker mode.
+
+- Docker image: `mcr.microsoft.com/dotnet/sdk:10.0` (GA tag)
+- Platform: `--platform linux/amd64`
+- WASI SDK v29 is installed inside the container
+
+### SDK version policy
+
+- `global.json` pins SDK to `10.0.100` with `rollForward: "latestFeature"`
+- This selects the latest SDK within the `10.0.1xx` feature band
+- `build-csharp-wasm.sh` validates that the Docker container has a matching SDK (`10.0.1` prefix)
+
+### Solution file separation
+
+| File | Purpose | Contains WASM project |
+|------|---------|-----------------------|
+| `src/SekibanWasmRuntime.ci.slnx` | CI: restore, build, test, pack | No (`SekibanWasm.Wasm` excluded) |
+| `src/SekibanWasmRuntime.slnx` | Development: all projects | Yes |
+
+`SekibanWasm.Wasm` is excluded from `ci.slnx` because it requires ILCompiler feeds
+that would re-introduce NU1507 in the normal restore path.
+
+### Validation scripts
+
+Run these to verify build infrastructure without needing Docker or submodules:
+
+```bash
+./build/scripts/tests/test-build-csharp-wasm.sh      # script structure validation
+./build/scripts/tests/test-nuget-source-mapping.sh    # NuGet.config is nuget.org only
+./build/scripts/tests/test-nuget-wasm-config.sh       # NuGet.wasm.config has ILCompiler feeds
+./build/scripts/tests/test-csproj-ilcompiler.sh       # ILCompiler package conditions
+```
+
 ## GUIDE3: Build Reproducibility Policy
 
 ### Linux-only toolchain via Docker fallback
