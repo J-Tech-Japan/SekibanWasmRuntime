@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 RUST_DIR="$ROOT/src/wasm-projectors/rust"
-MODULES_DIR="$ROOT/src/internalUsage/modules"
+MODULES_DIR="$ROOT/src/internalUsages/rust/modules"
 
 if [[ ! -d "$RUST_DIR" ]]; then
   echo "[build-rust-wasm] SKIP: Rust workspace not found at $RUST_DIR" >&2

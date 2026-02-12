@@ -1,0 +1,254 @@
+@page "/weather"
+@using SekibanWasm.Cs.Domain.Weather
+@using System.ComponentModel.DataAnnotations
+@attribute [StreamRendering()]
+@rendermode InteractiveServer
+
+@inject WeatherApiClient WeatherApiClient
+@inject IJSRuntime JsRuntime
+@inject ILogger<Weather> Logger
+
+<PageTitle>Weather - SekibanWasm CS</PageTitle>
+
+<h1>Weather Forecasts</h1>
+
+<div class="mb-3">
+    <button class="btn btn-primary" @onclick="OpenAddModal">Add New Forecast</button>
+</div>
+
+@if (forecasts == null)
+{
+    <p><em>Loading...</em></p>
+}
+else if (forecasts.Length == 0)
+{
+    <p>No weather forecasts available. Click "Add New Forecast" to create one.</p>
+}
+else
+{
+    <table class="table table-striped">
+        <thead>
+        <tr>
+            <th>Location</th>
+            <th>Temp. (C)</th>
+            <th>Temp. (F)</th>
+            <th>Summary</th>
+            <th>Actions</th>
+        </tr>
+        </thead>
+        <tbody>
+        @foreach (var forecast in forecasts.Where(f => !f.IsDeleted))
+        {
+            <tr>
+                <td>@forecast.Location</td>
+                <td>@forecast.TemperatureC</td>
+                <td>@(32 + (int)(forecast.TemperatureC / 0.5556))</td>
+                <td>@forecast.Summary</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-primary me-1"
+                            @onclick="() => OpenEditModal(forecast)">
+                        Edit Location
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger"
+                            @onclick="() => HandleDelete(forecast.ForecastId)">
+                        Delete
+                    </button>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
+
+<!-- Add Modal -->
+<div class="modal fade" id="addModal" data-bs-backdrop="static" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <EditForm Model="@addModel" OnValidSubmit="HandleAdd">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Weather Forecast</h5>
+                    <button type="button" class="btn-close" @onclick="CloseAddModal"></button>
+                </div>
+                <div class="modal-body">
+                    <DataAnnotationsValidator/>
+                    <div class="mb-3">
+                        <label class="form-label">Location</label>
+                        <InputText class="form-control" @bind-Value="addModel.Location"/>
+                        <ValidationMessage For="@(() => addModel.Location)"/>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Temperature (C)</label>
+                        <InputNumber class="form-control" @bind-Value="addModel.TemperatureC"/>
+                        <ValidationMessage For="@(() => addModel.TemperatureC)"/>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Summary</label>
+                        <InputSelect class="form-select" @bind-Value="addModel.Summary">
+                            <option value="">Select...</option>
+                            @foreach (var s in Summaries)
+                            {
+                                <option value="@s">@s</option>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="@(() => addModel.Summary)"/>
+                    </div>
+                    @if (!string.IsNullOrEmpty(addModel.Error))
+                    {
+                        <div class="alert alert-danger">@addModel.Error</div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseAddModal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add</button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Location Modal -->
+<div class="modal fade" id="editModal" data-bs-backdrop="static" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <EditForm Model="@editModel" OnValidSubmit="HandleEditLocation">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit Location</h5>
+                    <button type="button" class="btn-close" @onclick="CloseEditModal"></button>
+                </div>
+                <div class="modal-body">
+                    <DataAnnotationsValidator/>
+                    <div class="mb-3">
+                        <label class="form-label">New Location</label>
+                        <InputText class="form-control" @bind-Value="editModel.NewLocation"/>
+                        <ValidationMessage For="@(() => editModel.NewLocation)"/>
+                    </div>
+                    @if (!string.IsNullOrEmpty(editModel.Error))
+                    {
+                        <div class="alert alert-danger">@editModel.Error</div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseEditModal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Update</button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+</div>
+
+@code {
+    private static readonly string[] Summaries =
+        ["Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"];
+
+    private WeatherForecastItem[]? forecasts;
+    private AddForecastModel addModel = new();
+    private EditLocationModel editModel = new();
+
+    public class AddForecastModel
+    {
+        [Required] public string? Location { get; set; }
+        [Range(-60, 60)] public int TemperatureC { get; set; }
+        [Required] public string? Summary { get; set; }
+        public string? Error { get; set; }
+    }
+
+    public class EditLocationModel
+    {
+        public string ForecastId { get; set; } = "";
+        [Required] public string? NewLocation { get; set; }
+        public string? Error { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadForecasts();
+    }
+
+    private async Task LoadForecasts()
+    {
+        try
+        {
+            forecasts = await WeatherApiClient.GetWeatherAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading forecasts");
+            forecasts = [];
+        }
+    }
+
+    private async Task HandleAdd()
+    {
+        try
+        {
+            var command = new CreateWeatherForecast(
+                Guid.NewGuid().ToString(),
+                addModel.Location!,
+                addModel.TemperatureC,
+                addModel.Summary!);
+
+            await WeatherApiClient.CreateWeatherAsync(command);
+            await LoadForecasts();
+            await CloseAddModal();
+        }
+        catch (Exception ex)
+        {
+            addModel.Error = $"Failed to add forecast: {ex.Message}";
+        }
+    }
+
+    private async Task HandleDelete(string forecastId)
+    {
+        try
+        {
+            await WeatherApiClient.DeleteWeatherAsync(forecastId);
+            await LoadForecasts();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error deleting forecast");
+        }
+    }
+
+    private async Task HandleEditLocation()
+    {
+        try
+        {
+            await WeatherApiClient.UpdateLocationAsync(editModel.ForecastId, editModel.NewLocation!);
+            await LoadForecasts();
+            await CloseEditModal();
+        }
+        catch (Exception ex)
+        {
+            editModel.Error = $"Failed to update location: {ex.Message}";
+        }
+    }
+
+    private async Task OpenAddModal()
+    {
+        addModel = new AddForecastModel();
+        await JsRuntime.InvokeVoidAsync("eval", "new bootstrap.Modal(document.getElementById('addModal')).show()");
+    }
+
+    private async Task CloseAddModal()
+    {
+        addModel = new AddForecastModel();
+        await JsRuntime.InvokeVoidAsync("eval", "bootstrap.Modal.getInstance(document.getElementById('addModal'))?.hide()");
+    }
+
+    private async Task OpenEditModal(WeatherForecastItem forecast)
+    {
+        editModel = new EditLocationModel
+        {
+            ForecastId = forecast.ForecastId,
+            NewLocation = forecast.Location
+        };
+        await JsRuntime.InvokeVoidAsync("eval", "new bootstrap.Modal(document.getElementById('editModal')).show()");
+    }
+
+    private async Task CloseEditModal()
+    {
+        editModel = new EditLocationModel();
+        await JsRuntime.InvokeVoidAsync("eval", "bootstrap.Modal.getInstance(document.getElementById('editModal'))?.hide()");
+    }
+}
