@@ -12,6 +12,8 @@
 *.env
 .DS_Store
 .idea/
+.vscode/
+.claude/
 .takt/
 **/target/
 
