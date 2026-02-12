@@ -10,7 +10,8 @@
         "ASPNETCORE_ENVIRONMENT": "Development",
         "DOTNET_ENVIRONMENT": "Development",
         "DOTNET_DASHBOARD_OTLP_ENDPOINT_URL": "https://localhost:21070",
-        "DOTNET_RESOURCE_SERVICE_ENDPOINT_URL": "https://localhost:22040"
+        "DOTNET_RESOURCE_SERVICE_ENDPOINT_URL": "https://localhost:22040",
+        "WASM_MODULE_PATH": "../modules/csharp-weather.wasm"
       }
     },
     "http": {
@@ -22,7 +23,8 @@
         "ASPNETCORE_ENVIRONMENT": "Development",
         "DOTNET_ENVIRONMENT": "Development",
         "DOTNET_DASHBOARD_OTLP_ENDPOINT_URL": "http://localhost:19270",
-        "DOTNET_RESOURCE_SERVICE_ENDPOINT_URL": "http://localhost:20222"
+        "DOTNET_RESOURCE_SERVICE_ENDPOINT_URL": "http://localhost:20222",
+        "WASM_MODULE_PATH": "../modules/csharp-weather.wasm"
       }
     }
   }
