@@ -6,4 +6,9 @@ public record WasmStateSnapshot(
     int UnsafeVersion,
     string? SafeLastSortableUniqueId,
     string? LastSortableUniqueId,
-    Guid? LastEventId);
+    Guid? LastEventId,
+    string? TagPayloadName = null,
+    string? ProjectorVersion = null,
+    string? TagGroup = null,
+    string? TagContent = null,
+    string? TagProjector = null);

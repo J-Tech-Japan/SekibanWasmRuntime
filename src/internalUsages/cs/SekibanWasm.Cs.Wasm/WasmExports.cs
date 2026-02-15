@@ -53,6 +53,11 @@ public static class WasmExports
         var projectorType = ReadString(projectorTypePtr, projectorTypeLen);
         var kind = ResolveProjectorKind(projectorType);
 
+        if (kind == ProjectorKind.Unknown)
+        {
+            return -1;
+        }
+
         var instance = new ProjectorInstanceState
         {
             Kind = kind,
@@ -102,7 +107,9 @@ public static class WasmExports
                 if (item.ValueKind != JsonValueKind.Object) break;
                 if (!TryGetStringProperty(item, "eventType", out var eventType) ||
                     !TryGetStringProperty(item, "payloadJson", out var payloadJson))
+                {
                     break;
+                }
                 if (string.IsNullOrWhiteSpace(eventType)) break;
                 ApplyEventInternal(instance, eventType, payloadJson);
                 applied++;
@@ -127,7 +134,10 @@ public static class WasmExports
         var queryType = ReadString(queryTypePtr, queryTypeLen);
         var queryParamsJson = ReadString(paramsPtr, paramsLen);
 
-        if (instance.Kind is not ProjectorKind.WeatherList) return WriteString("null");
+        if (instance.Kind is not ProjectorKind.WeatherList)
+        {
+            return WriteString("null");
+        }
 
         var result = queryType switch
         {
@@ -150,10 +160,14 @@ public static class WasmExports
         var queryType = ReadString(queryTypePtr, queryTypeLen);
         var queryParamsJson = ReadString(paramsPtr, paramsLen);
 
+        if (instance.Kind != ProjectorKind.WeatherList)
+        {
+            return WriteString("[]");
+        }
+
         var result = queryType switch
         {
-            "GetWeatherForecastListQuery" or "WeatherForecastListQuery"
-                when instance.Kind == ProjectorKind.WeatherList =>
+            "GetWeatherForecastListQuery" or "WeatherForecastListQuery" =>
                 ExecuteListQueryInternal(queryParamsJson, instance.WeatherMultiState),
             _ => "[]"
         };
@@ -172,11 +186,12 @@ public static class WasmExports
             ProjectorKind.WeatherList => JsonSerializer.Serialize(
                 instance.WeatherMultiState,
                 DomainJsonContext.Default.WeatherForecastMultiProjection),
-            _ => instance.TagState is EmptyTagStatePayload
+            ProjectorKind.WeatherTag => instance.TagState is EmptyTagStatePayload
                 ? "{}"
                 : JsonSerializer.Serialize(
                     (WeatherForecastState)instance.TagState,
-                    DomainJsonContext.Default.WeatherForecastState)
+                    DomainJsonContext.Default.WeatherForecastState),
+            _ => "{}"
         };
 
         return WriteString(json);
@@ -189,17 +204,31 @@ public static class WasmExports
         if (instance == null) return;
 
         var json = ReadString(statePtr, stateLen);
+
         switch (instance.Kind)
         {
             case ProjectorKind.WeatherList:
                 instance.WeatherMultiState = DeserializeWeatherMultiState(json);
                 break;
+            case ProjectorKind.WeatherTag:
+                if (string.IsNullOrWhiteSpace(json) || json == "{}")
+                {
+                    instance.TagState = new EmptyTagStatePayload();
+                    break;
+                }
+                try
+                {
+                    var deserialized = JsonSerializer.Deserialize(
+                        json, DomainJsonContext.Default.WeatherForecastState);
+                    instance.TagState = deserialized;
+                }
+                catch
+                {
+                    instance.TagState = new EmptyTagStatePayload();
+                }
+                break;
             default:
-                instance.TagState = string.IsNullOrWhiteSpace(json) || json == "{}"
-                    ? new EmptyTagStatePayload()
-                    : JsonSerializer.Deserialize(json, DomainJsonContext.Default.WeatherForecastState) is { } w
-                        ? w
-                        : new EmptyTagStatePayload();
+                instance.TagState = new EmptyTagStatePayload();
                 break;
         }
     }
@@ -207,7 +236,10 @@ public static class WasmExports
     private static void ApplyEventInternal(ProjectorInstanceState instance, string eventType, string payloadJson)
     {
         var payload = DomainTypes.EventTypes.DeserializeEventPayload(eventType, payloadJson);
-        if (payload == null) return;
+        if (payload is null)
+        {
+            return;
+        }
 
         var ev = CreateEvent(payload, eventType);
         var tags = ExtractTags(payload);
