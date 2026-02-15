@@ -171,13 +171,16 @@ public class WasmProjectionRuntime : IProjectionRuntime
         {
             var wasmState = (WasmProjectionState)state;
             var json = wasmState.Instance.SerializeState();
+            var moduleRef = _registry.TryGet(projectorName);
             var snapshot = new WasmStateSnapshot(
                 json,
                 wasmState.SafeVersion,
                 wasmState.UnsafeVersion,
                 wasmState.SafeLastSortableUniqueId,
                 wasmState.LastSortableUniqueId,
-                wasmState.LastEventId);
+                wasmState.LastEventId,
+                ProjectorVersion: moduleRef?.ProjectorVersion,
+                TagProjector: projectorName);
             return ResultBox<byte[]>.FromValue(
                 JsonSerializer.SerializeToUtf8Bytes(snapshot, _jsonOptions));
         }
@@ -200,6 +203,24 @@ public class WasmProjectionRuntime : IProjectionRuntime
                 return ResultBox<IProjectionState>.FromException(
                     new InvalidOperationException("Failed to deserialize WasmStateSnapshot"));
             }
+
+            // Version guard: projector version mismatch resets to initial state
+            var moduleRef = _registry.TryGet(projectorName);
+            if (moduleRef is not null &&
+                snapshot.ProjectorVersion is not null &&
+                snapshot.ProjectorVersion != moduleRef.ProjectorVersion)
+            {
+                return GenerateInitialState(projectorName);
+            }
+
+            // Identity guard: tag identity mismatch resets to initial state
+            if (snapshot.TagGroup is not null &&
+                snapshot.TagProjector is not null &&
+                snapshot.TagProjector != projectorName)
+            {
+                return GenerateInitialState(projectorName);
+            }
+
             var instance = _host.CreateInstance(projectorName);
             instance.RestoreState(snapshot.StateJson);
             return ResultBox<IProjectionState>.FromValue(
