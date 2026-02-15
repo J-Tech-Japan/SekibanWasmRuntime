@@ -1,5 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Sekiban.Dcb.Primitives;
 using Sekiban.Dcb.Runtime;
+using System.Text.Json;
+using System.Linq;
 
 namespace Sekiban.Dcb.WasmRuntime;
 
@@ -21,11 +25,14 @@ public static class WasmRuntimeServiceCollectionExtensions
                 break;
 
             case WasmRuntimeMode.Wasm:
-                services.AddSingleton<IProjectionRuntime, WasmProjectionRuntime>();
+                EnsureWasmRuntimeDependencies(services);
+                services.TryAddSingleton<IProjectionRuntime, WasmProjectionRuntime>();
                 break;
 
             case WasmRuntimeMode.Hybrid:
-                services.AddSingleton<IProjectionRuntime, CompositeProjectionRuntime>();
+                EnsureWasmRuntimeDependencies(services);
+                EnsureRegistered<IProjectorRuntimeResolver>(services);
+                services.TryAddSingleton<IProjectionRuntime, CompositeProjectionRuntime>();
                 break;
 
             case WasmRuntimeMode.Remote:
@@ -33,5 +40,23 @@ public static class WasmRuntimeServiceCollectionExtensions
         }
 
         return services;
+    }
+
+    private static void EnsureWasmRuntimeDependencies(IServiceCollection services)
+    {
+        EnsureRegistered<IPrimitiveProjectionHost>(services);
+        EnsureRegistered<WasmProjectorRegistry>(services);
+        EnsureRegistered<JsonSerializerOptions>(services);
+    }
+
+    private static void EnsureRegistered<TService>(IServiceCollection services)
+    {
+        if (services.Any(d => d.ServiceType == typeof(TService)))
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"{typeof(TService).Name} must be registered before calling AddWasmTagStateRuntime for this mode.");
     }
 }

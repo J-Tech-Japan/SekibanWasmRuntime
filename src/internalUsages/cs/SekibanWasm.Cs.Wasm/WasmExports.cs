@@ -55,8 +55,7 @@ public static class WasmExports
 
         if (kind == ProjectorKind.Unknown)
         {
-            throw new InvalidOperationException(
-                $"Unknown projector type: '{projectorType}'");
+            return -1;
         }
 
         var instance = new ProjectorInstanceState
@@ -80,7 +79,9 @@ public static class WasmExports
         int eventTypePtr, int eventTypeLen,
         int payloadPtr, int payloadLen)
     {
-        var instance = GetRequiredInstance(instanceId);
+        var instance = GetInstance(instanceId);
+        if (instance == null) return;
+
         var eventType = ReadString(eventTypePtr, eventTypeLen);
         var payloadJson = ReadString(payloadPtr, payloadLen);
         ApplyEventInternal(instance, eventType, payloadJson);
@@ -89,40 +90,36 @@ public static class WasmExports
     [UnmanagedCallersOnly(EntryPoint = "apply_events_batch")]
     public static int ApplyEventsBatch(int instanceId, int jsonPtr, int jsonLen)
     {
-        var instance = GetRequiredInstance(instanceId);
+        var instance = GetInstance(instanceId);
+        if (instance == null) return -1;
+
         var json = ReadString(jsonPtr, jsonLen);
         if (string.IsNullOrWhiteSpace(json)) return 0;
 
-        using var doc = JsonDocument.Parse(json);
-        if (doc.RootElement.ValueKind != JsonValueKind.Array)
+        try
         {
-            throw new InvalidOperationException(
-                "Expected JSON array for batch events");
-        }
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array) return -1;
 
-        var applied = 0;
-        foreach (var item in doc.RootElement.EnumerateArray())
-        {
-            if (item.ValueKind != JsonValueKind.Object)
+            var applied = 0;
+            foreach (var item in doc.RootElement.EnumerateArray())
             {
-                throw new InvalidOperationException(
-                    $"Expected JSON object at batch index {applied}");
+                if (item.ValueKind != JsonValueKind.Object) break;
+                if (!TryGetStringProperty(item, "eventType", out var eventType) ||
+                    !TryGetStringProperty(item, "payloadJson", out var payloadJson))
+                {
+                    break;
+                }
+                if (string.IsNullOrWhiteSpace(eventType)) break;
+                ApplyEventInternal(instance, eventType, payloadJson);
+                applied++;
             }
-            if (!TryGetStringProperty(item, "eventType", out var eventType) ||
-                !TryGetStringProperty(item, "payloadJson", out var payloadJson))
-            {
-                throw new InvalidOperationException(
-                    $"Missing eventType or payloadJson at batch index {applied}");
-            }
-            if (string.IsNullOrWhiteSpace(eventType))
-            {
-                throw new InvalidOperationException(
-                    $"Empty eventType at batch index {applied}");
-            }
-            ApplyEventInternal(instance, eventType, payloadJson);
-            applied++;
+            return applied;
         }
-        return applied;
+        catch
+        {
+            return -1;
+        }
     }
 
     [UnmanagedCallersOnly(EntryPoint = "execute_query")]
@@ -131,20 +128,21 @@ public static class WasmExports
         int queryTypePtr, int queryTypeLen,
         int paramsPtr, int paramsLen)
     {
-        var instance = GetRequiredInstance(instanceId);
+        var instance = GetInstance(instanceId);
+        if (instance == null) return WriteString("null");
+
         var queryType = ReadString(queryTypePtr, queryTypeLen);
         var queryParamsJson = ReadString(paramsPtr, paramsLen);
 
         if (instance.Kind is not ProjectorKind.WeatherList)
         {
-            throw new InvalidOperationException(
-                $"Query execution not supported for projector kind: {instance.Kind}");
+            return WriteString("null");
         }
 
         var result = queryType switch
         {
             "GetWeatherForecastCountQuery" => ExecuteCountQuery(queryParamsJson, instance.WeatherMultiState),
-            _ => throw new InvalidOperationException($"Unknown query type: '{queryType}'")
+            _ => "null"
         };
 
         return WriteString(result);
@@ -156,21 +154,22 @@ public static class WasmExports
         int queryTypePtr, int queryTypeLen,
         int paramsPtr, int paramsLen)
     {
-        var instance = GetRequiredInstance(instanceId);
+        var instance = GetInstance(instanceId);
+        if (instance == null) return WriteString("[]");
+
         var queryType = ReadString(queryTypePtr, queryTypeLen);
         var queryParamsJson = ReadString(paramsPtr, paramsLen);
 
         if (instance.Kind != ProjectorKind.WeatherList)
         {
-            throw new InvalidOperationException(
-                $"List query execution not supported for projector kind: {instance.Kind}");
+            return WriteString("[]");
         }
 
         var result = queryType switch
         {
             "GetWeatherForecastListQuery" or "WeatherForecastListQuery" =>
                 ExecuteListQueryInternal(queryParamsJson, instance.WeatherMultiState),
-            _ => throw new InvalidOperationException($"Unknown list query type: '{queryType}'")
+            _ => "[]"
         };
 
         return WriteString(result);
@@ -179,7 +178,9 @@ public static class WasmExports
     [UnmanagedCallersOnly(EntryPoint = "serialize_state")]
     public static long SerializeState(int instanceId)
     {
-        var instance = GetRequiredInstance(instanceId);
+        var instance = GetInstance(instanceId);
+        if (instance == null) return WriteString("{}");
+
         var json = instance.Kind switch
         {
             ProjectorKind.WeatherList => JsonSerializer.Serialize(
@@ -190,8 +191,7 @@ public static class WasmExports
                 : JsonSerializer.Serialize(
                     (WeatherForecastState)instance.TagState,
                     DomainJsonContext.Default.WeatherForecastState),
-            _ => throw new InvalidOperationException(
-                $"Cannot serialize state for unknown projector kind")
+            _ => "{}"
         };
 
         return WriteString(json);
@@ -200,7 +200,9 @@ public static class WasmExports
     [UnmanagedCallersOnly(EntryPoint = "restore_state")]
     public static void RestoreState(int instanceId, int statePtr, int stateLen)
     {
-        var instance = GetRequiredInstance(instanceId);
+        var instance = GetInstance(instanceId);
+        if (instance == null) return;
+
         var json = ReadString(statePtr, stateLen);
 
         switch (instance.Kind)
@@ -216,16 +218,11 @@ public static class WasmExports
                 }
                 var deserialized = JsonSerializer.Deserialize(
                     json, DomainJsonContext.Default.WeatherForecastState);
-                if (deserialized is null)
-                {
-                    throw new InvalidOperationException(
-                        $"Failed to deserialize WeatherForecastState from: {json[..Math.Min(json.Length, 100)]}");
-                }
-                instance.TagState = deserialized;
+                instance.TagState = deserialized ?? new EmptyTagStatePayload();
                 break;
             default:
-                throw new InvalidOperationException(
-                    $"Cannot restore state for unknown projector kind");
+                instance.TagState = new EmptyTagStatePayload();
+                break;
         }
     }
 
@@ -234,8 +231,7 @@ public static class WasmExports
         var payload = DomainTypes.EventTypes.DeserializeEventPayload(eventType, payloadJson);
         if (payload is null)
         {
-            throw new InvalidOperationException(
-                $"Failed to deserialize event payload for type: '{eventType}'");
+            return;
         }
 
         var ev = CreateEvent(payload, eventType);
@@ -341,16 +337,11 @@ public static class WasmExports
         return ProjectorKind.Unknown;
     }
 
-    private static ProjectorInstanceState GetRequiredInstance(int instanceId)
+    private static ProjectorInstanceState? GetInstance(int instanceId)
     {
         lock (_gate)
         {
-            if (!_instances.TryGetValue(instanceId, out var instance))
-            {
-                throw new InvalidOperationException(
-                    $"Instance not found: {instanceId}");
-            }
-            return instance;
+            return _instances.TryGetValue(instanceId, out var instance) ? instance : null;
         }
     }
 

@@ -1,5 +1,7 @@
 using System.Text;
 using System.Text.Json;
+using System.Linq;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Primitives;
 using Sekiban.Dcb.Tags;
@@ -15,23 +17,28 @@ public class WasmTagStateProjectionPrimitive : IDisposable
     private readonly IPrimitiveProjectionInstance _instance;
     private readonly string _projectorName;
     private readonly string _projectorVersion;
+    private readonly IEventTypes _eventTypes;
     private readonly JsonSerializerOptions _jsonOptions;
 
+    private SerializableTagState? _cachedState;
     private int _version;
     private string? _lastSortedUniqueId;
     private string? _tagPayloadName;
     private string? _tagGroup;
     private string? _tagContent;
+    private bool _hasChanges;
 
     public WasmTagStateProjectionPrimitive(
         IPrimitiveProjectionInstance instance,
         string projectorName,
         string projectorVersion,
+        IEventTypes eventTypes,
         JsonSerializerOptions jsonOptions)
     {
         _instance = instance;
         _projectorName = projectorName;
         _projectorVersion = projectorVersion;
+        _eventTypes = eventTypes;
         _jsonOptions = jsonOptions;
     }
 
@@ -42,59 +49,132 @@ public class WasmTagStateProjectionPrimitive : IDisposable
     public string? TagGroup => _tagGroup;
     public string? TagContent => _tagContent;
 
-    public void ApplyState(SerializableTagState? state)
+    public bool ApplyState(SerializableTagState? state)
     {
+        _cachedState = state;
+        _hasChanges = false;
+
         if (state is null)
         {
-            return;
+            ResetToInitial();
+            return true;
         }
 
-        if (state.ProjectorVersion != _projectorVersion)
+        if (state.ProjectorVersion != _projectorVersion ||
+            state.TagProjector != _projectorName)
         {
             // Version mismatch: reset to initial state per native contract
-            return;
+            ResetToInitial();
+            return true;
         }
 
-        var payloadJson = Encoding.UTF8.GetString(state.Payload);
-        _instance.RestoreState(payloadJson);
-        _version = state.Version;
-        _lastSortedUniqueId = state.LastSortedUniqueId;
-        _tagPayloadName = state.TagPayloadName;
-        _tagGroup = state.TagGroup;
-        _tagContent = state.TagContent;
+        try
+        {
+            var payloadJson = state.Payload.Length == 0
+                ? "{}"
+                : Encoding.UTF8.GetString(state.Payload);
+            _instance.RestoreState(payloadJson);
+            _version = state.Version;
+            _lastSortedUniqueId = state.LastSortedUniqueId;
+            _tagPayloadName = state.TagPayloadName;
+            _tagGroup = state.TagGroup;
+            _tagContent = state.TagContent;
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public bool ApplyEvents(
+        IReadOnlyList<SerializableEvent> events,
+        string? latestSortableUniqueId,
+        CancellationToken cancellationToken = default)
+    {
+        foreach (var serializableEvent in events.OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (!string.IsNullOrEmpty(_lastSortedUniqueId) &&
+                string.Compare(serializableEvent.SortableUniqueIdValue, _lastSortedUniqueId, StringComparison.Ordinal) <= 0)
+            {
+                continue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(latestSortableUniqueId) &&
+                string.Compare(serializableEvent.SortableUniqueIdValue, latestSortableUniqueId, StringComparison.Ordinal) > 0)
+            {
+                continue;
+            }
+
+            var eventResult = serializableEvent.ToEvent(_eventTypes);
+            if (!eventResult.IsSuccess)
+            {
+                return false;
+            }
+
+            ApplyEvent(eventResult.GetValue());
+        }
+
+        return true;
     }
 
     public void ApplyEvents(IReadOnlyList<Event> events, string? safeWindowThreshold)
     {
         foreach (var ev in events)
         {
-            var payloadJson = JsonSerializer.Serialize(
-                ev.Payload, ev.Payload.GetType(), _jsonOptions);
-
-            _instance.ApplyEvent(
-                ev.EventType, payloadJson, ev.Tags, ev.SortableUniqueIdValue);
-
-            _version++;
-            _lastSortedUniqueId = ev.SortableUniqueIdValue;
-
-            UpdateTagMetadataFromEvent(ev);
+            ApplyEvent(ev);
         }
     }
 
     public SerializableTagState GetSerializedState()
     {
+        if (!_hasChanges && _cachedState != null)
+        {
+            return _cachedState;
+        }
+
         var payloadJson = _instance.SerializeState();
-        var payloadBytes = Encoding.UTF8.GetBytes(payloadJson);
+        var isEmptyPayload = string.IsNullOrWhiteSpace(payloadJson) || payloadJson == "{}";
+        var payloadBytes = isEmptyPayload ? Array.Empty<byte>() : Encoding.UTF8.GetBytes(payloadJson);
+        var payloadName = isEmptyPayload
+            ? nameof(EmptyTagStatePayload)
+            : _tagPayloadName ?? string.Empty;
 
         return new SerializableTagState(
             Payload: payloadBytes,
             Version: _version,
             LastSortedUniqueId: _lastSortedUniqueId ?? string.Empty,
             ProjectorVersion: _projectorVersion,
-            TagPayloadName: _tagPayloadName ?? string.Empty,
+            TagPayloadName: payloadName,
             TagGroup: _tagGroup ?? string.Empty,
             TagContent: _tagContent ?? string.Empty,
             TagProjector: _projectorName);
+    }
+
+    private void ApplyEvent(Event ev)
+    {
+        var payloadJson = JsonSerializer.Serialize(
+            ev.Payload, ev.Payload.GetType(), _jsonOptions);
+
+        _instance.ApplyEvent(
+            ev.EventType, payloadJson, ev.Tags, ev.SortableUniqueIdValue);
+
+        _version++;
+        _lastSortedUniqueId = ev.SortableUniqueIdValue;
+        _hasChanges = true;
+
+        UpdateTagMetadataFromEvent(ev);
+    }
+
+    private void ResetToInitial()
+    {
+        _version = 0;
+        _lastSortedUniqueId = null;
+        _tagPayloadName = nameof(EmptyTagStatePayload);
+        _tagGroup = null;
+        _tagContent = null;
     }
 
     private void UpdateTagMetadataFromEvent(Event ev)

@@ -214,8 +214,7 @@ public class WasmProjectionRuntime : IProjectionRuntime
             }
 
             // Identity guard: tag identity mismatch resets to initial state
-            if (snapshot.TagGroup is not null &&
-                snapshot.TagProjector is not null &&
+            if (snapshot.TagProjector is not null &&
                 snapshot.TagProjector != projectorName)
             {
                 return GenerateInitialState(projectorName);

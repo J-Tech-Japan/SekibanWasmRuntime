@@ -1,6 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
+using Sekiban.Dcb.Primitives;
 using Sekiban.Dcb.Runtime;
 using Sekiban.Dcb.WasmRuntime;
+using System.Text.Json;
 using Xunit;
 
 namespace SekibanWasm.Cs.Tests;
@@ -217,6 +219,9 @@ public class RuntimeSelectionTests
     {
         // Given
         var services = new ServiceCollection();
+        services.AddSingleton<IPrimitiveProjectionHost>(new StubPrimitiveProjectionHost());
+        services.AddSingleton(new WasmProjectorRegistry());
+        services.AddSingleton(new JsonSerializerOptions());
 
         // When
         services.AddWasmTagStateRuntime(o =>
@@ -240,6 +245,12 @@ public class RuntimeSelectionTests
     {
         // Given
         var services = new ServiceCollection();
+        services.AddSingleton<IPrimitiveProjectionHost>(new StubPrimitiveProjectionHost());
+        services.AddSingleton(new WasmProjectorRegistry());
+        services.AddSingleton(new JsonSerializerOptions());
+        var defaultRuntime = new StubProjectionRuntime("default");
+        services.AddSingleton<Sekiban.Dcb.WasmRuntime.IProjectorRuntimeResolver>(
+            new ProjectorRuntimeResolver(defaultRuntime, new Dictionary<string, IProjectionRuntime>()));
 
         // When
         services.AddWasmTagStateRuntime(o =>
@@ -301,6 +312,39 @@ public class RuntimeSelectionTests
             d => d.ServiceType == typeof(WasmTagStateOptions));
     }
 
+    [Fact]
+    public void AddWasmTagStateRuntime_WasmMode_ShouldThrow_WhenDependenciesAreMissing()
+    {
+        // Given
+        var services = new ServiceCollection();
+
+        // When / Then
+        var ex = Assert.Throws<InvalidOperationException>(() => services.AddWasmTagStateRuntime(o =>
+        {
+            o.Mode = WasmRuntimeMode.Wasm;
+            o.WasmModulePath = "/test.wasm";
+        }));
+        Assert.Contains(nameof(IPrimitiveProjectionHost), ex.Message);
+    }
+
+    [Fact]
+    public void AddWasmTagStateRuntime_HybridMode_ShouldThrow_WhenResolverIsMissing()
+    {
+        // Given
+        var services = new ServiceCollection();
+        services.AddSingleton<IPrimitiveProjectionHost>(new StubPrimitiveProjectionHost());
+        services.AddSingleton(new WasmProjectorRegistry());
+        services.AddSingleton(new JsonSerializerOptions());
+
+        // When / Then
+        var ex = Assert.Throws<InvalidOperationException>(() => services.AddWasmTagStateRuntime(o =>
+        {
+            o.Mode = WasmRuntimeMode.Hybrid;
+            o.WasmModulePath = "/test.wasm";
+        }));
+        Assert.Contains("IProjectorRuntimeResolver", ex.Message);
+    }
+
     /// <summary>
     /// Minimal stub for IProjectionRuntime used only to verify resolver routing.
     /// </summary>
@@ -360,5 +404,28 @@ public class RuntimeSelectionTests
 
         public ResultBoxes.ResultBox<string> ResolveProjectorName(Sekiban.Dcb.Queries.IListQueryCommon query) =>
             throw new NotImplementedException();
+    }
+
+    private sealed class StubPrimitiveProjectionHost : IPrimitiveProjectionHost
+    {
+        public IPrimitiveProjectionInstance CreateInstance(string projectorName)
+        {
+            return new StubPrimitiveProjectionInstance();
+        }
+    }
+
+    private sealed class StubPrimitiveProjectionInstance : IPrimitiveProjectionInstance
+    {
+        public void ApplyEvent(
+            string eventType,
+            string eventPayloadJson,
+            IReadOnlyList<string> tags,
+            string? sortableUniqueId) { }
+
+        public string ExecuteQuery(string queryType, string queryParamsJson) => "{}";
+        public string ExecuteListQuery(string queryType, string queryParamsJson) => "[]";
+        public string SerializeState() => "{}";
+        public void RestoreState(string stateJson) { }
+        public void Dispose() { }
     }
 }

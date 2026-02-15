@@ -5,6 +5,7 @@ using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Primitives;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.WasmRuntime;
+using SekibanWasm.Cs.Domain;
 using SekibanWasm.Cs.Domain.Weather;
 using Xunit;
 
@@ -16,6 +17,7 @@ public class WasmTagStatePrimitiveTests
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
+    private static readonly Sekiban.Dcb.Domains.IEventTypes EventTypes = DomainType.GetDomainTypes().EventTypes;
 
     [Fact]
     public void GetSerializedState_ShouldReturnInitialState_WhenNoEventsApplied()
@@ -23,7 +25,7 @@ public class WasmTagStatePrimitiveTests
         // Given
         using var instance = new StubProjectionInstance();
         var primitive = new WasmTagStateProjectionPrimitive(
-            instance, "WeatherForecastProjector", "v1", JsonOptions);
+            instance, "WeatherForecastProjector", "v1", EventTypes, JsonOptions);
 
         // When
         var result = primitive.GetSerializedState();
@@ -40,7 +42,7 @@ public class WasmTagStatePrimitiveTests
         // Given
         using var instance = new StubProjectionInstance();
         var primitive = new WasmTagStateProjectionPrimitive(
-            instance, "WeatherForecastProjector", "v1", JsonOptions);
+            instance, "WeatherForecastProjector", "v1", EventTypes, JsonOptions);
 
         var events = new List<Event>
         {
@@ -67,7 +69,7 @@ public class WasmTagStatePrimitiveTests
         // Given
         using var instance = new StubProjectionInstance();
         var primitive = new WasmTagStateProjectionPrimitive(
-            instance, "WeatherForecastProjector", "v1", JsonOptions);
+            instance, "WeatherForecastProjector", "v1", EventTypes, JsonOptions);
 
         var events = new List<Event>
         {
@@ -94,7 +96,7 @@ public class WasmTagStatePrimitiveTests
         // Given
         using var instance = new StubProjectionInstance();
         var primitive = new WasmTagStateProjectionPrimitive(
-            instance, "WeatherForecastProjector", "v1", JsonOptions);
+            instance, "WeatherForecastProjector", "v1", EventTypes, JsonOptions);
 
         var state = new SerializableTagState(
             Payload: Encoding.UTF8.GetBytes("{\"forecastId\":\"f-1\"}"),
@@ -124,7 +126,7 @@ public class WasmTagStatePrimitiveTests
         // Given
         using var instance = new StubProjectionInstance();
         var primitive = new WasmTagStateProjectionPrimitive(
-            instance, "WeatherForecastProjector", "v2", JsonOptions);
+            instance, "WeatherForecastProjector", "v2", EventTypes, JsonOptions);
 
         var state = new SerializableTagState(
             Payload: Encoding.UTF8.GetBytes("{\"forecastId\":\"f-1\"}"),
@@ -151,7 +153,7 @@ public class WasmTagStatePrimitiveTests
         // Given
         using var instance = new StubProjectionInstance();
         var primitive = new WasmTagStateProjectionPrimitive(
-            instance, "WeatherForecastProjector", "v1", JsonOptions);
+            instance, "WeatherForecastProjector", "v1", EventTypes, JsonOptions);
 
         // When
         primitive.ApplyState(null);
@@ -168,7 +170,7 @@ public class WasmTagStatePrimitiveTests
         using var instance = new StubProjectionInstance();
         instance.StateToReturn = "{\"forecastId\":\"f-1\",\"location\":\"Tokyo\"}";
         var primitive = new WasmTagStateProjectionPrimitive(
-            instance, "WeatherForecastProjector", "v1", JsonOptions);
+            instance, "WeatherForecastProjector", "v1", EventTypes, JsonOptions);
 
         var events = new List<Event>
         {
@@ -196,7 +198,7 @@ public class WasmTagStatePrimitiveTests
         // Given
         using var instance = new StubProjectionInstance();
         var primitive = new WasmTagStateProjectionPrimitive(
-            instance, "WeatherForecastProjector", "v1", JsonOptions);
+            instance, "WeatherForecastProjector", "v1", EventTypes, JsonOptions);
 
         var state = new SerializableTagState(
             Payload: Encoding.UTF8.GetBytes("{\"forecastId\":\"f-1\"}"),
