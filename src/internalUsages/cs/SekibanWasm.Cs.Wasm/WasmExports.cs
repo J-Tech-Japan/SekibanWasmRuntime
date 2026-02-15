@@ -216,9 +216,16 @@ public static class WasmExports
                     instance.TagState = new EmptyTagStatePayload();
                     break;
                 }
-                var deserialized = JsonSerializer.Deserialize(
-                    json, DomainJsonContext.Default.WeatherForecastState);
-                instance.TagState = deserialized ?? new EmptyTagStatePayload();
+                try
+                {
+                    var deserialized = JsonSerializer.Deserialize(
+                        json, DomainJsonContext.Default.WeatherForecastState);
+                    instance.TagState = deserialized;
+                }
+                catch
+                {
+                    instance.TagState = new EmptyTagStatePayload();
+                }
                 break;
             default:
                 instance.TagState = new EmptyTagStatePayload();
