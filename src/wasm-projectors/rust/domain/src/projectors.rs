@@ -44,7 +44,7 @@ impl Projector for WeatherForecastProjector {
 
 /// Weather forecast list multi projector.
 #[derive(MultiProjector)]
-#[projector(name = "WeatherForecastListProjector", version = "1.0.0")]
+#[projector(name = "WeatherForecastMultiProjection", version = "1.0.0")]
 pub struct WeatherForecastListProjector;
 
 impl Projector for WeatherForecastListProjector {
