@@ -4,6 +4,16 @@ This file is written so next week implementation can start directly without extr
 
 ## Phase 0: Baseline Lock (mandatory before coding)
 
+### Task 0.0: Sync Sekiban submodule to latest main (hard gate)
+- Run:
+  - `git -C submodules/Sekiban fetch origin`
+  - `git -C submodules/Sekiban checkout main`
+  - `git -C submodules/Sekiban pull --ff-only origin main`
+- Acceptance:
+  - `git -C submodules/Sekiban status --short` has no local source changes.
+  - `git -C submodules/Sekiban rev-parse --abbrev-ref HEAD` returns `main`.
+  - The synced SHA is posted in the issue before any implementation PR.
+
 ### Task 0.1: Confirm reference revisions
 - Record current revisions in issue comment:
   - `git rev-parse HEAD` (SekibanWasmRuntime)

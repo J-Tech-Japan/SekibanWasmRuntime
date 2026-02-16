@@ -15,8 +15,21 @@ Align SekibanWasmRuntime to latest Sekiban TagState abstraction and remove parti
 - internal usage examples for C# and Rust WASM
 - tests and CI verification for regression control
 
+## Mandatory Preflight (must be completed first)
+- Update `submodules/Sekiban` to latest `origin/main`:
+```bash
+git -C submodules/Sekiban fetch origin
+git -C submodules/Sekiban checkout main
+git -C submodules/Sekiban pull --ff-only origin main
+git -C submodules/Sekiban rev-parse HEAD
+```
+- Why this is required:
+  - If submodule is not at latest `main`, newly added runtime/primitive abstractions may be missing and SekibanWasmRuntime cannot correctly reference the target contracts.
+- Do not start implementation PRs until this SHA is posted in this issue.
+
 ## Task Checklist
 ### Phase 0 Baseline lock
+- [ ] Sync `submodules/Sekiban` to latest `origin/main` and post SHA
 - [ ] Capture and post repository SHAs (SekibanWasmRuntime + submodules/Sekiban)
 - [ ] Verify latest Sekiban TagState primitive contract and usage
 
