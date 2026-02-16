@@ -3,12 +3,13 @@
 Use this checklist as the only implementation driver for next week.
 
 ## Day 1 (Mon): Contract and Baseline
+- [ ] Sync `submodules/Sekiban` to latest `origin/main` and post SHA in issue.
 - [ ] Run baseline SHA capture and post into issue.
 - [ ] Complete Phase 0 tasks from `IMPLEMENTATION_TASKS.md`.
 - [ ] Produce gap matrix and agree priority order.
 
 Exit criteria:
-- clear gap matrix is posted.
+- submodule sync SHA and gap matrix are both posted.
 
 ## Day 2 (Tue): DI and Runtime Wiring
 - [ ] Complete Phase 1 and Phase 2 tasks.
