@@ -1,3 +1,4 @@
+using System.Text;
 using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Commands;
@@ -29,7 +30,7 @@ public class InProcSerializedDcbClientTests
         {
             TagStateToReturn = ResultBox.FromValue(expected)
         };
-        ISerializedDcbClient client = new InProcSerializedDcbClient(executor);
+        ISerializedDcbClient client = new InProcSerializedDcbClient(executor, new StubCommandExecutor());
 
         // When
         var result = await client.GetSerializableTagStateAsync(tagStateId);
@@ -55,7 +56,7 @@ public class InProcSerializedDcbClientTests
             TagStateToReturn = ResultBox<SerializableTagState>.FromException(
                 new InvalidOperationException("Tag not found"))
         };
-        ISerializedDcbClient client = new InProcSerializedDcbClient(executor);
+        ISerializedDcbClient client = new InProcSerializedDcbClient(executor, new StubCommandExecutor());
 
         // When
         var result = await client.GetSerializableTagStateAsync(tagStateId);
@@ -92,7 +93,7 @@ public class InProcSerializedDcbClientTests
         {
             CommitResultToReturn = ResultBox.FromValue(expected)
         };
-        ISerializedDcbClient client = new InProcSerializedDcbClient(executor);
+        ISerializedDcbClient client = new InProcSerializedDcbClient(executor, new StubCommandExecutor());
 
         // When
         var result = await client.CommitSerializableEventsAsync(request);
@@ -117,7 +118,7 @@ public class InProcSerializedDcbClientTests
             CommitResultToReturn = ResultBox<SerializedCommitResult>.FromException(
                 new InvalidOperationException("Consistency conflict"))
         };
-        ISerializedDcbClient client = new InProcSerializedDcbClient(executor);
+        ISerializedDcbClient client = new InProcSerializedDcbClient(executor, new StubCommandExecutor());
 
         // When
         var result = await client.CommitSerializableEventsAsync(request);
@@ -145,7 +146,7 @@ public class InProcSerializedDcbClientTests
         {
             CommitResultToReturn = ResultBox.FromValue(expected)
         };
-        ISerializedDcbClient client = new InProcSerializedDcbClient(executor);
+        ISerializedDcbClient client = new InProcSerializedDcbClient(executor, new StubCommandExecutor());
 
         // When
         var result = await client.CommitSerializableEventsAsync(request, cts.Token);
@@ -153,6 +154,107 @@ public class InProcSerializedDcbClientTests
         // Then
         Assert.True(result.IsSuccess);
         Assert.Equal(cts.Token, executor.LastCancellationToken);
+    }
+
+    [Fact]
+    public async Task ExecuteSerializedCommandAsync_ShouldDelegateToCommandExecutor()
+    {
+        // Given
+        var payloadBase64 = Convert.ToBase64String(
+            Encoding.UTF8.GetBytes("{\"forecastId\":\"f-1\"}"));
+
+        var expectedResponse = new SerializedCommandExecuteResponse(
+            EventCandidates: new List<SerializedCommandEventCandidate>
+            {
+                new(
+                    EventPayloadName: "WeatherForecastCreated",
+                    PayloadBase64: payloadBase64,
+                    Tags: new List<string> { "weather:f-1" })
+            },
+            ConsistencyTags: new List<ConsistencyTagEntry>
+            {
+                new(Tag: "weather:f-1", LastSortableUniqueId: "uid-001")
+            },
+            CommandResultJson: null);
+
+        var commandExecutor = new StubCommandExecutor
+        {
+            ResponseToReturn = ResultBox.FromValue(expectedResponse)
+        };
+        var executor = new StubSerializedSekibanDcbExecutor();
+        ISerializedDcbClient client = new InProcSerializedDcbClient(executor, commandExecutor);
+
+        var request = new SerializedCommandExecuteRequest(
+            CommandName: "CreateWeatherForecast",
+            CommandJson: "{\"forecastId\":\"f-1\"}",
+            ConsistencyTags: null,
+            Options: null);
+
+        // When
+        var result = await client.ExecuteSerializedCommandAsync(request);
+
+        // Then
+        Assert.True(result.IsSuccess);
+        var response = result.GetValue();
+        Assert.Single(response.EventCandidates);
+        Assert.Equal("WeatherForecastCreated", response.EventCandidates[0].EventPayloadName);
+        Assert.Same(request, commandExecutor.LastRequest);
+    }
+
+    [Fact]
+    public async Task ExecuteSerializedCommandAsync_ShouldPropagateError()
+    {
+        // Given
+        var commandExecutor = new StubCommandExecutor
+        {
+            ResponseToReturn = ResultBox<SerializedCommandExecuteResponse>.FromException(
+                new ArgumentException("Unknown command type: BadCommand"))
+        };
+        var executor = new StubSerializedSekibanDcbExecutor();
+        ISerializedDcbClient client = new InProcSerializedDcbClient(executor, commandExecutor);
+
+        var request = new SerializedCommandExecuteRequest(
+            CommandName: "BadCommand",
+            CommandJson: "{}",
+            ConsistencyTags: null,
+            Options: null);
+
+        // When
+        var result = await client.ExecuteSerializedCommandAsync(request);
+
+        // Then
+        Assert.False(result.IsSuccess);
+        Assert.IsType<ArgumentException>(result.GetException());
+        Assert.Contains("Unknown command type", result.GetException().Message);
+    }
+
+    [Fact]
+    public async Task ExecuteSerializedCommandAsync_ShouldPassCancellationToken()
+    {
+        // Given
+        var commandExecutor = new StubCommandExecutor
+        {
+            ResponseToReturn = ResultBox.FromValue(new SerializedCommandExecuteResponse(
+                new List<SerializedCommandEventCandidate>(),
+                new List<ConsistencyTagEntry>(),
+                null))
+        };
+        var executor = new StubSerializedSekibanDcbExecutor();
+        ISerializedDcbClient client = new InProcSerializedDcbClient(executor, commandExecutor);
+
+        using var cts = new CancellationTokenSource();
+        var request = new SerializedCommandExecuteRequest(
+            CommandName: "CreateWeatherForecast",
+            CommandJson: "{}",
+            ConsistencyTags: null,
+            Options: null);
+
+        // When
+        var result = await client.ExecuteSerializedCommandAsync(request, cts.Token);
+
+        // Then
+        Assert.True(result.IsSuccess);
+        Assert.Equal(cts.Token, commandExecutor.LastCancellationToken);
     }
 
     /// <summary>
@@ -185,6 +287,28 @@ public class InProcSerializedDcbClientTests
             return Task.FromResult(CommitResultToReturn
                 ?? ResultBox<SerializedCommitResult>.FromException(
                     new InvalidOperationException("CommitResultToReturn not configured")));
+        }
+    }
+
+    /// <summary>
+    ///     Manual stub for ISerializedCommandExecutor.
+    ///     Records arguments and returns pre-configured results.
+    /// </summary>
+    private sealed class StubCommandExecutor : ISerializedCommandExecutor
+    {
+        public ResultBox<SerializedCommandExecuteResponse>? ResponseToReturn { get; set; }
+        public SerializedCommandExecuteRequest? LastRequest { get; private set; }
+        public CancellationToken LastCancellationToken { get; private set; }
+
+        public Task<ResultBox<SerializedCommandExecuteResponse>> ExecuteAsync(
+            SerializedCommandExecuteRequest request,
+            CancellationToken cancellationToken)
+        {
+            LastRequest = request;
+            LastCancellationToken = cancellationToken;
+            return Task.FromResult(ResponseToReturn
+                ?? ResultBox<SerializedCommandExecuteResponse>.FromException(
+                    new InvalidOperationException("ResponseToReturn not configured")));
         }
     }
 }

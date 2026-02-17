@@ -29,6 +29,14 @@ builder.Services.AddTransient<ISekibanExecutor>(sp =>
     sp.GetRequiredService<Sekiban.Dcb.Orleans.OrleansDcbExecutor>());
 builder.Services.AddTransient<ISerializedSekibanDcbExecutor>(sp =>
     sp.GetRequiredService<Sekiban.Dcb.Orleans.OrleansDcbExecutor>());
+
+var commandRegistry = SerializedCommandTypeRegistry.FromAssemblies(
+    typeof(CreateWeatherForecast).Assembly);
+builder.Services.AddSingleton(commandRegistry);
+
+builder.Services.AddTransient<SerializedCommandEndpoints>();
+builder.Services.AddTransient<ISerializedCommandExecutor>(sp =>
+    sp.GetRequiredService<SerializedCommandEndpoints>());
 builder.Services.AddTransient<ISerializedDcbClient, InProcSerializedDcbClient>();
 
 var wasmModulePath = builder.Configuration["Wasm:DefaultModulePath"]
@@ -72,7 +80,7 @@ var app = builder.Build();
 app.MapDefaultEndpoints();
 app.MapOpenApi();
 
-CommandEndpoints.Map(app);
+SerializedCommandEndpoints.Map(app);
 InstanceEndpoints.Map(app);
 
 app.MapPost("/api/sekiban/serialized/tag-state", async (HttpContext http, TagStateRequest request) =>

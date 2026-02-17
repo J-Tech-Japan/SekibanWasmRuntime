@@ -18,9 +18,22 @@
   </ItemGroup>
 
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Sekiban.Dcb.WithoutResult" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\..\lib\Sekiban.Dcb.WasmRuntime\Sekiban.Dcb.WasmRuntime.csproj" />
     <ProjectReference Include="..\..\..\lib\Sekiban.Dcb.WasmRuntime.Remote\Sekiban.Dcb.WasmRuntime.Remote.csproj" />
     <ProjectReference Include="..\SekibanWasm.Cs.Domain\SekibanWasm.Cs.Domain.csproj" />
+    <ProjectReference Include="..\SekibanWasm.Cs.ClientApi\SekibanWasm.Cs.ClientApi.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\SekibanWasm.Cs.WasmServer\SerializedCommandEndpoints.cs" Link="SerializedCommandEndpoints.cs" />
   </ItemGroup>
 
 </Project>
