@@ -6,25 +6,25 @@
 
   <ItemGroup>
     <!-- Aspire -->
-    <PackageVersion Include="Aspire.Azure.Data.Tables" Version="13.1.0" />
-    <PackageVersion Include="Aspire.Azure.Storage.Blobs" Version="13.1.0" />
-    <PackageVersion Include="Aspire.Azure.Storage.Queues" Version="13.1.0" />
-    <PackageVersion Include="Aspire.Hosting" Version="13.1.0" />
-    <PackageVersion Include="Aspire.Hosting.AppHost" Version="13.1.0" />
-    <PackageVersion Include="Aspire.Hosting.Azure.Storage" Version="13.1.0" />
-    <PackageVersion Include="Aspire.Hosting.Orleans" Version="13.1.0" />
-    <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="13.1.0" />
-    <PackageVersion Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.1.0" />
+    <PackageVersion Include="Aspire.Azure.Data.Tables" Version="13.1.1" />
+    <PackageVersion Include="Aspire.Azure.Storage.Blobs" Version="13.1.1" />
+    <PackageVersion Include="Aspire.Azure.Storage.Queues" Version="13.1.1" />
+    <PackageVersion Include="Aspire.Hosting" Version="13.1.1" />
+    <PackageVersion Include="Aspire.Hosting.AppHost" Version="13.1.1" />
+    <PackageVersion Include="Aspire.Hosting.Azure.Storage" Version="13.1.1" />
+    <PackageVersion Include="Aspire.Hosting.Orleans" Version="13.1.1" />
+    <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="13.1.1" />
+    <PackageVersion Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.1.1" />
 
     <!-- Microsoft ASP.NET / EF Core -->
-    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.2" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.2" />
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.3" />
 
     <!-- Microsoft Extensions -->
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.2" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.3" />
     <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.2.0" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.2" />
-    <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.2" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.3" />
     <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.2.0" />
 
     <!-- Microsoft Orleans -->
@@ -38,9 +38,9 @@
     <!-- OpenTelemetry -->
     <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.0" />
     <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.15.0" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.14.0" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.14.0" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.14.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.15.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.15.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.15.0" />
 
     <!-- Sekiban DCB -->
     <PackageVersion Include="Sekiban.Dcb.Core" Version="10.1.0-preview03" />
@@ -53,7 +53,7 @@
     <!-- Testing -->
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageVersion Include="xunit" Version="2.9.3" />
-    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.0" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
 
     <!-- Wasmtime -->
     <PackageVersion Include="Wasmtime" Version="14.0.0" />

@@ -44,11 +44,7 @@ var wasmServerBuilder = builder
 var e2eApiPort = Environment.GetEnvironmentVariable("E2E_API_PORT");
 if (!string.IsNullOrWhiteSpace(e2eApiPort))
 {
-    wasmServerBuilder = wasmServerBuilder.WithHttpEndpoint(port: int.Parse(e2eApiPort), env: "ASPNETCORE_URLS");
-}
-else
-{
-    wasmServerBuilder = wasmServerBuilder.WithHttpEndpoint(env: "ASPNETCORE_URLS");
+    wasmServerBuilder = wasmServerBuilder.WithEnvironment("ASPNETCORE_URLS", $"http://127.0.0.1:{e2eApiPort}");
 }
 
 var wasmServer = wasmServerBuilder;

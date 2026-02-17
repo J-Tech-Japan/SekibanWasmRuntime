@@ -44,11 +44,7 @@ var wasmServerBuilder = builder
 var e2eApiPort = Environment.GetEnvironmentVariable("E2E_API_PORT");
 if (!string.IsNullOrWhiteSpace(e2eApiPort))
 {
-    wasmServerBuilder = wasmServerBuilder.WithHttpEndpoint(port: int.Parse(e2eApiPort), env: "ASPNETCORE_URLS");
-}
-else
-{
-    wasmServerBuilder = wasmServerBuilder.WithHttpEndpoint(env: "ASPNETCORE_URLS");
+    wasmServerBuilder = wasmServerBuilder.WithEnvironment("ASPNETCORE_URLS", $"http://127.0.0.1:{e2eApiPort}");
 }
 
 var wasmServer = wasmServerBuilder;
@@ -59,11 +55,7 @@ var clientApiBuilder = builder
 var e2eClientApiPort = Environment.GetEnvironmentVariable("E2E_CLIENT_API_PORT");
 if (!string.IsNullOrWhiteSpace(e2eClientApiPort))
 {
-    clientApiBuilder = clientApiBuilder.WithHttpEndpoint(port: int.Parse(e2eClientApiPort), env: "ASPNETCORE_URLS");
-}
-else
-{
-    clientApiBuilder = clientApiBuilder.WithHttpEndpoint(env: "ASPNETCORE_URLS");
+    clientApiBuilder = clientApiBuilder.WithEnvironment("ASPNETCORE_URLS", $"http://127.0.0.1:{e2eClientApiPort}");
 }
 
 var clientApi = clientApiBuilder
