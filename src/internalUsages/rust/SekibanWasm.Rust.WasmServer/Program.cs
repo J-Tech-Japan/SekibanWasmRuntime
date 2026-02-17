@@ -114,6 +114,13 @@ app.MapOpenApi();
 SerializedCommandEndpoints.Map(app);
 InstanceEndpoints.Map(app);
 
+app.MapGet("/api/weatherforecast", async (HttpContext http) =>
+{
+    var executor = http.RequestServices.GetRequiredService<ISekibanExecutor>();
+    var queryResult = await executor.QueryAsync(new GetWeatherForecastListQuery());
+    return Results.Ok(queryResult.Items.ToArray());
+});
+
 app.MapPost("/api/sekiban/serialized/tag-state", async (HttpContext http, TagStateRequest request) =>
 {
     TagStateId tagStateId;

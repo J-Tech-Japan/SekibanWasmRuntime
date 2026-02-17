@@ -14,6 +14,8 @@ public static class DomainType
             types.EventTypes.RegisterEventType<WeatherForecastDeleted>();
 
             types.TagProjectorTypes.RegisterProjector<WeatherForecastProjector>();
+            types.MultiProjectorTypes.RegisterProjector<WeatherForecastMultiProjection>();
+            types.QueryTypes.RegisterListQuery<GetWeatherForecastListQuery>();
 
             types.TagStatePayloadTypes.RegisterPayloadType<WeatherForecastState>();
 

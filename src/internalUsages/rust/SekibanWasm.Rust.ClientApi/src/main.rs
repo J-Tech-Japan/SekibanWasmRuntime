@@ -1,4 +1,4 @@
-use std::{env, net::SocketAddr};
+use std::{env, net::SocketAddr, time::Duration};
 
 use axum::{
     extract::State,
@@ -55,8 +55,19 @@ async fn health() -> impl IntoResponse {
 }
 
 async fn get_forecasts(State(state): State<AppState>) -> impl IntoResponse {
-    let _ = state;
-    Json(json!([])).into_response()
+    let url = format!("{}/api/weatherforecast", state.wasmserver_base);
+    match tokio::time::timeout(Duration::from_secs(2), state.client.get(&url).send()).await {
+        Ok(Ok(resp)) => {
+            if resp.status().is_success() {
+                let body: Value = resp.json().await.unwrap_or(json!([]));
+                (StatusCode::OK, Json(body)).into_response()
+            } else {
+                (StatusCode::OK, Json(json!([]))).into_response()
+            }
+        }
+        Ok(Err(_)) => (StatusCode::OK, Json(json!([]))).into_response(),
+        Err(_) => (StatusCode::OK, Json(json!([]))).into_response(),
+    }
 }
 
 async fn create_forecast(

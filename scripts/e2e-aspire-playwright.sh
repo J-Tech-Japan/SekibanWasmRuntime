@@ -95,9 +95,9 @@ until curl -fsS --max-time 2 "${WASM_API_BASE_URL}/openapi/v1.json" >/dev/null 2
   sleep 2
 done
 
-echo "[e2e-playwright] Waiting for ClientApi: ${CLIENT_API_BASE_URL}/api/weatherforecast"
+echo "[e2e-playwright] Waiting for ClientApi: ${CLIENT_API_BASE_URL}/health"
 deadline=$((SECONDS + 180))
-until curl -fsS --max-time 2 "${CLIENT_API_BASE_URL}/api/weatherforecast" >/dev/null 2>&1; do
+until curl -fsS --max-time 2 "${CLIENT_API_BASE_URL}/health" >/dev/null 2>&1; do
   if ! kill -0 "$APPHOST_PID" 2>/dev/null; then
     echo "[e2e-playwright] AppHost exited before ClientApi became ready. See: $APPHOST_LOG"
     tail -n 200 "$APPHOST_LOG" >"$ARTIFACT_DIR/apphost-tail.txt" || true
@@ -111,9 +111,9 @@ until curl -fsS --max-time 2 "${CLIENT_API_BASE_URL}/api/weatherforecast" >/dev/
   sleep 2
 done
 
-echo "[e2e-playwright] Waiting for Web UI: ${WEB_BASE_URL}/weather"
+echo "[e2e-playwright] Waiting for Web UI: ${WEB_BASE_URL}/"
 deadline=$((SECONDS + 180))
-until curl -fsS --max-time 2 "${WEB_BASE_URL}/weather" >/dev/null 2>&1; do
+until curl -fsS --max-time 2 "${WEB_BASE_URL}/" >/dev/null 2>&1; do
   if ! kill -0 "$APPHOST_PID" 2>/dev/null; then
     echo "[e2e-playwright] AppHost exited before Web UI became ready. See: $APPHOST_LOG"
     tail -n 200 "$APPHOST_LOG" >"$ARTIFACT_DIR/apphost-tail.txt" || true

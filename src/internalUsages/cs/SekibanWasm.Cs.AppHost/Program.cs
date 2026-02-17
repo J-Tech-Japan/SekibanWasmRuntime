@@ -57,6 +57,10 @@ if (!string.IsNullOrWhiteSpace(e2eClientApiPort))
 {
     clientApiBuilder = clientApiBuilder.WithEnvironment("ASPNETCORE_URLS", $"http://127.0.0.1:{e2eClientApiPort}");
 }
+if (!string.IsNullOrWhiteSpace(e2eApiPort))
+{
+    clientApiBuilder = clientApiBuilder.WithEnvironment("WASM_SERVER_URL", $"http://127.0.0.1:{e2eApiPort}");
+}
 
 var clientApi = clientApiBuilder
     .WithReference(wasmServer)
@@ -64,7 +68,6 @@ var clientApi = clientApiBuilder
 
 var webFrontend = builder
     .AddProject<SekibanWasm_Cs_Web>("webfrontend")
-    .WithExternalHttpEndpoints()
     .WithReference(clientApi)
     .WaitFor(clientApi);
 
@@ -72,6 +75,14 @@ var e2eWebPort = Environment.GetEnvironmentVariable("E2E_WEB_PORT");
 if (!string.IsNullOrWhiteSpace(e2eWebPort))
 {
     webFrontend.WithEnvironment("ASPNETCORE_URLS", $"http://127.0.0.1:{e2eWebPort}");
+    if (!string.IsNullOrWhiteSpace(e2eClientApiPort))
+    {
+        webFrontend.WithEnvironment("CLIENT_API_URL", $"http://127.0.0.1:{e2eClientApiPort}");
+    }
+}
+else
+{
+    webFrontend.WithExternalHttpEndpoints();
 }
 
 builder.Build().Run();
