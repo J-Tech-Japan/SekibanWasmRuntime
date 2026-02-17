@@ -171,7 +171,7 @@ async fn execute_and_commit(state: &AppState, command_name: &str, command: &Valu
         state.wasmserver_base
     );
 
-    let execute_resp = match state.client.post(&execute_url).json(&execute_req).send().await {
+    let execute_resp = match post_with_retry(&state.client, &execute_url, &execute_req).await {
         Ok(resp) => resp,
         Err(err) => {
             tracing::error!(error = %err, "command/execute request failed");
@@ -226,7 +226,7 @@ async fn execute_and_commit(state: &AppState, command_name: &str, command: &Valu
         state.wasmserver_base
     );
 
-    let commit_resp = match state.client.post(&commit_url).json(&commit_req).send().await {
+    let commit_resp = match post_with_retry(&state.client, &commit_url, &commit_req).await {
         Ok(resp) => resp,
         Err(err) => {
             tracing::error!(error = %err, "commit request failed");
@@ -248,8 +248,32 @@ async fn execute_and_commit(state: &AppState, command_name: &str, command: &Valu
         .into_response()
 }
 
+async fn post_with_retry<T: Serialize>(
+    client: &Client,
+    url: &str,
+    body: &T,
+) -> Result<reqwest::Response, reqwest::Error> {
+    let max_attempts = 5;
+    let mut last_err: Option<reqwest::Error> = None;
+
+    for attempt in 1..=max_attempts {
+        match client.post(url).json(body).send().await {
+            Ok(resp) => return Ok(resp),
+            Err(err) => {
+                last_err = Some(err);
+                if attempt < max_attempts {
+                    tokio::time::sleep(Duration::from_millis(250)).await;
+                }
+            }
+        }
+    }
+
+    Err(last_err.expect("retry loop should capture at least one error"))
+}
+
 fn resolve_wasmserver_base() -> String {
     let candidates = [
+        "WASM_SERVER_URL",
         "services__wasmserver__https__0",
         "services__wasmserver__http__0",
         "services__wasmserver__0",
