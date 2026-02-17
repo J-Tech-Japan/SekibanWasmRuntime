@@ -6,7 +6,7 @@ using Sekiban.Dcb.Queries;
 namespace Sekiban.Dcb.Runtime;
 
 /// <summary>
-///     Multi-projection execution runtime.
+///     Multi-projection execution runtime abstraction used by Wasm runtime.
 /// </summary>
 public interface IProjectionRuntime
 {

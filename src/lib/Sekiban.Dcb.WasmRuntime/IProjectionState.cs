@@ -3,7 +3,7 @@ using System.Text.Json;
 namespace Sekiban.Dcb.Runtime;
 
 /// <summary>
-///     Abstracts the projection state for both C# native and WASM runtimes.
+///     Projection state abstraction for C# native and WASM runtime paths.
 /// </summary>
 public interface IProjectionState
 {
