@@ -1,4 +1,6 @@
 using System.Text.Json;
+using Azure.Storage.Blobs;
+using Orleans.Hosting;
 using SekibanWasm.Rust.Domain;
 using SekibanWasm.Rust.Domain.Weather;
 using Sekiban.Dcb;
@@ -15,20 +17,57 @@ using Sekiban.Dcb.WasmRuntime.Wasmtime;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
+builder.AddKeyedAzureTableServiceClient("SekibanRustClusteringTable");
+builder.AddKeyedAzureBlobServiceClient("SekibanRustGrainState");
+builder.AddKeyedAzureQueueServiceClient("SekibanRustQueue");
+builder.UseOrleans(silo =>
+{
+    silo.UseLocalhostClustering();
+    silo.AddAzureBlobGrainStorage(
+        "OrleansStorage",
+        options =>
+        {
+            options.Configure<IServiceProvider>((opt, sp) =>
+            {
+                opt.BlobServiceClient = sp.GetRequiredKeyedService<BlobServiceClient>("SekibanRustGrainState");
+                opt.ContainerName = "sekiban-grainstate";
+            });
+        });
+    silo.AddAzureBlobGrainStorage(
+        "PubSubStore",
+        options =>
+        {
+            options.Configure<IServiceProvider>((opt, sp) =>
+            {
+                opt.BlobServiceClient = sp.GetRequiredKeyedService<BlobServiceClient>("SekibanRustGrainState");
+                opt.ContainerName = "sekiban-grainstate";
+            });
+        });
+    silo.AddMemoryStreams("SekibanRustQueue");
+    silo.AddMemoryStreams("EventStreamProvider");
+});
 
 var domainTypes = DomainType.GetDomainTypes();
 builder.Services.AddSingleton(domainTypes);
 
 builder.Services.AddSingleton<Sekiban.Dcb.ServiceId.IServiceIdProvider, Sekiban.Dcb.ServiceId.DefaultServiceIdProvider>();
-builder.Services.AddSingleton<IEventStore, PostgresEventStore>();
-builder.Services.AddSekibanDcbPostgresWithAspire();
+builder.Services.AddSekibanDcbPostgresWithAspire("SekibanRustDb");
 
 builder.Services.AddSekibanDcbNativeRuntime();
+builder.Services.AddSingleton<IActorObjectAccessor, OrleansActorObjectAccessor>();
 builder.Services.AddTransient<Sekiban.Dcb.Orleans.OrleansDcbExecutor>();
 builder.Services.AddTransient<ISekibanExecutor>(sp =>
     sp.GetRequiredService<Sekiban.Dcb.Orleans.OrleansDcbExecutor>());
 builder.Services.AddTransient<ISerializedSekibanDcbExecutor>(sp =>
     sp.GetRequiredService<Sekiban.Dcb.Orleans.OrleansDcbExecutor>());
+
+var commandRegistry = SerializedCommandTypeRegistry.FromAssemblies(
+    typeof(CreateWeatherForecast).Assembly);
+builder.Services.AddSingleton(commandRegistry);
+
+builder.Services.AddTransient<SerializedCommandEndpoints>();
+builder.Services.AddTransient<ISerializedCommandExecutor>(sp =>
+    sp.GetRequiredService<SerializedCommandEndpoints>());
 builder.Services.AddTransient<ISerializedDcbClient, InProcSerializedDcbClient>();
 
 var wasmModulePath = builder.Configuration["Wasm:DefaultModulePath"]
@@ -72,8 +111,15 @@ var app = builder.Build();
 app.MapDefaultEndpoints();
 app.MapOpenApi();
 
-CommandEndpoints.Map(app);
+SerializedCommandEndpoints.Map(app);
 InstanceEndpoints.Map(app);
+
+app.MapGet("/api/weatherforecast", async (HttpContext http) =>
+{
+    var executor = http.RequestServices.GetRequiredService<ISekibanExecutor>();
+    var queryResult = await executor.QueryAsync(new GetWeatherForecastListQuery());
+    return Results.Ok(queryResult.Items.ToArray());
+});
 
 app.MapPost("/api/sekiban/serialized/tag-state", async (HttpContext http, TagStateRequest request) =>
 {

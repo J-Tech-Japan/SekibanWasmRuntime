@@ -12,6 +12,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SekibanWasm.Cs.ServiceDefaults\SekibanWasm.Cs.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\..\..\lib\Sekiban.Dcb.WasmRuntime.Remote\Sekiban.Dcb.WasmRuntime.Remote.csproj" />
+    <ProjectReference Include="..\SekibanWasm.Cs.Domain\SekibanWasm.Cs.Domain.csproj" />
   </ItemGroup>
 
 </Project>

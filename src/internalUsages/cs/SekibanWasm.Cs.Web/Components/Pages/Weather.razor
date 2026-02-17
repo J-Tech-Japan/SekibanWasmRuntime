@@ -188,7 +188,16 @@ else
                 addModel.Summary!);
 
             await WeatherApiClient.CreateWeatherAsync(command);
-            await LoadForecasts();
+            var current = forecasts ?? [];
+            forecasts = [
+                .. current,
+                new WeatherForecastItem(
+                    command.ForecastId,
+                    command.Location,
+                    command.TemperatureC,
+                    command.Summary,
+                    DateTimeOffset.UtcNow)
+            ];
             await CloseAddModal();
         }
         catch (Exception ex)
@@ -202,7 +211,8 @@ else
         try
         {
             await WeatherApiClient.DeleteWeatherAsync(forecastId);
-            await LoadForecasts();
+            var current = forecasts ?? [];
+            forecasts = current.Where(x => x.ForecastId != forecastId).ToArray();
         }
         catch (Exception ex)
         {
@@ -215,7 +225,10 @@ else
         try
         {
             await WeatherApiClient.UpdateLocationAsync(editModel.ForecastId, editModel.NewLocation!);
-            await LoadForecasts();
+            var current = forecasts ?? [];
+            forecasts = current
+                .Select(x => x.ForecastId == editModel.ForecastId ? x with { Location = editModel.NewLocation! } : x)
+                .ToArray();
             await CloseEditModal();
         }
         catch (Exception ex)

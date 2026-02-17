@@ -16,7 +16,7 @@ case "$E2E_SAMPLE" in
     exit 2
     ;;
 esac
-READY_URL_PATH="${READY_URL_PATH:-/api/weatherforecast}"
+READY_URL_PATH="${READY_URL_PATH:-/openapi/v1.json}"
 E2E_TIMEOUT_SECONDS="${E2E_TIMEOUT_SECONDS:-180}"
 E2E_REQUIRE_POST="${E2E_REQUIRE_POST:-0}"
 
