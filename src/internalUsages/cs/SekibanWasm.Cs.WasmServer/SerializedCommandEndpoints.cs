@@ -8,6 +8,7 @@ using Sekiban.Dcb.WasmRuntime;
 
 public class SerializedCommandEndpoints : ISerializedCommandExecutor
 {
+    private static readonly JsonSerializerOptions FallbackJsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly MethodInfo ExecuteAsyncOpenMethod =
         typeof(ICommandExecutor)
             .GetMethods(BindingFlags.Public | BindingFlags.Instance)
@@ -64,7 +65,7 @@ public class SerializedCommandEndpoints : ISerializedCommandExecutor
                 EventPayloadName: evt.EventType,
                 PayloadBase64: Convert.ToBase64String(
                     Encoding.UTF8.GetBytes(
-                        JsonSerializer.Serialize(evt.Payload, evt.Payload.GetType(), _jsonOptions))),
+                        SerializeWithFallback(evt.Payload))),
                 Tags: evt.Tags))
             .ToList();
 
@@ -76,7 +77,7 @@ public class SerializedCommandEndpoints : ISerializedCommandExecutor
             .ToList();
 
         var commandResultJson = executionResult.Metadata is not null
-            ? JsonSerializer.Serialize(executionResult.Metadata, _jsonOptions)
+            ? SerializeWithFallback(executionResult.Metadata)
             : null;
 
         var response = new SerializedCommandExecuteResponse(
@@ -85,6 +86,18 @@ public class SerializedCommandEndpoints : ISerializedCommandExecutor
             CommandResultJson: commandResultJson);
 
         return ResultBox<SerializedCommandExecuteResponse>.FromValue(response);
+    }
+
+    private string SerializeWithFallback(object value)
+    {
+        try
+        {
+            return JsonSerializer.Serialize(value, value.GetType(), _jsonOptions);
+        }
+        catch (NotSupportedException)
+        {
+            return JsonSerializer.Serialize(value, value.GetType(), FallbackJsonOptions);
+        }
     }
 
     public static void Map(WebApplication app)
@@ -96,7 +109,7 @@ public class SerializedCommandEndpoints : ISerializedCommandExecutor
             var result = await endpoints.ExecuteAsync(request, ct);
             if (!result.IsSuccess)
             {
-                return Results.BadRequest(new { error = result.GetException().Message });
+                return Results.BadRequest(new { error = result.GetException().ToString() });
             }
             return Results.Ok(result.GetValue());
         });

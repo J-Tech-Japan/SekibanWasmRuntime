@@ -78,6 +78,11 @@ APPHOST_PID="$!"
 echo "[e2e-playwright] Waiting for API: ${API_BASE_URL}/openapi/v1.json"
 deadline=$((SECONDS + 300))
 until curl -fsS --max-time 2 "${API_BASE_URL}/openapi/v1.json" >/dev/null 2>&1; do
+  if ! kill -0 "$APPHOST_PID" 2>/dev/null; then
+    echo "[e2e-playwright] AppHost exited before API became ready. See: $APPHOST_LOG"
+    tail -n 200 "$APPHOST_LOG" >"$ARTIFACT_DIR/apphost-tail.txt" || true
+    exit 1
+  fi
   if (( SECONDS > deadline )); then
     echo "[e2e-playwright] Timeout waiting for API. See: $APPHOST_LOG"
     tail -n 200 "$APPHOST_LOG" >"$ARTIFACT_DIR/apphost-tail.txt" || true

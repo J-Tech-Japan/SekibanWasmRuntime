@@ -1,4 +1,6 @@
 using System.Text.Json;
+using Azure.Storage.Blobs;
+using Orleans.Hosting;
 using SekibanWasm.Rust.Domain;
 using SekibanWasm.Rust.Domain.Weather;
 using Sekiban.Dcb;
@@ -15,15 +17,44 @@ using Sekiban.Dcb.WasmRuntime.Wasmtime;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
+builder.AddKeyedAzureTableServiceClient("SekibanRustClusteringTable");
+builder.AddKeyedAzureBlobServiceClient("SekibanRustGrainState");
+builder.AddKeyedAzureQueueServiceClient("SekibanRustQueue");
+builder.UseOrleans(silo =>
+{
+    silo.UseLocalhostClustering();
+    silo.AddAzureBlobGrainStorage(
+        "OrleansStorage",
+        options =>
+        {
+            options.Configure<IServiceProvider>((opt, sp) =>
+            {
+                opt.BlobServiceClient = sp.GetRequiredKeyedService<BlobServiceClient>("SekibanRustGrainState");
+                opt.ContainerName = "sekiban-grainstate";
+            });
+        });
+    silo.AddAzureBlobGrainStorage(
+        "PubSubStore",
+        options =>
+        {
+            options.Configure<IServiceProvider>((opt, sp) =>
+            {
+                opt.BlobServiceClient = sp.GetRequiredKeyedService<BlobServiceClient>("SekibanRustGrainState");
+                opt.ContainerName = "sekiban-grainstate";
+            });
+        });
+    silo.AddMemoryStreams("SekibanRustQueue");
+    silo.AddMemoryStreams("EventStreamProvider");
+});
 
 var domainTypes = DomainType.GetDomainTypes();
 builder.Services.AddSingleton(domainTypes);
 
 builder.Services.AddSingleton<Sekiban.Dcb.ServiceId.IServiceIdProvider, Sekiban.Dcb.ServiceId.DefaultServiceIdProvider>();
-builder.Services.AddSingleton<IEventStore, PostgresEventStore>();
-builder.Services.AddSekibanDcbPostgresWithAspire();
+builder.Services.AddSekibanDcbPostgresWithAspire("SekibanRustDb");
 
 builder.Services.AddSekibanDcbNativeRuntime();
+builder.Services.AddSingleton<IActorObjectAccessor, OrleansActorObjectAccessor>();
 builder.Services.AddTransient<Sekiban.Dcb.Orleans.OrleansDcbExecutor>();
 builder.Services.AddTransient<ISekibanExecutor>(sp =>
     sp.GetRequiredService<Sekiban.Dcb.Orleans.OrleansDcbExecutor>());
