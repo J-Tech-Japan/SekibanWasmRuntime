@@ -34,8 +34,8 @@ if (!File.Exists(wasmModulePath))
         "Set WASM_MODULE_PATH to the path of the Rust .wasm module, or build it via ./build/scripts/build-rust-wasm.sh.");
 }
 
-var apiService = builder
-    .AddProject<SekibanWasm_Rust_ApiService>("apiservice")
+var wasmServer = builder
+    .AddProject<SekibanWasm_Rust_WasmServer>("wasmserver")
     .WithReference(postgres)
     .WithReference(orleans)
     .WaitFor(postgres)
@@ -44,14 +44,18 @@ var apiService = builder
 var e2eApiPort = Environment.GetEnvironmentVariable("E2E_API_PORT");
 if (!string.IsNullOrWhiteSpace(e2eApiPort))
 {
-    // Used by scripts/e2e-aspire-smoke.sh (curl expects http://127.0.0.1:${E2E_API_PORT})
-    apiService.WithEnvironment("ASPNETCORE_URLS", $"http://127.0.0.1:{e2eApiPort}");
+    wasmServer.WithEnvironment("ASPNETCORE_URLS", $"http://127.0.0.1:{e2eApiPort}");
 }
+
+var clientApi = builder
+    .AddProject<SekibanWasm_Rust_ClientApi>("clientapi")
+    .WithReference(wasmServer)
+    .WaitFor(wasmServer);
 
 builder
     .AddProject<SekibanWasm_Rust_Web>("webfrontend")
     .WithExternalHttpEndpoints()
-    .WithReference(apiService)
-    .WaitFor(apiService);
+    .WithReference(clientApi)
+    .WaitFor(clientApi);
 
 builder.Build().Run();

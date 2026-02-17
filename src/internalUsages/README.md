@@ -2,13 +2,26 @@
 
 Internal usage examples for SekibanWasmRuntime. Two independent configurations demonstrate WASM-based projection using Sekiban DCB.
 
+## Architecture
+
+Each configuration (CS and Rust) uses a three-service topology:
+
+```
+[Web (Blazor)] → [ClientApi (HTTP adapter)] → [WasmServer (Orleans + WASM runtime)]
+```
+
+- **WasmServer**: Hosts Orleans silo, PostgreSQL EventStore, Wasmtime-based WASM projection runtime, command execution endpoints (`/api/weatherforecast/*`), and the `/v1/instances/*` projection instance HTTP API.
+- **ClientApi**: A thin HTTP adapter that forwards `/api/weatherforecast/*` requests to WasmServer. No Sekiban runtime dependencies.
+- **Web**: Blazor Server frontend that consumes the ClientApi.
+
 ## Directory Structure
 
 ```
 src/internalUsages/
 ├── cs/                    # C# WASM implementation
 │   ├── SekibanWasm.Cs.AppHost/        # Aspire orchestrator
-│   ├── SekibanWasm.Cs.ApiService/     # API (Orleans + WASM projection)
+│   ├── SekibanWasm.Cs.WasmServer/     # WasmServer (Orleans + WASM projection + commands)
+│   ├── SekibanWasm.Cs.ClientApi/      # ClientApi (HTTP adapter)
 │   ├── SekibanWasm.Cs.Domain/         # Domain model (events, projectors, commands)
 │   ├── SekibanWasm.Cs.ServiceDefaults/ # Aspire service defaults
 │   ├── SekibanWasm.Cs.Tests/          # Unit tests
@@ -17,7 +30,8 @@ src/internalUsages/
 │   └── modules/                       # Built WASM binary (csharp-weather.wasm)
 └── rust/                  # Rust WASM implementation
     ├── SekibanWasm.Rust.AppHost/      # Aspire orchestrator
-    ├── SekibanWasm.Rust.ApiService/   # API (Orleans + WASM projection)
+    ├── SekibanWasm.Rust.WasmServer/   # WasmServer (Orleans + WASM projection + commands)
+    ├── SekibanWasm.Rust.ClientApi/    # ClientApi (HTTP adapter)
     ├── SekibanWasm.Rust.Domain/       # Domain model (events, projectors, commands)
     ├── SekibanWasm.Rust.ServiceDefaults/ # Aspire service defaults
     ├── SekibanWasm.Rust.Tests/        # Unit tests
@@ -34,9 +48,9 @@ src/internalUsages/
 | Build Requirement | .NET 10.0 SDK + Docker (non-Linux) | Rust toolchain + `wasm32-wasip1` target |
 | WASM Binary | `cs/modules/csharp-weather.wasm` | `rust/modules/rust-weather.wasm` |
 | Domain Layer | C# records with Sekiban DCB types | C# records (identical structure to CS) |
-| Projection Host | C# ApiService with WasmProjectionRuntime | C# ApiService with WasmProjectionRuntime |
+| Projection Host | WasmServer with WasmProjectionRuntime | WasmServer with WasmProjectionRuntime |
 
-Both configurations share the same architecture: Aspire AppHost orchestrates PostgreSQL, Azure Storage (emulated), Orleans, and the ApiService + Web frontend.
+Both configurations share the same architecture: Aspire AppHost orchestrates PostgreSQL, Azure Storage (emulated), Orleans, and the WasmServer + ClientApi + Web frontend.
 
 ## Comparison with DcbOrleans.Web (Sekiban Reference)
 
@@ -47,7 +61,7 @@ The reference implementation lives at `submodules/Sekiban/dcb/internalUsages/Dcb
 | Aspect | Both |
 |--------|------|
 | Framework | ASP.NET + Blazor Server (Interactive SSR) |
-| Aspire Integration | `AddServiceDefaults()`, service discovery via `https+http://apiservice` |
+| Aspire Integration | `AddServiceDefaults()`, service discovery |
 | UI Pattern | Razor Components with `HttpClient`-based API clients |
 | Routing | `MapRazorComponents<App>().AddInteractiveServerRenderMode()` |
 | Static Assets | `MapStaticAssets()` |
@@ -59,8 +73,9 @@ The reference implementation lives at `submodules/Sekiban/dcb/internalUsages/Dcb
 | Domain Scope | Weather, Student, ClassRoom, Enrollment (4 domains) | Weather only (1 domain) |
 | API Clients | `WeatherApiClient`, `StudentApiClient`, `ClassRoomApiClient`, `EnrollmentApiClient` | `WeatherApiClient` only |
 | Projection Runtime | Native (C# in-process projection) | WASM (projection runs inside Wasmtime host) |
+| Service Topology | Single ApiService | WasmServer + ClientApi (split) |
 | Orleans Config | Full production setup (Cosmos/Blob/Table storage, streaming, multiple grain providers) | Minimal Aspire-managed setup |
-| AppHost Features | Benchmark project, CLI tools, PgAdmin, DbGate | ApiService + Web only |
+| AppHost Features | Benchmark project, CLI tools, PgAdmin, DbGate | WasmServer + ClientApi + Web |
 | Health Endpoint | Custom `/health` endpoint in Web | Via `MapDefaultEndpoints()` |
 | CORS | Development CORS policy in ApiService | Not configured |
 | OpenAPI | Scalar API reference UI | `MapOpenApi()` only |

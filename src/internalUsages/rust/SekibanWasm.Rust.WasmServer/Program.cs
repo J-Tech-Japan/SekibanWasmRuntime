@@ -1,6 +1,6 @@
 using System.Text.Json;
-using SekibanWasm.Cs.Domain;
-using SekibanWasm.Cs.Domain.Weather;
+using SekibanWasm.Rust.Domain;
+using SekibanWasm.Rust.Domain.Weather;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Commands;
@@ -34,7 +34,7 @@ builder.Services.AddTransient<ISerializedDcbClient, InProcSerializedDcbClient>()
 var wasmModulePath = builder.Configuration["Wasm:DefaultModulePath"]
     ?? throw new InvalidOperationException(
         "Wasm:DefaultModulePath configuration is required. " +
-        "Set the Wasm__DefaultModulePath environment variable to the absolute path of the C# .wasm module.");
+        "Set the Wasm__DefaultModulePath environment variable to the absolute path of the Rust .wasm module.");
 
 var registry = new WasmProjectorRegistry();
 registry.Register(new WasmModuleRef(
@@ -72,33 +72,8 @@ var app = builder.Build();
 app.MapDefaultEndpoints();
 app.MapOpenApi();
 
-app.MapPost("/api/weatherforecast", async (HttpContext http, CreateWeatherForecast command) =>
-{
-    var executor = http.RequestServices.GetRequiredService<ISekibanExecutor>();
-    var result = await executor.ExecuteAsync(command);
-    return Results.Ok(result);
-});
-
-app.MapGet("/api/weatherforecast", () =>
-{
-    return Results.Ok(new { message = "WeatherForecast API is running" });
-});
-
-app.MapPost("/api/weatherforecast/delete", async (HttpContext http, DeleteWeatherForecastRequest request) =>
-{
-    var executor = http.RequestServices.GetRequiredService<ISekibanExecutor>();
-    var command = new DeleteWeatherForecast(request.ForecastId);
-    var result = await executor.ExecuteAsync(command);
-    return Results.Ok(result);
-});
-
-app.MapPost("/api/weatherforecast/update-location", async (HttpContext http, UpdateLocationRequest request) =>
-{
-    var executor = http.RequestServices.GetRequiredService<ISekibanExecutor>();
-    var command = new UpdateWeatherForecastLocation(request.ForecastId, request.NewLocation);
-    var result = await executor.ExecuteAsync(command);
-    return Results.Ok(result);
-});
+CommandEndpoints.Map(app);
+InstanceEndpoints.Map(app);
 
 app.MapPost("/api/sekiban/serialized/tag-state", async (HttpContext http, TagStateRequest request) =>
 {
@@ -133,6 +108,4 @@ app.MapPost("/api/sekiban/serialized/commit", async (HttpContext http, Serialize
 
 app.Run();
 
-public record DeleteWeatherForecastRequest(string ForecastId);
-public record UpdateLocationRequest(string ForecastId, string NewLocation);
 public record TagStateRequest(string TagStateId);
