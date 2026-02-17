@@ -12,9 +12,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Sekiban.Dcb.Core.Model" />
-    <PackageReference Include="Sekiban.Dcb.Orleans.Core" />
-    <PackageReference Include="Sekiban.Dcb.Core" />
+    <ProjectReference Include="..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.Core\Sekiban.Dcb.Core.csproj" />
+    <ProjectReference Include="..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.Core.Model\Sekiban.Dcb.Core.Model.csproj" />
+    <ProjectReference Include="..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.Orleans.Core\Sekiban.Dcb.Orleans.Core.csproj" />
   </ItemGroup>
 
 </Project>

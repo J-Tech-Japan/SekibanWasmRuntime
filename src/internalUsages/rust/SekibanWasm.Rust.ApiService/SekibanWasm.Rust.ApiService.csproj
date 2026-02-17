@@ -20,9 +20,9 @@
     <PackageReference Include="Microsoft.Orleans.Server" />
     <PackageReference Include="Microsoft.Orleans.Streaming" />
     <PackageReference Include="Microsoft.Orleans.Streaming.AzureStorage" />
-    <PackageReference Include="Sekiban.Dcb.WithoutResult" />
-    <PackageReference Include="Sekiban.Dcb.Orleans.WithoutResult" />
-    <PackageReference Include="Sekiban.Dcb.Postgres" />
+    <ProjectReference Include="..\..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.WithoutResult\Sekiban.Dcb.WithoutResult.csproj" />
+    <ProjectReference Include="..\..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.Orleans.WithoutResult\Sekiban.Dcb.Orleans.WithoutResult.csproj" />
+    <ProjectReference Include="..\..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.Postgres\Sekiban.Dcb.Postgres.csproj" />
   </ItemGroup>
 
   <ItemGroup>

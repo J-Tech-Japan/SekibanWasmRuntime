@@ -2,11 +2,13 @@ using System.Text.Json;
 using SekibanWasm.Rust.Domain;
 using SekibanWasm.Rust.Domain.Weather;
 using Sekiban.Dcb;
+using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Orleans;
 using Sekiban.Dcb.Postgres;
-using Sekiban.Dcb.Primitives;
 using Sekiban.Dcb.Runtime;
 using Sekiban.Dcb.Storage;
+using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.WasmRuntime;
 using Sekiban.Dcb.WasmRuntime.Wasmtime;
 
@@ -22,6 +24,12 @@ builder.Services.AddSingleton<IEventStore, PostgresEventStore>();
 builder.Services.AddSekibanDcbPostgresWithAspire();
 
 builder.Services.AddSekibanDcbNativeRuntime();
+builder.Services.AddTransient<Sekiban.Dcb.Orleans.OrleansDcbExecutor>();
+builder.Services.AddTransient<ISekibanExecutor>(sp =>
+    sp.GetRequiredService<Sekiban.Dcb.Orleans.OrleansDcbExecutor>());
+builder.Services.AddTransient<ISerializedSekibanDcbExecutor>(sp =>
+    sp.GetRequiredService<Sekiban.Dcb.Orleans.OrleansDcbExecutor>());
+builder.Services.AddTransient<ISerializedDcbClient, InProcSerializedDcbClient>();
 
 var wasmModulePath = builder.Configuration["Wasm:DefaultModulePath"]
     ?? throw new InvalidOperationException(
@@ -92,7 +100,39 @@ app.MapPost("/api/weatherforecast/update-location", async (HttpContext http, Upd
     return Results.Ok(result);
 });
 
+app.MapPost("/api/sekiban/serialized/tag-state", async (HttpContext http, TagStateRequest request) =>
+{
+    TagStateId tagStateId;
+    try
+    {
+        tagStateId = TagStateId.Parse(request.TagStateId);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+    var executor = http.RequestServices.GetRequiredService<ISerializedSekibanDcbExecutor>();
+    var result = await executor.GetSerializableTagStateAsync(tagStateId);
+    if (!result.IsSuccess)
+    {
+        return Results.BadRequest(new { error = result.GetException().Message });
+    }
+    return Results.Ok(result.GetValue());
+});
+
+app.MapPost("/api/sekiban/serialized/commit", async (HttpContext http, SerializedCommitRequest request, CancellationToken ct) =>
+{
+    var executor = http.RequestServices.GetRequiredService<ISerializedSekibanDcbExecutor>();
+    var result = await executor.CommitSerializableEventsAsync(request, ct);
+    if (!result.IsSuccess)
+    {
+        return Results.BadRequest(new { error = result.GetException().Message });
+    }
+    return Results.Ok(result.GetValue());
+});
+
 app.Run();
 
 public record DeleteWeatherForecastRequest(string ForecastId);
 public record UpdateLocationRequest(string ForecastId, string NewLocation);
+public record TagStateRequest(string TagStateId);
