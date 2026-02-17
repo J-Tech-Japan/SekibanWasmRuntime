@@ -34,7 +34,7 @@ if (!File.Exists(wasmModulePath))
         "Set WASM_MODULE_PATH to the path of the Rust .wasm module, or build it via ./build/scripts/build-rust-wasm.sh.");
 }
 
-var wasmServer = builder
+var wasmServerBuilder = builder
     .AddProject<SekibanWasm_Rust_WasmServer>("wasmserver")
     .WithReference(postgres)
     .WithReference(orleans)
@@ -44,8 +44,10 @@ var wasmServer = builder
 var e2eApiPort = Environment.GetEnvironmentVariable("E2E_API_PORT");
 if (!string.IsNullOrWhiteSpace(e2eApiPort))
 {
-    wasmServer.WithEnvironment("ASPNETCORE_URLS", $"http://127.0.0.1:{e2eApiPort}");
+    wasmServerBuilder = wasmServerBuilder.WithEnvironment("ASPNETCORE_URLS", $"http://127.0.0.1:{e2eApiPort}");
 }
+
+var wasmServer = wasmServerBuilder;
 
 var rustClientApiDir = Path.GetFullPath(Path.Combine(
     builder.AppHostDirectory,
