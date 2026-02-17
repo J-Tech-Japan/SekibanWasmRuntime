@@ -34,7 +34,7 @@ if (!File.Exists(wasmModulePath))
         "Set WASM_MODULE_PATH to the path of the C# .wasm module, or build it via ./build/scripts/build-csharp-wasm.sh.");
 }
 
-var wasmServer = builder
+var wasmServerBuilder = builder
     .AddProject<SekibanWasm_Cs_WasmServer>("wasmserver")
     .WithReference(postgres)
     .WithReference(orleans)
@@ -44,11 +44,21 @@ var wasmServer = builder
 var e2eApiPort = Environment.GetEnvironmentVariable("E2E_API_PORT");
 if (!string.IsNullOrWhiteSpace(e2eApiPort))
 {
-    wasmServer.WithEnvironment("ASPNETCORE_URLS", $"http://127.0.0.1:{e2eApiPort}");
+    wasmServerBuilder = wasmServerBuilder.WithEnvironment("ASPNETCORE_URLS", $"http://127.0.0.1:{e2eApiPort}");
 }
 
-var clientApi = builder
-    .AddProject<SekibanWasm_Cs_ClientApi>("clientapi")
+var wasmServer = wasmServerBuilder;
+
+var clientApiBuilder = builder
+    .AddProject<SekibanWasm_Cs_ClientApi>("clientapi");
+
+var e2eClientApiPort = Environment.GetEnvironmentVariable("E2E_CLIENT_API_PORT");
+if (!string.IsNullOrWhiteSpace(e2eClientApiPort))
+{
+    clientApiBuilder = clientApiBuilder.WithEnvironment("ASPNETCORE_URLS", $"http://127.0.0.1:{e2eClientApiPort}");
+}
+
+var clientApi = clientApiBuilder
     .WithReference(wasmServer)
     .WaitFor(wasmServer);
 
