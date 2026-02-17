@@ -16,4 +16,8 @@ public interface ISerializedDcbClient
     Task<ResultBox<SerializedCommitResult>> CommitSerializableEventsAsync(
         SerializedCommitRequest request,
         CancellationToken cancellationToken = default);
+
+    Task<ResultBox<SerializedCommandExecuteResponse>> ExecuteSerializedCommandAsync(
+        SerializedCommandExecuteRequest request,
+        CancellationToken cancellationToken = default);
 }

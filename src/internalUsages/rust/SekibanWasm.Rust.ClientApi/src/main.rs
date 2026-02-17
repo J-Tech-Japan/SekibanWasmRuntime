@@ -2,12 +2,13 @@ use std::{env, net::SocketAddr};
 
 use axum::{
     extract::State,
-    http::{header, HeaderMap, HeaderValue, StatusCode},
+    http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
 };
 use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 #[derive(Clone)]
@@ -56,67 +57,178 @@ async fn create_forecast(
     State(state): State<AppState>,
     Json(body): Json<Value>,
 ) -> impl IntoResponse {
-    proxy_post(&state, "/api/weatherforecast", body).await
+    execute_and_commit(&state, "CreateWeatherForecast", &body).await
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DeleteRequest {
+    forecast_id: String,
 }
 
 async fn delete_forecast(
     State(state): State<AppState>,
-    Json(body): Json<Value>,
+    Json(body): Json<DeleteRequest>,
 ) -> impl IntoResponse {
-    proxy_post(&state, "/api/weatherforecast/delete", body).await
+    let command = json!({ "forecastId": body.forecast_id });
+    execute_and_commit(&state, "DeleteWeatherForecast", &command).await
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateLocationReq {
+    forecast_id: String,
+    new_location: String,
 }
 
 async fn update_location(
     State(state): State<AppState>,
-    Json(body): Json<Value>,
+    Json(body): Json<UpdateLocationReq>,
 ) -> impl IntoResponse {
-    proxy_post(&state, "/api/weatherforecast/update-location", body).await
+    let command = json!({
+        "forecastId": body.forecast_id,
+        "newLocation": body.new_location,
+    });
+    execute_and_commit(&state, "UpdateWeatherForecastLocation", &command).await
 }
 
-async fn proxy_post(state: &AppState, path: &str, body: Value) -> impl IntoResponse {
-    let url = format!("{}{}", state.wasmserver_base, path);
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CommandExecuteRequest {
+    command_name: String,
+    command_json: String,
+    consistency_tags: Option<Vec<Value>>,
+    options: Option<Value>,
+}
 
-    let result = state.client.post(url).json(&body).send().await;
-    let response = match result {
-        Ok(response) => response,
-        Err(err) => {
-            tracing::error!(error = %err, "forward request failed");
-            return (
-                StatusCode::BAD_GATEWAY,
-                Json(json!({ "error": format!("forward request failed: {err}") })),
-            )
-                .into_response();
-        }
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CommandExecuteResponse {
+    event_candidates: Vec<EventCandidate>,
+    consistency_tags: Vec<ConsistencyTag>,
+    command_result_json: Option<String>,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EventCandidate {
+    event_payload_name: String,
+    payload_base64: String,
+    tags: Vec<String>,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ConsistencyTag {
+    tag: String,
+    last_sortable_unique_id: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CommitRequest {
+    event_candidates: Vec<CommitEventCandidate>,
+    consistency_tags: Vec<ConsistencyTag>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CommitEventCandidate {
+    payload: String,
+    event_payload_name: String,
+    tags: Vec<String>,
+}
+
+async fn execute_and_commit(state: &AppState, command_name: &str, command: &Value) -> impl IntoResponse {
+    let command_json = serde_json::to_string(command).unwrap();
+
+    let execute_req = CommandExecuteRequest {
+        command_name: command_name.to_string(),
+        command_json,
+        consistency_tags: None,
+        options: None,
     };
 
-    let status = response.status();
-    let content_type = response
-        .headers()
-        .get(header::CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok())
-        .unwrap_or("application/json")
-        .to_string();
-
-    let bytes = match response.bytes().await {
-        Ok(bytes) => bytes,
-        Err(err) => {
-            tracing::error!(error = %err, "failed to read upstream response");
-            return (
-                StatusCode::BAD_GATEWAY,
-                Json(json!({ "error": format!("failed to read upstream response: {err}") })),
-            )
-                .into_response();
-        }
-    };
-
-    let mut headers = HeaderMap::new();
-    headers.insert(
-        header::CONTENT_TYPE,
-        HeaderValue::from_str(&content_type)
-            .unwrap_or_else(|_| HeaderValue::from_static("application/json")),
+    let execute_url = format!(
+        "{}/api/sekiban/serialized/command/execute",
+        state.wasmserver_base
     );
 
-    (status, headers, bytes).into_response()
+    let execute_resp = match state.client.post(&execute_url).json(&execute_req).send().await {
+        Ok(resp) => resp,
+        Err(err) => {
+            tracing::error!(error = %err, "command/execute request failed");
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({ "error": format!("command/execute request failed: {err}") })),
+            )
+                .into_response();
+        }
+    };
+
+    if !execute_resp.status().is_success() {
+        let status = execute_resp.status();
+        let body = execute_resp.text().await.unwrap_or_default();
+        tracing::error!(%status, %body, "command/execute returned error");
+        return (
+            StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY),
+            Json(json!({ "error": body })),
+        )
+            .into_response();
+    }
+
+    let execute_response: CommandExecuteResponse = match execute_resp.json().await {
+        Ok(r) => r,
+        Err(err) => {
+            tracing::error!(error = %err, "failed to parse command/execute response");
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({ "error": format!("failed to parse command/execute response: {err}") })),
+            )
+                .into_response();
+        }
+    };
+
+    let commit_candidates: Vec<CommitEventCandidate> = execute_response
+        .event_candidates
+        .iter()
+        .map(|ec| CommitEventCandidate {
+            payload: ec.payload_base64.clone(),
+            event_payload_name: ec.event_payload_name.clone(),
+            tags: ec.tags.clone(),
+        })
+        .collect();
+
+    let commit_req = CommitRequest {
+        event_candidates: commit_candidates,
+        consistency_tags: execute_response.consistency_tags,
+    };
+
+    let commit_url = format!(
+        "{}/api/sekiban/serialized/commit",
+        state.wasmserver_base
+    );
+
+    let commit_resp = match state.client.post(&commit_url).json(&commit_req).send().await {
+        Ok(resp) => resp,
+        Err(err) => {
+            tracing::error!(error = %err, "commit request failed");
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({ "error": format!("commit request failed: {err}") })),
+            )
+                .into_response();
+        }
+    };
+
+    let status = commit_resp.status();
+    let body: Value = commit_resp.json().await.unwrap_or(json!({ "error": "failed to read commit response" }));
+
+    (
+        StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
+        Json(body),
+    )
+        .into_response()
 }
 
 fn resolve_wasmserver_base() -> String {

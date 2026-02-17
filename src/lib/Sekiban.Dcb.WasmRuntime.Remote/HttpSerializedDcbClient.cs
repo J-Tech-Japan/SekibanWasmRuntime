@@ -91,5 +91,36 @@ public class HttpSerializedDcbClient : ISerializedDcbClient
         return ResultBox<SerializedCommitResult>.FromValue(result);
     }
 
+    public async Task<ResultBox<SerializedCommandExecuteResponse>> ExecuteSerializedCommandAsync(
+        SerializedCommandExecuteRequest request,
+        CancellationToken cancellationToken)
+    {
+        var baseUrl = _options.BaseUrl.TrimEnd('/');
+
+        var response = await _httpClient.PostAsJsonAsync(
+            $"{baseUrl}/api/sekiban/serialized/command/execute",
+            request,
+            _jsonOptions,
+            cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            return ResultBox<SerializedCommandExecuteResponse>.FromException(
+                new HttpRequestException(
+                    $"ExecuteSerializedCommand failed with {response.StatusCode}: {errorBody}"));
+        }
+
+        var result = await response.Content.ReadFromJsonAsync<SerializedCommandExecuteResponse>(
+            _jsonOptions, cancellationToken);
+        if (result is null)
+        {
+            return ResultBox<SerializedCommandExecuteResponse>.FromException(
+                new InvalidOperationException("Null response from command/execute endpoint"));
+        }
+
+        return ResultBox<SerializedCommandExecuteResponse>.FromValue(result);
+    }
+
     private record TagStateRequest(string TagStateId);
 }
