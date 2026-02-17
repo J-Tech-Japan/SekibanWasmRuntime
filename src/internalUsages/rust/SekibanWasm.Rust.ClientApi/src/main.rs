@@ -30,7 +30,8 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!(%wasmserver_base, "resolved wasmserver base");
 
     let app = Router::new()
-        .route("/api/weatherforecast", get(health).post(create_forecast))
+        .route("/health", get(health))
+        .route("/api/weatherforecast", get(get_forecasts).post(create_forecast))
         .route("/api/weatherforecast/delete", post(delete_forecast))
         .route(
             "/api/weatherforecast/update-location",
@@ -51,6 +52,11 @@ async fn main() -> anyhow::Result<()> {
 
 async fn health() -> impl IntoResponse {
     Json(json!({ "message": "WeatherForecast API is running" }))
+}
+
+async fn get_forecasts(State(state): State<AppState>) -> impl IntoResponse {
+    let _ = state;
+    Json(json!([])).into_response()
 }
 
 async fn create_forecast(

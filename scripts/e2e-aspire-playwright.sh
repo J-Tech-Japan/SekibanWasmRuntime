@@ -131,7 +131,11 @@ echo "[e2e-playwright] Running Playwright (headless)..."
 (
   cd "$ROOT/e2e/playwright"
   npm install
-  npx playwright install chromium
+  if [[ "$(uname -s)" == "Linux" ]]; then
+    npx playwright install --with-deps chromium
+  else
+    npx playwright install chromium
+  fi
   WEB_BASE_URL="$WEB_BASE_URL" \
   WASM_API_BASE_URL="$WASM_API_BASE_URL" \
   CLIENT_API_BASE_URL="$CLIENT_API_BASE_URL" \

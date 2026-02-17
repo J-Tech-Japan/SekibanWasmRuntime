@@ -37,5 +37,11 @@ jobs:
 
       - name: Test
         run: dotnet test src/SekibanWasmRuntime.ci.slnx -c Release --no-build
+
+      - name: E2E (Aspire + Playwright, CS)
+        env:
+          E2E_SAMPLE: cs
+        run: ./scripts/e2e-aspire-playwright.sh
+
       - name: Pack
         run: dotnet pack src/SekibanWasmRuntime.ci.slnx -c Release -o artifacts/nuget

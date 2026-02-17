@@ -41,7 +41,7 @@ app.MapOpenApi();
 
 app.MapGet("/api/weatherforecast", () =>
 {
-    return Results.Ok(new { message = "WeatherForecast API is running" });
+    return Results.Ok(Array.Empty<WeatherForecastItem>());
 });
 
 app.MapPost("/api/weatherforecast", async (
