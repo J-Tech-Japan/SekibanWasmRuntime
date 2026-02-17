@@ -63,6 +63,39 @@ dotnet test src/SekibanWasmRuntime.ci.slnx
 ./build/scripts/run-e2e.sh
 ```
 
+## Execution Models
+
+SekibanWasmRuntime supports two execution models for WASM projections:
+
+### Local (In-Process) Execution
+
+The default mode. The API service hosts both Orleans grains and the Wasmtime projection runtime in the same process. Commands are committed and tag states are read locally via `ISerializedSekibanDcbExecutor`.
+
+```
+Client -> API Service (Orleans + WasmProjectionRuntime)
+                |
+                +-> PostgreSQL (event store)
+```
+
+Use `InProcSerializedDcbClient` for this mode. It delegates directly to `ISerializedSekibanDcbExecutor` without HTTP overhead.
+
+### Remote (HTTP) Execution
+
+For scenarios where the WASM client runs in a separate process (e.g., browser-side Blazor WASM). The client sends serialized commit requests over HTTP to the API service's serialized endpoints.
+
+```
+WASM Client -> HTTP -> API Service (/api/sekiban/serialized/*)
+                            |
+                            +-> ISerializedSekibanDcbExecutor
+                            +-> PostgreSQL (event store)
+```
+
+Use `HttpSerializedDcbClient` for this mode. It calls the API service's serialized endpoints:
+- `POST /api/sekiban/serialized/tag-state` - Get the current tag state
+- `POST /api/sekiban/serialized/commit` - Commit serialized events with consistency tags
+
+Both modes implement `ISerializedDcbClient`, so application code is transport-agnostic.
+
 ## Submodules
 
 This repository uses git submodules. Initialize them after cloning:
