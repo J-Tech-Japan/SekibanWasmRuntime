@@ -65,7 +65,15 @@ var clientApiBuilder = builder
         rustClientApiDir,
         new[] { "run", "--release" });
 
-clientApiBuilder = clientApiBuilder.WithHttpEndpoint(env: "PORT");
+var e2eClientApiPort = Environment.GetEnvironmentVariable("E2E_CLIENT_API_PORT");
+if (!string.IsNullOrWhiteSpace(e2eClientApiPort))
+{
+    clientApiBuilder = clientApiBuilder.WithHttpEndpoint(port: int.Parse(e2eClientApiPort), env: "PORT");
+}
+else
+{
+    clientApiBuilder = clientApiBuilder.WithHttpEndpoint(env: "PORT");
+}
 
 var clientApi = clientApiBuilder
     .WithEnvironment("RUST_LOG", "info")

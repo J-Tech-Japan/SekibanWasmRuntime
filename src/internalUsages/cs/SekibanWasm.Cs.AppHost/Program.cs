@@ -53,9 +53,20 @@ else
 
 var wasmServer = wasmServerBuilder;
 
-var clientApi = builder
-    .AddProject<SekibanWasm_Cs_ClientApi>("clientapi")
-    .WithHttpEndpoint(env: "ASPNETCORE_URLS")
+var clientApiBuilder = builder
+    .AddProject<SekibanWasm_Cs_ClientApi>("clientapi");
+
+var e2eClientApiPort = Environment.GetEnvironmentVariable("E2E_CLIENT_API_PORT");
+if (!string.IsNullOrWhiteSpace(e2eClientApiPort))
+{
+    clientApiBuilder = clientApiBuilder.WithHttpEndpoint(port: int.Parse(e2eClientApiPort), env: "ASPNETCORE_URLS");
+}
+else
+{
+    clientApiBuilder = clientApiBuilder.WithHttpEndpoint(env: "ASPNETCORE_URLS");
+}
+
+var clientApi = clientApiBuilder
     .WithReference(wasmServer)
     .WaitFor(wasmServer);
 

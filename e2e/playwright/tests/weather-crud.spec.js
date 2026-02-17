@@ -2,7 +2,9 @@ import { expect, test } from '@playwright/test';
 
 const encodeCommand = (command) => JSON.stringify(command);
 
-test('serialized command execute + commit works', async ({ request }) => {
+test('serialized command execute + commit works', async ({ playwright }) => {
+  const wasmApiBaseUrl = process.env.WASM_API_BASE_URL ?? 'http://127.0.0.1:3000';
+  const api = await playwright.request.newContext({ baseURL: wasmApiBaseUrl });
   const sample = process.env.E2E_SAMPLE ?? 'cs';
   const suffix = `${Date.now()}`;
   const forecastId = `pw-${sample}-${suffix}`;
@@ -14,7 +16,7 @@ test('serialized command execute + commit works', async ({ request }) => {
     summary: 'Warm'
   };
 
-  const execute = await request.post('/api/sekiban/serialized/command/execute', {
+  const execute = await api.post('/api/sekiban/serialized/command/execute', {
     data: {
       commandName: 'CreateWeatherForecast',
       commandJson: encodeCommand(createCommand),
@@ -28,7 +30,7 @@ test('serialized command execute + commit works', async ({ request }) => {
   expect(Array.isArray(executeJson.eventCandidates)).toBeTruthy();
   expect(executeJson.eventCandidates.length).toBeGreaterThan(0);
 
-  const commit = await request.post('/api/sekiban/serialized/commit', {
+  const commit = await api.post('/api/sekiban/serialized/commit', {
     data: {
       eventCandidates: executeJson.eventCandidates.map((candidate) => ({
         payload: candidate.payloadBase64,
@@ -42,4 +44,6 @@ test('serialized command execute + commit works', async ({ request }) => {
   expect(commit.ok(), `commit failed: ${await commit.text()}`).toBeTruthy();
   const commitJson = await commit.json();
   expect(commitJson).toBeTruthy();
+
+  await api.dispose();
 });
