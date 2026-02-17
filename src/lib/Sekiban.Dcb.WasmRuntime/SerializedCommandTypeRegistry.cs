@@ -16,6 +16,11 @@ public class SerializedCommandTypeRegistry
         var dict = new Dictionary<string, Type>();
         foreach (var type in commandTypes)
         {
+            if (dict.TryGetValue(type.Name, out var existing))
+            {
+                throw new ArgumentException(
+                    $"Duplicate command type name detected: {type.Name} ({existing.FullName} / {type.FullName})");
+            }
             dict[type.Name] = type;
         }
         _commandTypes = dict.ToFrozenDictionary();

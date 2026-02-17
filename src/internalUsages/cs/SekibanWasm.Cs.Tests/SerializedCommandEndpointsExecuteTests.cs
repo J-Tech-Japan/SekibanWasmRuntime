@@ -93,9 +93,13 @@ public class SerializedCommandEndpointsExecuteTests
             ConsistencyTags: null,
             Options: null);
 
-        // When / Then
-        await Assert.ThrowsAsync<ArgumentException>(
-            () => endpoints.ExecuteAsync(request, CancellationToken.None));
+        // When
+        var result = await endpoints.ExecuteAsync(request, CancellationToken.None);
+
+        // Then
+        Assert.False(result.IsSuccess);
+        Assert.IsType<ArgumentException>(result.GetException());
+        Assert.Contains("Unknown command type", result.GetException().Message);
     }
 
     [Fact]

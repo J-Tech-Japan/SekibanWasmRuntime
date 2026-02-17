@@ -52,10 +52,16 @@ var clientApi = builder
     .WithReference(wasmServer)
     .WaitFor(wasmServer);
 
-builder
+var webFrontend = builder
     .AddProject<SekibanWasm_Cs_Web>("webfrontend")
     .WithExternalHttpEndpoints()
     .WithReference(clientApi)
     .WaitFor(clientApi);
+
+var e2eWebPort = Environment.GetEnvironmentVariable("E2E_WEB_PORT");
+if (!string.IsNullOrWhiteSpace(e2eWebPort))
+{
+    webFrontend.WithEnvironment("ASPNETCORE_URLS", $"http://127.0.0.1:{e2eWebPort}");
+}
 
 builder.Build().Run();

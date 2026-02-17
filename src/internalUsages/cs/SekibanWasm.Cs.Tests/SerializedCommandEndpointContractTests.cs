@@ -228,4 +228,5 @@ public class SerializedCommandEndpointContractTests
         Assert.NotNull(registry.GetCommandType("DeleteWeatherForecast"));
         Assert.NotNull(registry.GetCommandType("UpdateWeatherForecastLocation"));
     }
+
 }

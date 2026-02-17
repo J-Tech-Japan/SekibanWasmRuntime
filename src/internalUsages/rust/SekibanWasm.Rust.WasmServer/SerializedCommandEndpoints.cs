@@ -36,17 +36,28 @@ public class SerializedCommandEndpoints : ISerializedCommandExecutor
         SerializedCommandExecuteRequest request,
         CancellationToken cancellationToken)
     {
-        var commandType = _registry.GetCommandType(request.CommandName);
-        var command = JsonSerializer.Deserialize(request.CommandJson, commandType, _jsonOptions);
-        if (command is null)
+        ExecutionResult executionResult;
+        try
         {
-            return ResultBox<SerializedCommandExecuteResponse>.FromException(
-                new ArgumentException($"Failed to deserialize command: {request.CommandName}"));
-        }
+            var commandType = _registry.GetCommandType(request.CommandName);
+            var command = JsonSerializer.Deserialize(request.CommandJson, commandType, _jsonOptions);
+            if (command is null)
+            {
+                return ResultBox<SerializedCommandExecuteResponse>.FromException(
+                    new ArgumentException($"Failed to deserialize command: {request.CommandName}"));
+            }
 
-        var closedMethod = ExecuteAsyncOpenMethod.MakeGenericMethod(commandType);
-        var task = (Task<ExecutionResult>)closedMethod.Invoke(_executor, [command, cancellationToken])!;
-        var executionResult = await task;
+            var closedMethod = ExecuteAsyncOpenMethod.MakeGenericMethod(commandType);
+            var task = (Task<ExecutionResult>)closedMethod.Invoke(_executor, [command, cancellationToken])!;
+            executionResult = await task;
+        }
+        catch (Exception ex)
+        {
+            var source = ex is TargetInvocationException tie && tie.InnerException is not null
+                ? tie.InnerException
+                : ex;
+            return ResultBox<SerializedCommandExecuteResponse>.FromException(source);
+        }
 
         var eventCandidates = executionResult.Events
             .Select(evt => new SerializedCommandEventCandidate(
