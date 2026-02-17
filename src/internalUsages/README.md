@@ -11,7 +11,7 @@ Each configuration (CS and Rust) uses a three-service topology:
 ```
 
 - **WasmServer**: Hosts Orleans silo, PostgreSQL EventStore, Wasmtime-based WASM projection runtime, command execution endpoints (`/api/weatherforecast/*`), and the `/v1/instances/*` projection instance HTTP API.
-- **ClientApi**: A thin HTTP adapter that forwards `/api/weatherforecast/*` requests to WasmServer. No Sekiban runtime dependencies.
+- **ClientApi**: A thin HTTP adapter that forwards `/api/weatherforecast/*` requests to WasmServer. CS uses ASP.NET, Rust uses `axum`.
 - **Web**: Blazor Server frontend that consumes the ClientApi.
 
 ## Directory Structure
@@ -31,7 +31,7 @@ src/internalUsages/
 └── rust/                  # Rust WASM implementation
     ├── SekibanWasm.Rust.AppHost/      # Aspire orchestrator
     ├── SekibanWasm.Rust.WasmServer/   # WasmServer (Orleans + WASM projection + commands)
-    ├── SekibanWasm.Rust.ClientApi/    # ClientApi (HTTP adapter)
+    ├── SekibanWasm.Rust.ClientApi/    # ClientApi (Rust/axum HTTP adapter)
     ├── SekibanWasm.Rust.Domain/       # Domain model (events, projectors, commands)
     ├── SekibanWasm.Rust.ServiceDefaults/ # Aspire service defaults
     ├── SekibanWasm.Rust.Tests/        # Unit tests

@@ -20,7 +20,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SekibanWasm.Rust.WasmServer\SekibanWasm.Rust.WasmServer.csproj" />
-    <ProjectReference Include="..\SekibanWasm.Rust.ClientApi\SekibanWasm.Rust.ClientApi.csproj" />
     <ProjectReference Include="..\SekibanWasm.Rust.Web\SekibanWasm.Rust.Web.csproj" />
   </ItemGroup>
 

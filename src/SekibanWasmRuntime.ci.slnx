@@ -10,7 +10,6 @@
   </Folder>
   <Folder Name="/internalUsages/rust/">
     <Project Path="internalUsages/rust/SekibanWasm.Rust.WasmServer/SekibanWasm.Rust.WasmServer.csproj" />
-    <Project Path="internalUsages/rust/SekibanWasm.Rust.ClientApi/SekibanWasm.Rust.ClientApi.csproj" />
     <Project Path="internalUsages/rust/SekibanWasm.Rust.AppHost/SekibanWasm.Rust.AppHost.csproj" />
     <Project Path="internalUsages/rust/SekibanWasm.Rust.Domain/SekibanWasm.Rust.Domain.csproj" />
     <Project Path="internalUsages/rust/SekibanWasm.Rust.ServiceDefaults/SekibanWasm.Rust.ServiceDefaults.csproj" />

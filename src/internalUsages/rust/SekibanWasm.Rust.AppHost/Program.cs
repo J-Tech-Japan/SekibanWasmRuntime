@@ -47,15 +47,26 @@ if (!string.IsNullOrWhiteSpace(e2eApiPort))
     wasmServer.WithEnvironment("ASPNETCORE_URLS", $"http://127.0.0.1:{e2eApiPort}");
 }
 
+var rustClientApiDir = Path.GetFullPath(Path.Combine(
+    builder.AppHostDirectory,
+    "..",
+    "SekibanWasm.Rust.ClientApi"));
+
 var clientApi = builder
-    .AddProject<SekibanWasm_Rust_ClientApi>("clientapi")
+    .AddExecutable(
+        "clientapi",
+        "cargo",
+        rustClientApiDir,
+        new[] { "run", "--release" })
+    .WithHttpEndpoint(env: "PORT")
+    .WithEnvironment("RUST_LOG", "info")
     .WithReference(wasmServer)
     .WaitFor(wasmServer);
 
 builder
     .AddProject<SekibanWasm_Rust_Web>("webfrontend")
     .WithExternalHttpEndpoints()
-    .WithReference(clientApi)
+    .WithReference(clientApi.GetEndpoint("http"))
     .WaitFor(clientApi);
 
 builder.Build().Run();
