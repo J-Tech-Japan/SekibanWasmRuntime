@@ -19,7 +19,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\SekibanWasm.Cs.ApiService\SekibanWasm.Cs.ApiService.csproj" />
+    <ProjectReference Include="..\SekibanWasm.Cs.WasmServer\SekibanWasm.Cs.WasmServer.csproj" />
+    <ProjectReference Include="..\SekibanWasm.Cs.ClientApi\SekibanWasm.Cs.ClientApi.csproj" />
     <ProjectReference Include="..\SekibanWasm.Cs.Web\SekibanWasm.Cs.Web.csproj" />
   </ItemGroup>
 
