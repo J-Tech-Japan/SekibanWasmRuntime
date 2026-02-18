@@ -6,6 +6,7 @@ using SekibanWasm.Rust.Domain.Weather;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Commands;
+using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Orleans;
 using Sekiban.Dcb.Postgres;
 using Sekiban.Dcb.Runtime;
@@ -54,6 +55,13 @@ builder.Services.AddSingleton<Sekiban.Dcb.ServiceId.IServiceIdProvider, Sekiban.
 builder.Services.AddSekibanDcbPostgresWithAspire("SekibanRustDb");
 
 builder.Services.AddSekibanDcbNativeRuntime();
+builder.Services.AddSingleton<Sekiban.Dcb.Actors.IEventSubscriptionResolver>(_ =>
+    new Sekiban.Dcb.Orleans.Streams.DefaultOrleansEventSubscriptionResolver(
+        "EventStreamProvider",
+        "AllEvents",
+        Guid.Empty));
+builder.Services.AddSingleton<IMultiProjectionEventStatistics, NoOpMultiProjectionEventStatistics>();
+builder.Services.AddSingleton(new Sekiban.Dcb.Actors.GeneralMultiProjectionActorOptions());
 builder.Services.AddSingleton<IActorObjectAccessor, OrleansActorObjectAccessor>();
 builder.Services.AddTransient<Sekiban.Dcb.Orleans.OrleansDcbExecutor>();
 builder.Services.AddTransient<ISekibanExecutor>(sp =>
