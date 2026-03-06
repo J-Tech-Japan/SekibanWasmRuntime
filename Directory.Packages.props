@@ -28,12 +28,12 @@
     <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.2.0" />
 
     <!-- Microsoft Orleans -->
-    <PackageVersion Include="Microsoft.Orleans.Clustering.AzureStorage" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Orleans.Persistence.AzureStorage" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Orleans.Persistence.Memory" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Orleans.Server" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Orleans.Streaming" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Orleans.Streaming.AzureStorage" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Orleans.Clustering.AzureStorage" Version="10.0.1" />
+    <PackageVersion Include="Microsoft.Orleans.Persistence.AzureStorage" Version="10.0.1" />
+    <PackageVersion Include="Microsoft.Orleans.Persistence.Memory" Version="10.0.1" />
+    <PackageVersion Include="Microsoft.Orleans.Server" Version="10.0.1" />
+    <PackageVersion Include="Microsoft.Orleans.Streaming" Version="10.0.1" />
+    <PackageVersion Include="Microsoft.Orleans.Streaming.AzureStorage" Version="10.0.1" />
 
     <!-- OpenTelemetry -->
     <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.0" />
@@ -43,12 +43,12 @@
     <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.15.0" />
 
     <!-- Sekiban DCB -->
-    <PackageVersion Include="Sekiban.Dcb.Core" Version="10.1.0-preview03" />
-    <PackageVersion Include="Sekiban.Dcb.Core.Model" Version="10.1.0-preview03" />
-    <PackageVersion Include="Sekiban.Dcb.Orleans.Core" Version="10.1.0-preview03" />
-    <PackageVersion Include="Sekiban.Dcb.Orleans.WithoutResult" Version="10.1.0-preview03" />
-    <PackageVersion Include="Sekiban.Dcb.Postgres" Version="10.1.0-preview03" />
-    <PackageVersion Include="Sekiban.Dcb.WithoutResult" Version="10.1.0-preview03" />
+    <PackageVersion Include="Sekiban.Dcb.Core" Version="10.1.0-preview08" />
+    <PackageVersion Include="Sekiban.Dcb.Core.Model" Version="10.1.0-preview08" />
+    <PackageVersion Include="Sekiban.Dcb.Orleans.Core" Version="10.1.0-preview08" />
+    <PackageVersion Include="Sekiban.Dcb.Orleans.WithoutResult" Version="10.1.0-preview08" />
+    <PackageVersion Include="Sekiban.Dcb.Postgres" Version="10.1.0-preview08" />
+    <PackageVersion Include="Sekiban.Dcb.WithoutResult" Version="10.1.0-preview08" />
 
     <!-- Testing -->
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
