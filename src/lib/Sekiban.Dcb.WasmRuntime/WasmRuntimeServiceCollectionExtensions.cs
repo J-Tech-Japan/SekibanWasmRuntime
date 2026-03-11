@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sekiban.Dcb.Primitives;
 using Sekiban.Dcb.Runtime;
+using Sekiban.Dcb.Domains;
 using System.Text.Json;
 using System.Linq;
 
@@ -26,12 +27,14 @@ public static class WasmRuntimeServiceCollectionExtensions
 
             case WasmRuntimeMode.Wasm:
                 EnsureWasmRuntimeDependencies(services);
+                services.Replace(ServiceDescriptor.Singleton<ITagStateProjectionPrimitive, WasmTagStateProjectionPrimitiveFactory>());
                 services.TryAddSingleton<IProjectionRuntime, WasmProjectionRuntime>();
                 break;
 
             case WasmRuntimeMode.Hybrid:
                 EnsureWasmRuntimeDependencies(services);
                 EnsureRegistered<IProjectorRuntimeResolver>(services);
+                services.Replace(ServiceDescriptor.Singleton<ITagStateProjectionPrimitive, WasmTagStateProjectionPrimitiveFactory>());
                 services.TryAddSingleton<IProjectionRuntime, CompositeProjectionRuntime>();
                 break;
 
@@ -47,6 +50,7 @@ public static class WasmRuntimeServiceCollectionExtensions
         EnsureRegistered<IPrimitiveProjectionHost>(services);
         EnsureRegistered<WasmProjectorRegistry>(services);
         EnsureRegistered<JsonSerializerOptions>(services);
+        EnsureRegistered<IEventTypes>(services);
     }
 
     private static void EnsureRegistered<TService>(IServiceCollection services)

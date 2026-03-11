@@ -109,8 +109,11 @@ builder.Services.AddWasmtimeProjectionHost(opt =>
 });
 
 builder.Services.AddSingleton<JsonSerializerOptions>(_ => DomainJsonContext.Default.Options);
-
-builder.Services.AddSingleton<IProjectionRuntime, WasmProjectionRuntime>();
+builder.Services.AddWasmTagStateRuntime(opt =>
+{
+    opt.Mode = WasmRuntimeMode.Wasm;
+    opt.WasmModulePath = wasmModulePath;
+});
 
 builder.Services.AddOpenApi();
 

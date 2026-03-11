@@ -1,7 +1,12 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
+using SekibanWasm.Cs.Domain;
+using SekibanWasm.Cs.Domain.Weather;
 using Sekiban.Dcb.Primitives;
 using Sekiban.Dcb.Runtime;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.WasmRuntime;
+using Sekiban.Dcb.Tags;
 using System.Text.Json;
 using Xunit;
 
@@ -222,6 +227,7 @@ public class RuntimeSelectionTests
         services.AddSingleton<IPrimitiveProjectionHost>(new StubPrimitiveProjectionHost());
         services.AddSingleton(new WasmProjectorRegistry());
         services.AddSingleton(new JsonSerializerOptions());
+        services.AddSingleton(DomainType.GetDomainTypes().EventTypes);
 
         // When
         services.AddWasmTagStateRuntime(o =>
@@ -237,6 +243,10 @@ public class RuntimeSelectionTests
                  d.ImplementationType == typeof(WasmProjectionRuntime));
         Assert.Contains(
             services,
+            d => d.ServiceType == typeof(ITagStateProjectionPrimitive) &&
+                 d.ImplementationType == typeof(WasmTagStateProjectionPrimitiveFactory));
+        Assert.Contains(
+            services,
             d => d.ServiceType == typeof(WasmTagStateOptions));
     }
 
@@ -248,6 +258,7 @@ public class RuntimeSelectionTests
         services.AddSingleton<IPrimitiveProjectionHost>(new StubPrimitiveProjectionHost());
         services.AddSingleton(new WasmProjectorRegistry());
         services.AddSingleton(new JsonSerializerOptions());
+        services.AddSingleton(DomainType.GetDomainTypes().EventTypes);
         var defaultRuntime = new StubProjectionRuntime("default");
         services.AddSingleton<Sekiban.Dcb.WasmRuntime.IProjectorRuntimeResolver>(
             new ProjectorRuntimeResolver(defaultRuntime, new Dictionary<string, IProjectionRuntime>()));
@@ -264,6 +275,10 @@ public class RuntimeSelectionTests
             services,
             d => d.ServiceType == typeof(IProjectionRuntime) &&
                  d.ImplementationType == typeof(CompositeProjectionRuntime));
+        Assert.Contains(
+            services,
+            d => d.ServiceType == typeof(ITagStateProjectionPrimitive) &&
+                 d.ImplementationType == typeof(WasmTagStateProjectionPrimitiveFactory));
         Assert.Contains(
             services,
             d => d.ServiceType == typeof(WasmTagStateOptions));
@@ -335,6 +350,7 @@ public class RuntimeSelectionTests
         services.AddSingleton<IPrimitiveProjectionHost>(new StubPrimitiveProjectionHost());
         services.AddSingleton(new WasmProjectorRegistry());
         services.AddSingleton(new JsonSerializerOptions());
+        services.AddSingleton(DomainType.GetDomainTypes().EventTypes);
 
         // When / Then
         var ex = Assert.Throws<InvalidOperationException>(() => services.AddWasmTagStateRuntime(o =>
@@ -343,6 +359,56 @@ public class RuntimeSelectionTests
             o.WasmModulePath = "/test.wasm";
         }));
         Assert.Contains("IProjectorRuntimeResolver", ex.Message);
+    }
+
+    [Fact]
+    public void AddWasmTagStateRuntime_WasmMode_ShouldReplaceExistingTagStatePrimitive()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IPrimitiveProjectionHost>(new StubPrimitiveProjectionHost());
+        services.AddSingleton(new WasmProjectorRegistry());
+        services.AddSingleton(new JsonSerializerOptions());
+        services.AddSingleton(DomainType.GetDomainTypes().EventTypes);
+        services.AddSingleton<ITagStateProjectionPrimitive>(new StubTagStateProjectionPrimitive());
+
+        services.AddWasmTagStateRuntime(o =>
+        {
+            o.Mode = WasmRuntimeMode.Wasm;
+            o.WasmModulePath = "/test.wasm";
+        });
+
+        var descriptor = Assert.Single(services, d => d.ServiceType == typeof(ITagStateProjectionPrimitive));
+        Assert.Equal(typeof(WasmTagStateProjectionPrimitiveFactory), descriptor.ImplementationType);
+    }
+
+    [Fact]
+    public void MissingAccumulator_ShouldPreserveCachedState_WhenModuleIsUnavailable()
+    {
+        var registry = new WasmProjectorRegistry();
+        var factory = new WasmTagStateProjectionPrimitiveFactory(
+            new StubPrimitiveProjectionHost(),
+            registry,
+            DomainType.GetDomainTypes().EventTypes,
+            new JsonSerializerOptions(),
+            NullLogger<WasmTagStateProjectionPrimitiveFactory>.Instance);
+
+        var accumulator = factory.CreateAccumulator(TagStateId.Parse("weather:f-1:WeatherForecastProjector"));
+        var cachedState = new SerializableTagState(
+            Payload: [1, 2, 3],
+            Version: 7,
+            LastSortedUniqueId: "sorted-7",
+            TagGroup: "weather",
+            TagContent: "f-1",
+            TagProjector: nameof(WeatherForecastProjector),
+            TagPayloadName: nameof(WeatherForecastState),
+            ProjectorVersion: "v1");
+
+        Assert.True(accumulator.ApplyState(cachedState));
+        Assert.True(accumulator.ApplyEvents([], null));
+
+        var result = accumulator.GetSerializedState();
+
+        Assert.Same(cachedState, result);
     }
 
     /// <summary>
@@ -427,5 +493,11 @@ public class RuntimeSelectionTests
         public string SerializeState() => "{}";
         public void RestoreState(string stateJson) { }
         public void Dispose() { }
+    }
+
+    private sealed class StubTagStateProjectionPrimitive : ITagStateProjectionPrimitive
+    {
+        public ITagStateProjectionAccumulator CreateAccumulator(Sekiban.Dcb.Tags.TagStateId tagStateId) =>
+            throw new NotImplementedException();
     }
 }
