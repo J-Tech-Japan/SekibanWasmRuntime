@@ -1,13 +1,11 @@
-using SekibanWasm.Rust.Domain.Weather;
-
 namespace SekibanWasm.Rust.Web;
 
 public class WeatherApiClient(HttpClient httpClient)
 {
-    public async Task<WeatherForecastItem[]> GetWeatherAsync(
+    public async Task<WeatherForecastListItem[]> GetWeatherAsync(
         CancellationToken cancellationToken = default)
     {
-        var forecasts = await httpClient.GetFromJsonAsync<List<WeatherForecastItem>>(
+        var forecasts = await httpClient.GetFromJsonAsync<List<WeatherForecastListItem>>(
             "/api/weatherforecast",
             cancellationToken);
 
@@ -15,7 +13,7 @@ public class WeatherApiClient(HttpClient httpClient)
     }
 
     public async Task<CommandResponse> CreateWeatherAsync(
-        CreateWeatherForecast command,
+        CreateWeatherForecastRequest command,
         CancellationToken cancellationToken = default)
     {
         var response = await httpClient.PostAsJsonAsync("/api/weatherforecast", command, cancellationToken);
@@ -44,5 +42,3 @@ public class WeatherApiClient(HttpClient httpClient)
             ?? throw new InvalidOperationException("Failed to deserialize CommandResponse");
     }
 }
-
-public record CommandResponse(bool Success, string? Error, string? SortableUniqueId);

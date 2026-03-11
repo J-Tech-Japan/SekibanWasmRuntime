@@ -10,6 +10,7 @@ use axum::{
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use sekiban_wasm_domain::WeatherForecastItem;
 
 #[derive(Clone)]
 struct AppState {
@@ -59,7 +60,7 @@ async fn get_forecasts(State(state): State<AppState>) -> impl IntoResponse {
     match tokio::time::timeout(Duration::from_secs(2), state.client.get(&url).send()).await {
         Ok(Ok(resp)) => {
             if resp.status().is_success() {
-                let body: Value = resp.json().await.unwrap_or(json!([]));
+                let body: Vec<WeatherForecastItem> = resp.json().await.unwrap_or_default();
                 (StatusCode::OK, Json(body)).into_response()
             } else {
                 (StatusCode::OK, Json(json!([]))).into_response()
@@ -72,9 +73,10 @@ async fn get_forecasts(State(state): State<AppState>) -> impl IntoResponse {
 
 async fn create_forecast(
     State(state): State<AppState>,
-    Json(body): Json<Value>,
+    Json(command): Json<CreateWeatherForecastCommand>,
 ) -> impl IntoResponse {
-    execute_and_commit(&state, "CreateWeatherForecast", &body).await
+    let forecast_id = command.forecast_id.map(|id| id.to_string());
+    execute_and_commit(&state, "CreateWeatherForecast", &command, forecast_id).await
 }
 
 #[derive(Deserialize)]
@@ -83,12 +85,37 @@ struct DeleteRequest {
     forecast_id: String,
 }
 
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CreateWeatherForecastCommand {
+    forecast_id: Option<uuid::Uuid>,
+    location: String,
+    temperature_c: i32,
+    summary: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DeleteWeatherForecastCommand {
+    forecast_id: uuid::Uuid,
+}
+
 async fn delete_forecast(
     State(state): State<AppState>,
     Json(body): Json<DeleteRequest>,
 ) -> impl IntoResponse {
-    let command = json!({ "forecastId": body.forecast_id });
-    execute_and_commit(&state, "DeleteWeatherForecast", &command).await
+    let forecast_id = match parse_uuid_field(&body.forecast_id, "forecastId") {
+        Ok(value) => value,
+        Err(response) => return response,
+    };
+    let command = DeleteWeatherForecastCommand { forecast_id };
+    execute_and_commit(
+        &state,
+        "DeleteWeatherForecast",
+        &command,
+        Some(body.forecast_id),
+    )
+    .await
 }
 
 #[derive(Deserialize)]
@@ -98,15 +125,32 @@ struct UpdateLocationReq {
     new_location: String,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateWeatherForecastLocationCommand {
+    forecast_id: uuid::Uuid,
+    new_location: String,
+}
+
 async fn update_location(
     State(state): State<AppState>,
     Json(body): Json<UpdateLocationReq>,
 ) -> impl IntoResponse {
-    let command = json!({
-        "forecastId": body.forecast_id,
-        "newLocation": body.new_location,
-    });
-    execute_and_commit(&state, "UpdateWeatherForecastLocation", &command).await
+    let forecast_id = match parse_uuid_field(&body.forecast_id, "forecastId") {
+        Ok(value) => value,
+        Err(response) => return response,
+    };
+    let command = UpdateWeatherForecastLocationCommand {
+        forecast_id,
+        new_location: body.new_location,
+    };
+    execute_and_commit(
+        &state,
+        "UpdateWeatherForecastLocation",
+        &command,
+        Some(body.forecast_id),
+    )
+    .await
 }
 
 #[derive(Serialize)]
@@ -123,7 +167,7 @@ struct CommandExecuteRequest {
 struct CommandExecuteResponse {
     event_candidates: Vec<EventCandidate>,
     consistency_tags: Vec<ConsistencyTag>,
-    command_result_json: Option<String>,
+    _command_result_json: Option<String>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -156,8 +200,36 @@ struct CommitEventCandidate {
     tags: Vec<String>,
 }
 
-async fn execute_and_commit(state: &AppState, command_name: &str, command: &Value) -> impl IntoResponse {
-    let command_json = serde_json::to_string(command).unwrap();
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CommandResponse {
+    success: bool,
+    error: Option<String>,
+    sortable_unique_id: Option<String>,
+    forecast_id: Option<String>,
+}
+
+async fn execute_and_commit<T: Serialize>(
+    state: &AppState,
+    command_name: &str,
+    command: &T,
+    forecast_id: Option<String>,
+) -> axum::response::Response {
+    let command_json = match serde_json::to_string(command) {
+        Ok(json) => json,
+        Err(err) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(CommandResponse {
+                    success: false,
+                    error: Some(format!("failed to serialize command: {err}")),
+                    sortable_unique_id: None,
+                    forecast_id,
+                }),
+            )
+                .into_response();
+        }
+    };
 
     let execute_req = CommandExecuteRequest {
         command_name: command_name.to_string(),
@@ -177,7 +249,12 @@ async fn execute_and_commit(state: &AppState, command_name: &str, command: &Valu
             tracing::error!(error = %err, "command/execute request failed");
             return (
                 StatusCode::BAD_GATEWAY,
-                Json(json!({ "error": format!("command/execute request failed: {err}") })),
+                Json(CommandResponse {
+                    success: false,
+                    error: Some(format!("command/execute request failed: {err}")),
+                    sortable_unique_id: None,
+                    forecast_id,
+                }),
             )
                 .into_response();
         }
@@ -189,7 +266,12 @@ async fn execute_and_commit(state: &AppState, command_name: &str, command: &Valu
         tracing::error!(%status, %body, "command/execute returned error");
         return (
             StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY),
-            Json(json!({ "error": body })),
+            Json(CommandResponse {
+                success: false,
+                error: Some(body),
+                sortable_unique_id: None,
+                forecast_id,
+            }),
         )
             .into_response();
     }
@@ -200,7 +282,12 @@ async fn execute_and_commit(state: &AppState, command_name: &str, command: &Valu
             tracing::error!(error = %err, "failed to parse command/execute response");
             return (
                 StatusCode::BAD_GATEWAY,
-                Json(json!({ "error": format!("failed to parse command/execute response: {err}") })),
+                Json(CommandResponse {
+                    success: false,
+                    error: Some(format!("failed to parse command/execute response: {err}")),
+                    sortable_unique_id: None,
+                    forecast_id,
+                }),
             )
                 .into_response();
         }
@@ -232,18 +319,35 @@ async fn execute_and_commit(state: &AppState, command_name: &str, command: &Valu
             tracing::error!(error = %err, "commit request failed");
             return (
                 StatusCode::BAD_GATEWAY,
-                Json(json!({ "error": format!("commit request failed: {err}") })),
+                Json(CommandResponse {
+                    success: false,
+                    error: Some(format!("commit request failed: {err}")),
+                    sortable_unique_id: None,
+                    forecast_id,
+                }),
             )
                 .into_response();
         }
     };
 
     let status = commit_resp.status();
-    let body: Value = commit_resp.json().await.unwrap_or(json!({ "error": "failed to read commit response" }));
+    let body: Value = commit_resp
+        .json()
+        .await
+        .unwrap_or(json!({ "error": "failed to read commit response" }));
+    let sortable_unique_id = body
+        .get("sortableUniqueId")
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned);
 
     (
         StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
-        Json(body),
+        Json(CommandResponse {
+            success: status.is_success(),
+            error: (!status.is_success()).then(|| body.to_string()),
+            sortable_unique_id,
+            forecast_id,
+        }),
     )
         .into_response()
 }
@@ -298,4 +402,19 @@ fn init_tracing() {
         .with_env_filter(filter)
         .with_target(false)
         .try_init();
+}
+
+fn parse_uuid_field(value: &str, field_name: &str) -> Result<uuid::Uuid, axum::response::Response> {
+    uuid::Uuid::parse_str(value).map_err(|err| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(CommandResponse {
+                success: false,
+                error: Some(format!("invalid {field_name}: {err}")),
+                sortable_unique_id: None,
+                forecast_id: Some(value.to_string()),
+            }),
+        )
+            .into_response()
+    })
 }

@@ -8,7 +8,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SekibanWasm.Rust.ServiceDefaults\SekibanWasm.Rust.ServiceDefaults.csproj" />
-    <ProjectReference Include="..\SekibanWasm.Rust.Domain\SekibanWasm.Rust.Domain.csproj" />
   </ItemGroup>
 
 </Project>
