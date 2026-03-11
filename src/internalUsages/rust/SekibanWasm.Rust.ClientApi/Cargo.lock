@@ -1004,8 +1004,11 @@ name = "sekiban-wasm-rust-clientapi"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "axum",
+ "base64",
  "reqwest",
+ "sekiban-core",
  "sekiban-wasm-domain",
  "serde",
  "serde_json",
