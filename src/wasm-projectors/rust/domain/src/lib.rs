@@ -1,9 +1,11 @@
+pub mod commands;
 pub mod events;
 pub mod projectors;
 pub mod queries;
 pub mod states;
 pub mod tags;
 
+pub use commands::*;
 pub use events::*;
 pub use projectors::*;
 pub use queries::*;
@@ -18,19 +20,14 @@ domain_types!(WeatherForecastDomain {
         WeatherForecastLocationUpdated,
         WeatherForecastDeleted,
     ],
-    tags: [
-        WeatherForecastTag,
+    tags: [WeatherForecastTag,],
+    tag_projectors: [WeatherForecastProjector,],
+    multi_projectors: [WeatherForecastListProjector,],
+    commands: [
+        CreateWeatherForecast,
+        UpdateWeatherForecastLocation,
+        DeleteWeatherForecast,
     ],
-    tag_projectors: [
-        WeatherForecastProjector,
-    ],
-    multi_projectors: [
-        WeatherForecastListProjector,
-    ],
-    queries: [
-        GetWeatherForecastCountQuery,
-    ],
-    list_queries: [
-        GetWeatherForecastListQuery,
-    ],
+    queries: [GetWeatherForecastCountQuery,],
+    list_queries: [GetWeatherForecastListQuery,],
 });

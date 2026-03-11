@@ -4,7 +4,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <IsAotCompatible>true</IsAotCompatible>
+    <RootNamespace>SekibanWasm.Rust.Domain</RootNamespace>
+    <AssemblyName>SekibanWasm.Rust.ServerBridge</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>

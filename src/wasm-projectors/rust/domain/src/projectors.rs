@@ -105,9 +105,7 @@ impl MultiProjectorQuery for WeatherForecastListProjector {
         } else {
             state.items.len() as i32
         };
-        Some(
-            serde_json::to_string(&CountResult { count }).unwrap_or_else(|_| "{}".to_string()),
-        )
+        Some(serde_json::to_string(&CountResult { count }).unwrap_or_else(|_| "{}".to_string()))
     }
 
     fn execute_list_query(state: &Self::State, query_type: &str, params: &str) -> Option<String> {

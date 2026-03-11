@@ -11,15 +11,14 @@
   <Folder Name="/internalUsages/rust/">
     <Project Path="internalUsages/rust/SekibanWasm.Rust.WasmServer/SekibanWasm.Rust.WasmServer.csproj" />
     <Project Path="internalUsages/rust/SekibanWasm.Rust.AppHost/SekibanWasm.Rust.AppHost.csproj" />
-    <Project Path="internalUsages/rust/SekibanWasm.Rust.Domain/SekibanWasm.Rust.Domain.csproj" />
     <Project Path="internalUsages/rust/SekibanWasm.Rust.ServiceDefaults/SekibanWasm.Rust.ServiceDefaults.csproj" />
-    <Project Path="internalUsages/rust/SekibanWasm.Rust.Tests/SekibanWasm.Rust.Tests.csproj" />
     <Project Path="internalUsages/rust/SekibanWasm.Rust.Web/SekibanWasm.Rust.Web.csproj" />
   </Folder>
   <Folder Name="/lib/">
     <Project Path="lib/Sekiban.Dcb.WasmRuntime.Remote/Sekiban.Dcb.WasmRuntime.Remote.csproj" />
     <Project Path="lib/Sekiban.Dcb.WasmRuntime.Wasmtime/Sekiban.Dcb.WasmRuntime.Wasmtime.csproj" />
     <Project Path="lib/Sekiban.Dcb.WasmRuntime/Sekiban.Dcb.WasmRuntime.csproj" />
+    <Project Path="lib/SekibanWasm.Rust.ServerBridge/SekibanWasm.Rust.ServerBridge.csproj" />
   </Folder>
   <Project Path="../external/wasmtime-dotnet/src/Wasmtime.csproj" />
 </Solution>
