@@ -12,6 +12,7 @@ namespace SekibanWasm.Cs.Domain;
 [JsonSerializable(typeof(WeatherForecastState))]
 [JsonSerializable(typeof(WeatherForecastItem))]
 [JsonSerializable(typeof(WeatherForecastMultiProjection))]
+[JsonSerializable(typeof(GetWeatherForecastListQuery))]
 [JsonSerializable(typeof(Dictionary<string, WeatherForecastItem>))]
 [JsonSerializable(typeof(List<WeatherForecastItem>))]
 [JsonSourceGenerationOptions(

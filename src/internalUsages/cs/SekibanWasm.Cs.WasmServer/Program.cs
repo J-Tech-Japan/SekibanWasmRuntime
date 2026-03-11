@@ -254,6 +254,9 @@ static async Task WaitForSortableUniqueIdAsync(
     string sortableUniqueId,
     CancellationToken ct)
 {
+    await grain.StartSubscriptionAsync();
+    await grain.RefreshAsync();
+
     var timeout = TimeSpan.FromSeconds(30);
     var started = DateTime.UtcNow;
     while (DateTime.UtcNow - started < timeout && !ct.IsCancellationRequested)

@@ -277,7 +277,11 @@ public static class WasmExports
     private static string ExecuteCountQuery(string queryParamsJson, WeatherForecastMultiProjection state)
     {
         var query = ParseLocationQuery(queryParamsJson);
-        var active = state.Forecasts.Values.Where(f => !f.IsDeleted);
+        var active = state.Forecasts.Values.AsEnumerable();
+        if (!query.IncludeDeleted)
+            active = active.Where(f => !f.IsDeleted);
+        if (!string.IsNullOrWhiteSpace(query.ForecastId))
+            active = active.Where(f => f.ForecastId == query.ForecastId);
         var count = string.IsNullOrEmpty(query.LocationFilter)
             ? active.Count()
             : active.Count(f => f.Location.Contains(query.LocationFilter, StringComparison.OrdinalIgnoreCase));
@@ -287,7 +291,11 @@ public static class WasmExports
     private static string ExecuteListQueryInternal(string queryParamsJson, WeatherForecastMultiProjection state)
     {
         var query = ParseLocationQuery(queryParamsJson);
-        var items = state.Forecasts.Values.Where(f => !f.IsDeleted);
+        var items = state.Forecasts.Values.AsEnumerable();
+        if (!query.IncludeDeleted)
+            items = items.Where(f => !f.IsDeleted);
+        if (!string.IsNullOrWhiteSpace(query.ForecastId))
+            items = items.Where(f => f.ForecastId == query.ForecastId);
         if (!string.IsNullOrEmpty(query.LocationFilter))
             items = items.Where(f => f.Location.Contains(query.LocationFilter, StringComparison.OrdinalIgnoreCase));
 

@@ -93,7 +93,11 @@ async fn get_forecasts(
         Ok(items) => (StatusCode::OK, Json(items)).into_response(),
         Err(err) => {
             tracing::warn!(error = %err, "list query failed");
-            (StatusCode::OK, Json(Vec::<WeatherForecastItem>::new())).into_response()
+            (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({ "error": err.to_string() })),
+            )
+                .into_response()
         }
     }
 }
