@@ -155,8 +155,19 @@ app.MapPost("/api/sekiban/serialized/query", async (
     SerializedQueryRequest request,
     CancellationToken ct) =>
 {
-    var result = await ExecuteSerializedQueryAsync(http, request, isListQuery: false, ct);
-    return result;
+    try
+    {
+        var result = await ExecuteSerializedQueryAsync(http, request, isListQuery: false, ct);
+        return result;
+    }
+    catch (TimeoutException)
+    {
+        return Results.StatusCode(StatusCodes.Status504GatewayTimeout);
+    }
+    catch (OperationCanceledException)
+    {
+        return Results.StatusCode(499);
+    }
 });
 
 app.MapPost("/api/sekiban/serialized/list-query", async (
@@ -164,8 +175,19 @@ app.MapPost("/api/sekiban/serialized/list-query", async (
     SerializedQueryRequest request,
     CancellationToken ct) =>
 {
-    var result = await ExecuteSerializedQueryAsync(http, request, isListQuery: true, ct);
-    return result;
+    try
+    {
+        var result = await ExecuteSerializedQueryAsync(http, request, isListQuery: true, ct);
+        return result;
+    }
+    catch (TimeoutException)
+    {
+        return Results.StatusCode(StatusCodes.Status504GatewayTimeout);
+    }
+    catch (OperationCanceledException)
+    {
+        return Results.StatusCode(499);
+    }
 });
 
 app.Run();
@@ -233,6 +255,14 @@ static async Task WaitForSortableUniqueIdAsync(
 
         await Task.Delay(TimeSpan.FromMilliseconds(200), ct);
     }
+
+    if (ct.IsCancellationRequested)
+    {
+        throw new OperationCanceledException(ct);
+    }
+
+    throw new TimeoutException(
+        $"Timed out after {timeout.TotalSeconds} seconds waiting for sortable unique id '{sortableUniqueId}'.");
 }
 
 static async Task<byte[]> CompressStringAsync(string value)

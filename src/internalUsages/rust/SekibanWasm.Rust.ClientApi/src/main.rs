@@ -258,11 +258,15 @@ impl HttpCommandContext {
             .map_err(|err| CommandError::Validation(format!("tag-state request failed: {err}")))?;
 
         if !response.status().is_success() {
-            return Ok(SerializableTagStateResponse {
-                payload: String::new(),
-                version: 0,
-                last_sorted_unique_id: String::new(),
-            });
+            let status = response.status();
+            let body = response
+                .text()
+                .await
+                .unwrap_or_else(|err| format!("<failed to read error body: {err}>"));
+            return Err(CommandError::Validation(format!(
+                "tag-state request failed with status {}: {}",
+                status, body
+            )));
         }
 
         response
