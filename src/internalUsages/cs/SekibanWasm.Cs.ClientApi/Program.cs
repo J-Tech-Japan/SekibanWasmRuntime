@@ -28,18 +28,36 @@ app.MapOpenApi();
 app.MapGet("/api/weatherforecast", async (HttpContext http, CancellationToken ct) =>
 {
     var client = http.RequestServices.GetRequiredService<IHttpClientFactory>().CreateClient("wasmserver");
+    var jsonOptions = http.RequestServices.GetRequiredService<JsonSerializerOptions>();
+    var transportJsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
     try
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(2));
-        var response = await client.GetAsync("/api/weatherforecast", timeout.Token);
+        var query = new GetWeatherForecastListQuery();
+        var request = new SerializedQueryRequest(
+            QueryType: nameof(GetWeatherForecastListQuery),
+            QueryParamsJson: JsonSerializer.Serialize(query, query.GetType(), jsonOptions),
+            WaitForSortableUniqueId: null);
+        var response = await client.PostAsJsonAsync(
+            "/api/sekiban/serialized/list-query",
+            request,
+            transportJsonOptions,
+            timeout.Token);
         if (!response.IsSuccessStatusCode)
         {
             return Results.Ok(Array.Empty<WeatherForecastItem>());
         }
 
-        var result = await response.Content.ReadAsStringAsync(timeout.Token);
-        return Results.Content(result, "application/json", statusCode: 200);
+        var result = await response.Content.ReadFromJsonAsync<SerializedListQueryResponse>(
+            transportJsonOptions,
+            timeout.Token);
+        if (result is null)
+        {
+            return Results.Ok(Array.Empty<WeatherForecastItem>());
+        }
+
+        return Results.Content(result.ItemsJson, "application/json", statusCode: 200);
     }
     catch
     {
@@ -197,3 +215,13 @@ static string ResolveWasmServerBase(IConfiguration configuration)
 
 public record DeleteWeatherForecastRequest(string ForecastId);
 public record UpdateLocationRequest(string ForecastId, string NewLocation);
+public record SerializedQueryRequest(
+    string QueryType,
+    string QueryParamsJson,
+    string? WaitForSortableUniqueId = null);
+public record SerializedListQueryResponse(
+    string ItemsJson,
+    int? TotalCount,
+    int? TotalPages,
+    int? CurrentPage,
+    int? PageSize);
