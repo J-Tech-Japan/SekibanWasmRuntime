@@ -1,6 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
+using SekibanWasm.Cs.Domain;
 using Sekiban.Dcb.Primitives;
 using Sekiban.Dcb.Runtime;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.WasmRuntime;
 using System.Text.Json;
 using Xunit;
@@ -222,6 +224,7 @@ public class RuntimeSelectionTests
         services.AddSingleton<IPrimitiveProjectionHost>(new StubPrimitiveProjectionHost());
         services.AddSingleton(new WasmProjectorRegistry());
         services.AddSingleton(new JsonSerializerOptions());
+        services.AddSingleton(DomainType.GetDomainTypes().EventTypes);
 
         // When
         services.AddWasmTagStateRuntime(o =>
@@ -237,6 +240,10 @@ public class RuntimeSelectionTests
                  d.ImplementationType == typeof(WasmProjectionRuntime));
         Assert.Contains(
             services,
+            d => d.ServiceType == typeof(ITagStateProjectionPrimitive) &&
+                 d.ImplementationType == typeof(WasmTagStateProjectionPrimitiveFactory));
+        Assert.Contains(
+            services,
             d => d.ServiceType == typeof(WasmTagStateOptions));
     }
 
@@ -248,6 +255,7 @@ public class RuntimeSelectionTests
         services.AddSingleton<IPrimitiveProjectionHost>(new StubPrimitiveProjectionHost());
         services.AddSingleton(new WasmProjectorRegistry());
         services.AddSingleton(new JsonSerializerOptions());
+        services.AddSingleton(DomainType.GetDomainTypes().EventTypes);
         var defaultRuntime = new StubProjectionRuntime("default");
         services.AddSingleton<Sekiban.Dcb.WasmRuntime.IProjectorRuntimeResolver>(
             new ProjectorRuntimeResolver(defaultRuntime, new Dictionary<string, IProjectionRuntime>()));
@@ -264,6 +272,10 @@ public class RuntimeSelectionTests
             services,
             d => d.ServiceType == typeof(IProjectionRuntime) &&
                  d.ImplementationType == typeof(CompositeProjectionRuntime));
+        Assert.Contains(
+            services,
+            d => d.ServiceType == typeof(ITagStateProjectionPrimitive) &&
+                 d.ImplementationType == typeof(WasmTagStateProjectionPrimitiveFactory));
         Assert.Contains(
             services,
             d => d.ServiceType == typeof(WasmTagStateOptions));
@@ -335,6 +347,7 @@ public class RuntimeSelectionTests
         services.AddSingleton<IPrimitiveProjectionHost>(new StubPrimitiveProjectionHost());
         services.AddSingleton(new WasmProjectorRegistry());
         services.AddSingleton(new JsonSerializerOptions());
+        services.AddSingleton(DomainType.GetDomainTypes().EventTypes);
 
         // When / Then
         var ex = Assert.Throws<InvalidOperationException>(() => services.AddWasmTagStateRuntime(o =>
@@ -343,6 +356,26 @@ public class RuntimeSelectionTests
             o.WasmModulePath = "/test.wasm";
         }));
         Assert.Contains("IProjectorRuntimeResolver", ex.Message);
+    }
+
+    [Fact]
+    public void AddWasmTagStateRuntime_WasmMode_ShouldReplaceExistingTagStatePrimitive()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IPrimitiveProjectionHost>(new StubPrimitiveProjectionHost());
+        services.AddSingleton(new WasmProjectorRegistry());
+        services.AddSingleton(new JsonSerializerOptions());
+        services.AddSingleton(DomainType.GetDomainTypes().EventTypes);
+        services.AddSingleton<ITagStateProjectionPrimitive>(new StubTagStateProjectionPrimitive());
+
+        services.AddWasmTagStateRuntime(o =>
+        {
+            o.Mode = WasmRuntimeMode.Wasm;
+            o.WasmModulePath = "/test.wasm";
+        });
+
+        var descriptor = Assert.Single(services, d => d.ServiceType == typeof(ITagStateProjectionPrimitive));
+        Assert.Equal(typeof(WasmTagStateProjectionPrimitiveFactory), descriptor.ImplementationType);
     }
 
     /// <summary>
@@ -427,5 +460,11 @@ public class RuntimeSelectionTests
         public string SerializeState() => "{}";
         public void RestoreState(string stateJson) { }
         public void Dispose() { }
+    }
+
+    private sealed class StubTagStateProjectionPrimitive : ITagStateProjectionPrimitive
+    {
+        public ITagStateProjectionAccumulator CreateAccumulator(Sekiban.Dcb.Tags.TagStateId tagStateId) =>
+            throw new NotImplementedException();
     }
 }

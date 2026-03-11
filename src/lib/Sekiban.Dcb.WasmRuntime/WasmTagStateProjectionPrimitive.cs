@@ -4,6 +4,7 @@ using System.Linq;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Primitives;
+using Sekiban.Dcb.Runtime;
 using Sekiban.Dcb.Tags;
 
 namespace Sekiban.Dcb.WasmRuntime;
@@ -12,7 +13,7 @@ namespace Sekiban.Dcb.WasmRuntime;
 /// Bridges IPrimitiveProjectionInstance (WASM level) and SerializableTagState (Sekiban level).
 /// Follows the same accumulator contract as native: ApplyState, ApplyEvents, GetSerializedState.
 /// </summary>
-public class WasmTagStateProjectionPrimitive : IDisposable
+public class WasmTagStateProjectionPrimitive : ITagStateProjectionAccumulator, IDisposable
 {
     private readonly IPrimitiveProjectionInstance _instance;
     private readonly string _projectorName;
