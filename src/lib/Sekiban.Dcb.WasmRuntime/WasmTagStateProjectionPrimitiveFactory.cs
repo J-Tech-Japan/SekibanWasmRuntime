@@ -70,6 +70,7 @@ public sealed class WasmTagStateProjectionPrimitiveFactory : ITagStateProjection
     {
         private readonly TagStateId _tagStateId;
         private readonly string _projectorVersion;
+        private SerializableTagState? _cachedState;
 
         public MissingTagStateProjectionAccumulator(TagStateId tagStateId, string projectorVersion)
         {
@@ -77,7 +78,11 @@ public sealed class WasmTagStateProjectionPrimitiveFactory : ITagStateProjection
             _projectorVersion = projectorVersion;
         }
 
-        public bool ApplyState(SerializableTagState? cachedState) => true;
+        public bool ApplyState(SerializableTagState? cachedState)
+        {
+            _cachedState = cachedState;
+            return true;
+        }
 
         public bool ApplyEvents(
             IReadOnlyList<SerializableEvent> events,
@@ -85,14 +90,15 @@ public sealed class WasmTagStateProjectionPrimitiveFactory : ITagStateProjection
             CancellationToken cancellationToken = default) => true;
 
         public SerializableTagState GetSerializedState() =>
+            _cachedState ??
             new(
-                Array.Empty<byte>(),
-                0,
-                string.Empty,
-                _tagStateId.TagGroup,
-                _tagStateId.TagContent,
-                _tagStateId.TagProjectorName,
-                nameof(EmptyTagStatePayload),
-                _projectorVersion);
+                Payload: Array.Empty<byte>(),
+                Version: 0,
+                LastSortedUniqueId: string.Empty,
+                TagGroup: _tagStateId.TagGroup,
+                TagContent: _tagStateId.TagContent,
+                TagProjector: _tagStateId.TagProjectorName,
+                TagPayloadName: nameof(EmptyTagStatePayload),
+                ProjectorVersion: _projectorVersion);
     }
 }

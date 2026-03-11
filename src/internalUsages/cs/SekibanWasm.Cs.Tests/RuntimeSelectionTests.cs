@@ -1,9 +1,12 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using SekibanWasm.Cs.Domain;
+using SekibanWasm.Cs.Domain.Weather;
 using Sekiban.Dcb.Primitives;
 using Sekiban.Dcb.Runtime;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.WasmRuntime;
+using Sekiban.Dcb.Tags;
 using System.Text.Json;
 using Xunit;
 
@@ -376,6 +379,36 @@ public class RuntimeSelectionTests
 
         var descriptor = Assert.Single(services, d => d.ServiceType == typeof(ITagStateProjectionPrimitive));
         Assert.Equal(typeof(WasmTagStateProjectionPrimitiveFactory), descriptor.ImplementationType);
+    }
+
+    [Fact]
+    public void MissingAccumulator_ShouldPreserveCachedState_WhenModuleIsUnavailable()
+    {
+        var registry = new WasmProjectorRegistry();
+        var factory = new WasmTagStateProjectionPrimitiveFactory(
+            new StubPrimitiveProjectionHost(),
+            registry,
+            DomainType.GetDomainTypes().EventTypes,
+            new JsonSerializerOptions(),
+            NullLogger<WasmTagStateProjectionPrimitiveFactory>.Instance);
+
+        var accumulator = factory.CreateAccumulator(TagStateId.Parse("weather:f-1:WeatherForecastProjector"));
+        var cachedState = new SerializableTagState(
+            Payload: [1, 2, 3],
+            Version: 7,
+            LastSortedUniqueId: "sorted-7",
+            TagGroup: "weather",
+            TagContent: "f-1",
+            TagProjector: nameof(WeatherForecastProjector),
+            TagPayloadName: nameof(WeatherForecastState),
+            ProjectorVersion: "v1");
+
+        Assert.True(accumulator.ApplyState(cachedState));
+        Assert.True(accumulator.ApplyEvents([], null));
+
+        var result = accumulator.GetSerializedState();
+
+        Assert.Same(cachedState, result);
     }
 
     /// <summary>
