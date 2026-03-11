@@ -27,7 +27,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SekibanWasm.Rust.ServiceDefaults\SekibanWasm.Rust.ServiceDefaults.csproj" />
-    <ProjectReference Include="..\SekibanWasm.Rust.Domain\SekibanWasm.Rust.Domain.csproj" />
+    <ProjectReference Include="..\..\..\lib\SekibanWasm.Rust.ServerBridge\SekibanWasm.Rust.ServerBridge.csproj" />
     <ProjectReference Include="..\..\..\lib\Sekiban.Dcb.WasmRuntime\Sekiban.Dcb.WasmRuntime.csproj" />
     <ProjectReference Include="..\..\..\lib\Sekiban.Dcb.WasmRuntime.Wasmtime\Sekiban.Dcb.WasmRuntime.Wasmtime.csproj" />
   </ItemGroup>
