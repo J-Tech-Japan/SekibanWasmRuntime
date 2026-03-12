@@ -30,7 +30,7 @@ public class ClientApiCommandFlowTests
         var stubClient = CreateClient(handler);
         var queryClient = new StubWeatherQueryClient();
 
-        var flow = new ClientApiCommandFlow(stubClient, queryClient, JsonOptions);
+        var flow = new ClientApiCommandFlow(stubClient, queryClient, new DomainSerializerOptions(JsonOptions));
         var command = new CreateWeatherForecast("f-1", "Tokyo", 22, "Warm");
 
         var result = await flow.ExecuteAndCommit(nameof(CreateWeatherForecast), command, CancellationToken.None);
@@ -59,7 +59,7 @@ public class ClientApiCommandFlowTests
         var stubClient = CreateClient(handler);
         var queryClient = new StubWeatherQueryClient { ForecastToReturn = existing };
 
-        var flow = new ClientApiCommandFlow(stubClient, queryClient, JsonOptions);
+        var flow = new ClientApiCommandFlow(stubClient, queryClient, new DomainSerializerOptions(JsonOptions));
         var result = await flow.ExecuteAndCommit(
             nameof(CreateWeatherForecast),
             new CreateWeatherForecast("f-1", "Tokyo", 22, "Warm"),
@@ -83,7 +83,7 @@ public class ClientApiCommandFlowTests
         var stubClient = CreateClient(handler);
         var queryClient = new StubWeatherQueryClient { ForecastToReturn = existing };
 
-        var flow = new ClientApiCommandFlow(stubClient, queryClient, JsonOptions);
+        var flow = new ClientApiCommandFlow(stubClient, queryClient, new DomainSerializerOptions(JsonOptions));
         var result = await flow.ExecuteAndCommit(
             nameof(UpdateWeatherForecastLocation),
             new UpdateWeatherForecastLocation("f-1", "Osaka"),
@@ -104,7 +104,7 @@ public class ClientApiCommandFlowTests
         var stubClient = CreateClient(handler);
         var queryClient = new StubWeatherQueryClient();
 
-        var flow = new ClientApiCommandFlow(stubClient, queryClient, JsonOptions);
+        var flow = new ClientApiCommandFlow(stubClient, queryClient, new DomainSerializerOptions(JsonOptions));
         var result = await flow.ExecuteAndCommit(
             nameof(DeleteWeatherForecast),
             new DeleteWeatherForecast("f-1"),
@@ -128,7 +128,7 @@ public class ClientApiCommandFlowTests
         var stubClient = CreateClient(handler);
         var queryClient = new StubWeatherQueryClient { ForecastToReturn = existing };
 
-        var flow = new ClientApiCommandFlow(stubClient, queryClient, JsonOptions);
+        var flow = new ClientApiCommandFlow(stubClient, queryClient, new DomainSerializerOptions(JsonOptions));
         var result = await flow.ExecuteAndCommit(
             nameof(UpdateWeatherForecastLocation),
             new UpdateWeatherForecastLocation("f-1", "Osaka"),

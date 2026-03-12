@@ -11,10 +11,11 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 
-var jsonOptions = DomainJsonContext.Default.Options;
-var transportJsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
-builder.Services.AddSingleton(jsonOptions);
-builder.Services.AddSingleton(transportJsonOptions);
+var domainSerializerOptions = new DomainSerializerOptions(DomainJsonContext.Default.Options);
+var transportSerializerOptions = new TransportSerializerOptions(
+    new JsonSerializerOptions(JsonSerializerDefaults.Web));
+builder.Services.AddSingleton(domainSerializerOptions);
+builder.Services.AddSingleton(transportSerializerOptions);
 
 var wasmServerBaseUrl = ResolveWasmServerBase(builder.Configuration);
 builder.Services.AddHttpClient("wasmserver", client =>
@@ -26,7 +27,7 @@ builder.Services.AddScoped<ISerializedDcbClient>(sp =>
     new HttpSerializedDcbClient(
         sp.GetRequiredService<IHttpClientFactory>().CreateClient("serialized-dcb"),
         new SerializedDcbClientOptions { BaseUrl = wasmServerBaseUrl },
-        transportJsonOptions));
+        sp.GetRequiredService<TransportSerializerOptions>().Value));
 builder.Services.AddScoped<IWeatherQueryClient, WeatherQueryClient>();
 builder.Services.AddScoped<ClientApiCommandFlow>();
 
@@ -45,7 +46,8 @@ app.MapGet("/api/weatherforecast", async Task<IResult> (
     CancellationToken ct) =>
 {
     var client = http.RequestServices.GetRequiredService<IHttpClientFactory>().CreateClient("wasmserver");
-    var jsonOptions = http.RequestServices.GetRequiredService<JsonSerializerOptions>();
+    var jsonOptions = http.RequestServices.GetRequiredService<DomainSerializerOptions>().Value;
+    var transportJsonOptions = http.RequestServices.GetRequiredService<TransportSerializerOptions>().Value;
     try
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);

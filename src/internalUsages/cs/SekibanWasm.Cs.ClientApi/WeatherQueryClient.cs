@@ -17,12 +17,12 @@ public sealed class WeatherQueryClient : IWeatherQueryClient
 
     public WeatherQueryClient(
         IHttpClientFactory httpClientFactory,
-        JsonSerializerOptions domainJsonOptions,
-        JsonSerializerOptions transportJsonOptions)
+        DomainSerializerOptions domainJsonOptions,
+        TransportSerializerOptions transportJsonOptions)
     {
         _httpClientFactory = httpClientFactory;
-        _domainJsonOptions = domainJsonOptions;
-        _transportJsonOptions = transportJsonOptions;
+        _domainJsonOptions = domainJsonOptions.Value;
+        _transportJsonOptions = transportJsonOptions.Value;
     }
 
     public async Task<WeatherForecastItem?> GetForecastAsync(string forecastId, CancellationToken ct)

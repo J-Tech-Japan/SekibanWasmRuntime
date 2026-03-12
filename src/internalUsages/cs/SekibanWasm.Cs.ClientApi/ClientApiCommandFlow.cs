@@ -16,11 +16,11 @@ public class ClientApiCommandFlow
     public ClientApiCommandFlow(
         ISerializedDcbClient client,
         IWeatherQueryClient queryClient,
-        JsonSerializerOptions jsonOptions)
+        DomainSerializerOptions jsonOptions)
     {
         _client = client;
         _queryClient = queryClient;
-        _jsonOptions = jsonOptions;
+        _jsonOptions = jsonOptions.Value;
     }
 
     public async Task<IResult> ExecuteAndCommit(
