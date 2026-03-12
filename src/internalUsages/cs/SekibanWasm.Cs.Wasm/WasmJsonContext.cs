@@ -12,5 +12,5 @@ public partial class WasmJsonContext : JsonSerializerContext
 {
 }
 
-public record LocationQuery(string? LocationFilter);
+public record LocationQuery(string? LocationFilter, string? ForecastId = null, bool IncludeDeleted = false);
 public record CountResult(int Count);

@@ -1,3 +1,5 @@
+using System.IO.Compression;
+using System.Text;
 using System.Text.Json;
 using Azure.Storage.Blobs;
 using Orleans.Hosting;
@@ -8,8 +10,12 @@ using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Orleans;
+using Sekiban.Dcb.Orleans.Grains;
+using Sekiban.Dcb.Orleans.Serialization;
+using Sekiban.Dcb.Orleans.ServiceId;
 using Sekiban.Dcb.Postgres;
 using Sekiban.Dcb.Runtime;
+using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.WasmRuntime;
@@ -125,13 +131,6 @@ app.MapOpenApi();
 SerializedCommandEndpoints.Map(app);
 InstanceEndpoints.Map(app);
 
-app.MapGet("/api/weatherforecast", async (HttpContext http) =>
-{
-    var executor = http.RequestServices.GetRequiredService<ISekibanExecutor>();
-    var queryResult = await executor.QueryAsync(new GetWeatherForecastListQuery());
-    return Results.Ok(queryResult.Items.ToArray());
-});
-
 app.MapPost("/api/sekiban/serialized/tag-state", async (HttpContext http, TagStateRequest request) =>
 {
     TagStateId tagStateId;
@@ -163,6 +162,161 @@ app.MapPost("/api/sekiban/serialized/commit", async (HttpContext http, Serialize
     return Results.Ok(result.GetValue());
 });
 
+app.MapPost("/api/sekiban/serialized/query", async (
+    HttpContext http,
+    SerializedQueryRequest request,
+    CancellationToken ct) =>
+{
+    try
+    {
+        return await ExecuteSerializedQueryAsync(http, request, isListQuery: false, ct);
+    }
+    catch (TimeoutException ex)
+    {
+        return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status504GatewayTimeout);
+    }
+    catch (OperationCanceledException)
+    {
+        return Results.StatusCode(499);
+    }
+});
+
+app.MapPost("/api/sekiban/serialized/list-query", async (
+    HttpContext http,
+    SerializedQueryRequest request,
+    CancellationToken ct) =>
+{
+    try
+    {
+        return await ExecuteSerializedQueryAsync(http, request, isListQuery: true, ct);
+    }
+    catch (TimeoutException ex)
+    {
+        return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status504GatewayTimeout);
+    }
+    catch (OperationCanceledException)
+    {
+        return Results.StatusCode(499);
+    }
+});
+
 app.Run();
 
+static async Task<IResult> ExecuteSerializedQueryAsync(
+    HttpContext http,
+    SerializedQueryRequest request,
+    bool isListQuery,
+    CancellationToken ct)
+{
+    var registry = http.RequestServices.GetRequiredService<WasmProjectorRegistry>();
+    var projectorName = registry.ResolveProjectorForQuery(request.QueryType);
+    if (string.IsNullOrWhiteSpace(projectorName))
+    {
+        return Results.BadRequest(new { error = $"Query type '{request.QueryType}' is not mapped." });
+    }
+
+    var clusterClient = http.RequestServices.GetRequiredService<IClusterClient>();
+    var serviceIdProvider = http.RequestServices.GetRequiredService<IServiceIdProvider>();
+    var grainKey = ServiceIdGrainKey.Build(serviceIdProvider.GetCurrentServiceId(), projectorName);
+    var grain = clusterClient.GetGrain<IMultiProjectionGrain>(grainKey);
+
+    if (!string.IsNullOrWhiteSpace(request.WaitForSortableUniqueId))
+    {
+        await WaitForSortableUniqueIdAsync(grain, request.WaitForSortableUniqueId!, ct);
+    }
+
+    var parameter = new SerializableQueryParameter
+    {
+        QueryTypeName = request.QueryType,
+        QueryAssemblyVersion = "csharp",
+        CompressedQueryJson = await CompressStringAsync(request.QueryParamsJson)
+    };
+
+    if (!isListQuery)
+    {
+        var result = await grain.ExecuteQueryAsync(parameter);
+        var resultJson = await DecompressToStringAsync(result.CompressedResultJson);
+        return Results.Ok(new SerializedQueryResponse(resultJson));
+    }
+
+    var listResult = await grain.ExecuteListQueryAsync(parameter);
+    var itemsJson = await DecompressToStringAsync(listResult.CompressedItemsJson);
+    return Results.Ok(new SerializedListQueryResponse(
+        ItemsJson: itemsJson,
+        TotalCount: listResult.TotalCount,
+        TotalPages: listResult.TotalPages,
+        CurrentPage: listResult.CurrentPage,
+        PageSize: listResult.PageSize));
+}
+
+static async Task WaitForSortableUniqueIdAsync(
+    IMultiProjectionGrain grain,
+    string sortableUniqueId,
+    CancellationToken ct)
+{
+    await grain.StartSubscriptionAsync();
+    await grain.RefreshAsync();
+
+    var timeout = TimeSpan.FromSeconds(30);
+    var started = DateTime.UtcNow;
+    while (DateTime.UtcNow - started < timeout && !ct.IsCancellationRequested)
+    {
+        if (await grain.IsSortableUniqueIdReceived(sortableUniqueId))
+        {
+            return;
+        }
+
+        await Task.Delay(TimeSpan.FromMilliseconds(200), ct);
+    }
+
+    if (ct.IsCancellationRequested)
+    {
+        throw new OperationCanceledException(ct);
+    }
+
+    throw new TimeoutException(
+        $"Timed out after {timeout.TotalSeconds} seconds waiting for sortable unique id '{sortableUniqueId}'.");
+}
+
+static async Task<byte[]> CompressStringAsync(string value)
+{
+    if (string.IsNullOrEmpty(value))
+    {
+        return Array.Empty<byte>();
+    }
+
+    var bytes = Encoding.UTF8.GetBytes(value);
+    await using var output = new MemoryStream();
+    await using (var gzip = new GZipStream(output, CompressionLevel.Fastest, leaveOpen: true))
+    {
+        await gzip.WriteAsync(bytes);
+    }
+    return output.ToArray();
+}
+
+static async Task<string> DecompressToStringAsync(byte[] value)
+{
+    if (value.Length == 0)
+    {
+        return string.Empty;
+    }
+
+    await using var input = new MemoryStream(value);
+    await using var gzip = new GZipStream(input, CompressionMode.Decompress);
+    using var output = new MemoryStream();
+    await gzip.CopyToAsync(output);
+    return Encoding.UTF8.GetString(output.ToArray());
+}
+
 public record TagStateRequest(string TagStateId);
+public record SerializedQueryRequest(
+    string QueryType,
+    string QueryParamsJson,
+    string? WaitForSortableUniqueId = null);
+public record SerializedQueryResponse(string ResultJson);
+public record SerializedListQueryResponse(
+    string ItemsJson,
+    int? TotalCount,
+    int? TotalPages,
+    int? CurrentPage,
+    int? PageSize);

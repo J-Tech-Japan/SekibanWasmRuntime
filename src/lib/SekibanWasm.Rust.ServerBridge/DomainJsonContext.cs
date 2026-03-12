@@ -9,6 +9,9 @@ namespace SekibanWasm.Rust.Domain;
 [JsonSerializable(typeof(WeatherForecastState))]
 [JsonSerializable(typeof(WeatherForecastItem))]
 [JsonSerializable(typeof(WeatherForecastMultiProjection))]
+[JsonSerializable(typeof(GetWeatherForecastCountQuery))]
+[JsonSerializable(typeof(GetWeatherForecastListQuery))]
+[JsonSerializable(typeof(CountResult))]
 [JsonSerializable(typeof(Dictionary<string, WeatherForecastItem>))]
 [JsonSerializable(typeof(List<WeatherForecastItem>))]
 [JsonSourceGenerationOptions(

@@ -1,12 +1,13 @@
 using System.Text;
 using System.Text.Json;
-using Microsoft.AspNetCore.Http;
+using System.Net;
 using ResultBoxes;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Events;
-using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.WasmRuntime;
+using Sekiban.Dcb.WasmRuntime.Remote;
 using SekibanWasm.Cs.ClientApi;
+using SekibanWasm.Cs.Domain.Weather;
 using Xunit;
 
 namespace SekibanWasm.Cs.Tests;
@@ -19,203 +20,174 @@ public class ClientApiCommandFlowTests
     };
 
     [Fact]
-    public async Task ExecuteAndCommit_ShouldReturnOk_WhenExecuteAndCommitBothSucceed()
+    public async Task ExecuteAndCommit_Create_ShouldCommitCreatedEvent_WhenStateIsEmpty()
     {
-        // Given
-        var payloadBase64 = Convert.ToBase64String(
-            Encoding.UTF8.GetBytes("{\"forecastId\":\"f-1\"}"));
-
-        var executeResponse = new SerializedCommandExecuteResponse(
-            EventCandidates: new List<SerializedCommandEventCandidate>
-            {
-                new(
-                    EventPayloadName: "WeatherForecastCreated",
-                    PayloadBase64: payloadBase64,
-                    Tags: new List<string> { "weather:f-1" })
-            },
-            ConsistencyTags: new List<ConsistencyTagEntry>
-            {
-                new(Tag: "weather:f-1", LastSortableUniqueId: "uid-001")
-            },
-            CommandResultJson: null);
-
         var commitResult = new SerializedCommitResult(
-            WrittenEvents: new List<SerializableEvent>(),
-            TagWriteResults: new List<TagWriteResult>(),
+            WrittenEvents: [],
+            TagWriteResults: [],
             Duration: TimeSpan.FromMilliseconds(10));
+        var handler = new StubHttpMessageHandler(HttpStatusCode.OK, JsonSerializer.Serialize(commitResult, JsonOptions));
+        var stubClient = CreateClient(handler);
+        var queryClient = new StubWeatherQueryClient();
 
-        var stubClient = new StubSerializedDcbClient
-        {
-            ExecuteResponseToReturn = ResultBox.FromValue(executeResponse),
-            CommitResultToReturn = ResultBox.FromValue(commitResult)
-        };
+        var flow = new ClientApiCommandFlow(stubClient, queryClient, new DomainSerializerOptions(JsonOptions));
+        var command = new CreateWeatherForecast("f-1", "Tokyo", 22, "Warm");
 
-        var flow = new ClientApiCommandFlow(stubClient, JsonOptions);
-        var command = new { forecastId = "f-1", location = "Tokyo", temperatureC = 22, summary = "Warm" };
+        var result = await flow.ExecuteAndCommit(nameof(CreateWeatherForecast), command, CancellationToken.None);
 
-        // When
-        var result = await flow.ExecuteAndCommit("CreateWeatherForecast", command, CancellationToken.None);
-
-        // Then
         Assert.IsType<Microsoft.AspNetCore.Http.HttpResults.Ok<SerializedCommitResult>>(result);
-
-        Assert.NotNull(stubClient.LastExecuteRequest);
-        Assert.Equal("CreateWeatherForecast", stubClient.LastExecuteRequest.CommandName);
-        Assert.Contains("forecastId", stubClient.LastExecuteRequest.CommandJson);
-
-        Assert.NotNull(stubClient.LastCommitRequest);
-        Assert.Single(stubClient.LastCommitRequest.EventCandidates);
-        var candidate = stubClient.LastCommitRequest.EventCandidates[0];
-        Assert.Equal("WeatherForecastCreated", candidate.EventPayloadName);
-        var decodedPayload = Encoding.UTF8.GetString(candidate.Payload);
-        Assert.Equal("{\"forecastId\":\"f-1\"}", decodedPayload);
+        Assert.Equal("f-1", queryClient.LastForecastId);
+        Assert.NotNull(handler.LastRequestBody);
+        var payloadJson = ExtractFirstPayloadJson(handler.LastRequestBody);
+        Assert.Contains(nameof(WeatherForecastCreated), handler.LastRequestBody);
+        Assert.Contains("weather:f-1", handler.LastRequestBody);
+        Assert.Contains("\"forecastId\":\"f-1\"", payloadJson);
+        Assert.Contains("\"location\":\"Tokyo\"", payloadJson);
     }
 
     [Fact]
-    public async Task ExecuteAndCommit_ShouldReturnBadRequest_WhenExecuteFails()
+    public async Task ExecuteAndCommit_Create_ShouldReturnBadRequest_WhenStateAlreadyExists()
     {
-        // Given
-        var stubClient = new StubSerializedDcbClient
-        {
-            ExecuteResponseToReturn = ResultBox<SerializedCommandExecuteResponse>.FromException(
-                new InvalidOperationException("Command execution failed"))
-        };
+        var existing = new WeatherForecastItem(
+            ForecastId: "f-1",
+            Location: "Tokyo",
+            TemperatureC: 20,
+            Summary: "Cloudy",
+            CreatedAt: DateTimeOffset.UtcNow);
 
-        var flow = new ClientApiCommandFlow(stubClient, JsonOptions);
-        var command = new { forecastId = "f-1" };
+        var handler = new StubHttpMessageHandler(HttpStatusCode.OK, JsonSerializer.Serialize(new SerializedCommitResult([], [], TimeSpan.Zero), JsonOptions));
+        var stubClient = CreateClient(handler);
+        var queryClient = new StubWeatherQueryClient { ForecastToReturn = existing };
 
-        // When
-        var result = await flow.ExecuteAndCommit("CreateWeatherForecast", command, CancellationToken.None);
+        var flow = new ClientApiCommandFlow(stubClient, queryClient, new DomainSerializerOptions(JsonOptions));
+        var result = await flow.ExecuteAndCommit(
+            nameof(CreateWeatherForecast),
+            new CreateWeatherForecast("f-1", "Tokyo", 22, "Warm"),
+            CancellationToken.None);
 
-        // Then
         Assert.Contains("BadRequest", result.GetType().Name);
-        Assert.Null(stubClient.LastCommitRequest);
+        Assert.Null(handler.LastRequestBody);
+    }
+
+    [Fact]
+    public async Task ExecuteAndCommit_Update_ShouldCommitUpdatedEvent()
+    {
+        var existing = new WeatherForecastItem(
+            ForecastId: "f-1",
+            Location: "Tokyo",
+            TemperatureC: 20,
+            Summary: "Cloudy",
+            CreatedAt: DateTimeOffset.UtcNow);
+
+        var handler = new StubHttpMessageHandler(HttpStatusCode.OK, JsonSerializer.Serialize(new SerializedCommitResult([], [], TimeSpan.Zero), JsonOptions));
+        var stubClient = CreateClient(handler);
+        var queryClient = new StubWeatherQueryClient { ForecastToReturn = existing };
+
+        var flow = new ClientApiCommandFlow(stubClient, queryClient, new DomainSerializerOptions(JsonOptions));
+        var result = await flow.ExecuteAndCommit(
+            nameof(UpdateWeatherForecastLocation),
+            new UpdateWeatherForecastLocation("f-1", "Osaka"),
+            CancellationToken.None);
+
+        Assert.IsType<Microsoft.AspNetCore.Http.HttpResults.Ok<SerializedCommitResult>>(result);
+        Assert.NotNull(handler.LastRequestBody);
+        var payloadJson = ExtractFirstPayloadJson(handler.LastRequestBody);
+        Assert.Contains(nameof(WeatherForecastLocationUpdated), handler.LastRequestBody);
+        Assert.Contains("\"newLocation\":\"Osaka\"", payloadJson);
+        Assert.Contains("\"lastSortableUniqueId\":\"\"", handler.LastRequestBody);
+    }
+
+    [Fact]
+    public async Task ExecuteAndCommit_Delete_ShouldReturnBadRequest_WhenStateDoesNotExist()
+    {
+        var handler = new StubHttpMessageHandler(HttpStatusCode.OK, JsonSerializer.Serialize(new SerializedCommitResult([], [], TimeSpan.Zero), JsonOptions));
+        var stubClient = CreateClient(handler);
+        var queryClient = new StubWeatherQueryClient();
+
+        var flow = new ClientApiCommandFlow(stubClient, queryClient, new DomainSerializerOptions(JsonOptions));
+        var result = await flow.ExecuteAndCommit(
+            nameof(DeleteWeatherForecast),
+            new DeleteWeatherForecast("f-1"),
+            CancellationToken.None);
+
+        Assert.Contains("BadRequest", result.GetType().Name);
+        Assert.Null(handler.LastRequestBody);
     }
 
     [Fact]
     public async Task ExecuteAndCommit_ShouldReturnBadRequest_WhenCommitFails()
     {
-        // Given
-        var payloadBase64 = Convert.ToBase64String(
-            Encoding.UTF8.GetBytes("{\"forecastId\":\"f-1\"}"));
+        var existing = new WeatherForecastItem(
+            ForecastId: "f-1",
+            Location: "Tokyo",
+            TemperatureC: 20,
+            Summary: "Cloudy",
+            CreatedAt: DateTimeOffset.UtcNow);
 
-        var executeResponse = new SerializedCommandExecuteResponse(
-            EventCandidates: new List<SerializedCommandEventCandidate>
-            {
-                new(
-                    EventPayloadName: "WeatherForecastCreated",
-                    PayloadBase64: payloadBase64,
-                    Tags: new List<string> { "weather:f-1" })
-            },
-            ConsistencyTags: new List<ConsistencyTagEntry>
-            {
-                new(Tag: "weather:f-1", LastSortableUniqueId: "uid-001")
-            },
-            CommandResultJson: null);
+        var handler = new StubHttpMessageHandler(HttpStatusCode.BadRequest, "{\"error\":\"Consistency conflict\"}");
+        var stubClient = CreateClient(handler);
+        var queryClient = new StubWeatherQueryClient { ForecastToReturn = existing };
 
-        var stubClient = new StubSerializedDcbClient
-        {
-            ExecuteResponseToReturn = ResultBox.FromValue(executeResponse),
-            CommitResultToReturn = ResultBox<SerializedCommitResult>.FromException(
-                new InvalidOperationException("Consistency conflict"))
-        };
+        var flow = new ClientApiCommandFlow(stubClient, queryClient, new DomainSerializerOptions(JsonOptions));
+        var result = await flow.ExecuteAndCommit(
+            nameof(UpdateWeatherForecastLocation),
+            new UpdateWeatherForecastLocation("f-1", "Osaka"),
+            CancellationToken.None);
 
-        var flow = new ClientApiCommandFlow(stubClient, JsonOptions);
-        var command = new { forecastId = "f-1" };
-
-        // When
-        var result = await flow.ExecuteAndCommit("CreateWeatherForecast", command, CancellationToken.None);
-
-        // Then
         Assert.Contains("BadRequest", result.GetType().Name);
-        Assert.NotNull(stubClient.LastCommitRequest);
+        Assert.NotNull(handler.LastRequestBody);
     }
 
-    [Fact]
-    public async Task ExecuteAndCommit_ShouldConvertBase64PayloadToBytes()
+    private static ISerializedDcbClient CreateClient(StubHttpMessageHandler handler)
     {
-        // Given
-        var originalPayload = "{\"forecastId\":\"f-1\",\"location\":\"Tokyo\"}";
-        var payloadBase64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(originalPayload));
-
-        var executeResponse = new SerializedCommandExecuteResponse(
-            EventCandidates: new List<SerializedCommandEventCandidate>
-            {
-                new(
-                    EventPayloadName: "WeatherForecastCreated",
-                    PayloadBase64: payloadBase64,
-                    Tags: new List<string> { "weather:f-1", "forecast:f-1" })
-            },
-            ConsistencyTags: new List<ConsistencyTagEntry>
-            {
-                new(Tag: "weather:f-1", LastSortableUniqueId: "uid-001")
-            },
-            CommandResultJson: null);
-
-        var commitResult = new SerializedCommitResult(
-            WrittenEvents: new List<SerializableEvent>(),
-            TagWriteResults: new List<TagWriteResult>(),
-            Duration: TimeSpan.FromMilliseconds(5));
-
-        var stubClient = new StubSerializedDcbClient
-        {
-            ExecuteResponseToReturn = ResultBox.FromValue(executeResponse),
-            CommitResultToReturn = ResultBox.FromValue(commitResult)
-        };
-
-        var flow = new ClientApiCommandFlow(stubClient, JsonOptions);
-        var command = new { forecastId = "f-1", location = "Tokyo" };
-
-        // When
-        await flow.ExecuteAndCommit("CreateWeatherForecast", command, CancellationToken.None);
-
-        // Then
-        Assert.NotNull(stubClient.LastCommitRequest);
-        Assert.Single(stubClient.LastCommitRequest.EventCandidates);
-        var candidate = stubClient.LastCommitRequest.EventCandidates[0];
-        var decodedPayload = Encoding.UTF8.GetString(candidate.Payload);
-        Assert.Equal(originalPayload, decodedPayload);
-        Assert.Equal("WeatherForecastCreated", candidate.EventPayloadName);
-        Assert.Equal(2, candidate.Tags.Count);
-        Assert.Equal("weather:f-1", candidate.Tags[0]);
-        Assert.Equal("forecast:f-1", candidate.Tags[1]);
+        return new HttpSerializedDcbClient(
+            new HttpClient(handler),
+            new SerializedDcbClientOptions { BaseUrl = "https://localhost:5001" },
+            JsonOptions);
     }
 
-    private sealed class StubSerializedDcbClient : ISerializedDcbClient
+    private static string ExtractFirstPayloadJson(string requestBody)
     {
-        public ResultBox<SerializedCommandExecuteResponse>? ExecuteResponseToReturn { get; set; }
-        public ResultBox<SerializedCommitResult>? CommitResultToReturn { get; set; }
+        using var document = JsonDocument.Parse(requestBody);
+        var payloadBase64 = document.RootElement
+            .GetProperty("eventCandidates")[0]
+            .GetProperty("payload")
+            .GetString();
+        Assert.False(string.IsNullOrWhiteSpace(payloadBase64));
+        return Encoding.UTF8.GetString(Convert.FromBase64String(payloadBase64!));
+    }
 
-        public SerializedCommandExecuteRequest? LastExecuteRequest { get; private set; }
-        public SerializedCommitRequest? LastCommitRequest { get; private set; }
+    private sealed class StubWeatherQueryClient : IWeatherQueryClient
+    {
+        public WeatherForecastItem? ForecastToReturn { get; set; }
+        public string? LastForecastId { get; private set; }
 
-        public Task<ResultBox<SerializableTagState>> GetSerializableTagStateAsync(TagStateId tagStateId)
+        public Task<WeatherForecastItem?> GetForecastAsync(string forecastId, CancellationToken ct)
         {
-            throw new NotSupportedException("Not used in these tests");
+            LastForecastId = forecastId;
+            return Task.FromResult(ForecastToReturn);
         }
+    }
 
-        public Task<ResultBox<SerializedCommitResult>> CommitSerializableEventsAsync(
-            SerializedCommitRequest request,
-            CancellationToken cancellationToken = default)
-        {
-            LastCommitRequest = request;
-            if (CommitResultToReturn is null)
-            {
-                throw new InvalidOperationException("CommitResultToReturn not configured");
-            }
-            return Task.FromResult(CommitResultToReturn);
-        }
+    private sealed class StubHttpMessageHandler(HttpStatusCode statusCode, string responseBody) : HttpMessageHandler
+    {
+        public HttpRequestMessage? LastRequest { get; private set; }
+        public string? LastRequestBody { get; private set; }
 
-        public Task<ResultBox<SerializedCommandExecuteResponse>> ExecuteSerializedCommandAsync(
-            SerializedCommandExecuteRequest request,
-            CancellationToken cancellationToken = default)
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
         {
-            LastExecuteRequest = request;
-            if (ExecuteResponseToReturn is null)
+            LastRequest = request;
+            if (request.Content is not null)
             {
-                throw new InvalidOperationException("ExecuteResponseToReturn not configured");
+                LastRequestBody = await request.Content.ReadAsStringAsync(cancellationToken);
             }
-            return Task.FromResult(ExecuteResponseToReturn);
+
+            return new HttpResponseMessage(statusCode)
+            {
+                Content = new StringContent(responseBody, Encoding.UTF8, "application/json")
+            };
         }
     }
 }

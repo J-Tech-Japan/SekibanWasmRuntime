@@ -1,34 +1,24 @@
 using Sekiban.Dcb.Queries;
 
-namespace SekibanWasm.Cs.Domain.Weather;
+namespace SekibanWasm.Rust.Domain.Weather;
 
 public record GetWeatherForecastListQuery :
     IMultiProjectionListQuery<WeatherForecastMultiProjection, GetWeatherForecastListQuery, WeatherForecastItem>,
     IQueryPagingParameter
 {
-    public string? ForecastId { get; init; }
-    public bool IncludeDeleted { get; init; }
+    public string? LocationFilter { get; init; }
     public int? PageNumber { get; init; }
     public int? PageSize { get; init; }
 
     public static IEnumerable<WeatherForecastItem> HandleFilter(
         WeatherForecastMultiProjection projector,
         GetWeatherForecastListQuery query,
-        IQueryContext context)
-    {
-        var items = projector.Forecasts.Values.AsEnumerable();
-        if (!query.IncludeDeleted)
-        {
-            items = items.Where(x => !x.IsDeleted);
-        }
-
-        if (!string.IsNullOrWhiteSpace(query.ForecastId))
-        {
-            items = items.Where(x => x.ForecastId == query.ForecastId);
-        }
-
-        return items;
-    }
+        IQueryContext context) =>
+        string.IsNullOrWhiteSpace(query.LocationFilter)
+            ? projector.Forecasts.Values.Where(x => !x.IsDeleted)
+            : projector.Forecasts.Values.Where(x =>
+                !x.IsDeleted &&
+                x.Location.Contains(query.LocationFilter, StringComparison.OrdinalIgnoreCase));
 
     public static IEnumerable<WeatherForecastItem> HandleSort(
         IEnumerable<WeatherForecastItem> filteredList,
