@@ -32,9 +32,7 @@ src/internalUsages/
     ├── SekibanWasm.Rust.AppHost/      # Aspire orchestrator
     ├── SekibanWasm.Rust.WasmServer/   # WasmServer (Orleans + WASM projection + commands)
     ├── SekibanWasm.Rust.ClientApi/    # ClientApi (Rust/axum HTTP adapter)
-    ├── SekibanWasm.Rust.Domain/       # Domain model (events, projectors, commands)
     ├── SekibanWasm.Rust.ServiceDefaults/ # Aspire service defaults
-    ├── SekibanWasm.Rust.Tests/        # Unit tests
     ├── SekibanWasm.Rust.Web/          # Blazor frontend
     └── modules/                       # Built WASM binary (rust-weather.wasm)
 ```
@@ -47,7 +45,7 @@ src/internalUsages/
 | Build Script | `build/scripts/build-csharp-wasm.sh` | `build/scripts/build-rust-wasm.sh` |
 | Build Requirement | .NET 10.0 SDK + Docker (non-Linux) | Rust toolchain + `wasm32-wasip1` target |
 | WASM Binary | `cs/modules/csharp-weather.wasm` | `rust/modules/rust-weather.wasm` |
-| Domain Layer | C# records with Sekiban DCB types | C# records (identical structure to CS) |
+| Domain Layer | C# records with Sekiban DCB types | Shared bridge types in `src/lib/SekibanWasm.Rust.ServerBridge` |
 | Projection Host | WasmServer with WasmProjectionRuntime | WasmServer with WasmProjectionRuntime |
 
 Both configurations share the same architecture: Aspire AppHost orchestrates PostgreSQL, Azure Storage (emulated), Orleans, and the WasmServer + ClientApi + Web frontend.
