@@ -30,7 +30,7 @@ public static class WasmExports
     private static readonly Dictionary<int, ProjectorInstanceState> _instances = new();
     private static int _nextInstanceId = 1;
 
-    private static DcbDomainTypes DomainTypes => WasmDomainTypes.Create();
+    private static DcbDomainTypes DomainTypes => DomainType.GetWasmDomainTypes();
 
     [UnmanagedCallersOnly(EntryPoint = "alloc")]
     public static unsafe int Alloc(int size)
@@ -220,7 +220,9 @@ public static class WasmExports
                 {
                     var deserialized = JsonSerializer.Deserialize(
                         json, DomainJsonContext.Default.WeatherForecastState);
-                    instance.TagState = deserialized;
+                    instance.TagState = deserialized is null
+                        ? new EmptyTagStatePayload()
+                        : (ITagStatePayload)deserialized;
                 }
                 catch
                 {

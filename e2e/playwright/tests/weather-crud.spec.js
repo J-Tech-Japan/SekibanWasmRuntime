@@ -1,11 +1,16 @@
 import { expect, test } from '@playwright/test';
 
 const encodeCommand = (command) => JSON.stringify(command);
+const sample = process.env.E2E_SAMPLE ?? 'cs';
 
 test('serialized command execute + commit works', async ({ playwright }) => {
+  test.skip(
+    sample === 'rust',
+    'Rust sample executes commands through ClientApi; WasmServer does not expose serialized command execution.'
+  );
+
   const wasmApiBaseUrl = process.env.WASM_API_BASE_URL ?? 'http://127.0.0.1:3000';
   const api = await playwright.request.newContext({ baseURL: wasmApiBaseUrl });
-  const sample = process.env.E2E_SAMPLE ?? 'cs';
   const suffix = `${Date.now()}`;
   const forecastId = `pw-${sample}-${suffix}`;
 
