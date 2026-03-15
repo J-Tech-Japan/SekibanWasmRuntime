@@ -14,10 +14,16 @@ WASM_PROJ_REL="src/internalUsages/cs/SekibanWasm.Cs.Wasm/SekibanWasm.Cs.Wasm.csp
 PUBLISH_DIR_REL="artifacts/csharp-wasm"
 NUGET_WASM_CONFIG_REL="NuGet.wasm.config"
 DOTNET_IMAGE="mcr.microsoft.com/dotnet/sdk:10.0"
-REQUIRED_SDK_PREFIX="10.0.1"
+REQUIRED_SDK_PREFIX="10.0."
 
 HOST_OS="$(uname -s)"
-if [[ "$HOST_OS" == "Linux" ]]; then
+if [[ "${BUILD_CSHARP_WASM_MODE:-}" == "docker" ]]; then
+  BUILD_MODE="docker"
+elif [[ "${BUILD_CSHARP_WASM_MODE:-}" == "native" ]]; then
+  BUILD_MODE="native"
+elif [[ "${CI:-}" == "true" ]]; then
+  BUILD_MODE="docker"
+elif [[ "$HOST_OS" == "Linux" ]]; then
   BUILD_MODE="native"
 else
   BUILD_MODE="docker"
@@ -84,8 +90,13 @@ echo "[build-csharp-wasm] Publish succeeded. Scanning for .wasm output..."
 
 WASM_FILE="$PUBLISH_DIR/$EXPECTED_WASM_NAME"
 if [[ ! -f "$WASM_FILE" ]]; then
-  echo "[build-csharp-wasm] Expected $EXPECTED_WASM_NAME not found; searching for any .wasm file..." >&2
-  WASM_FILE=$(find "$PUBLISH_DIR" -maxdepth 1 -name '*.wasm' -type f | head -n 1)
+  echo "[build-csharp-wasm] Expected $EXPECTED_WASM_NAME not found at publish root; searching recursively..." >&2
+  WASM_FILE=$(find "$PUBLISH_DIR" -name '*.wasm' -type f | head -n 1)
+fi
+
+if [[ -z "$WASM_FILE" || ! -f "$WASM_FILE" ]]; then
+  echo "[build-csharp-wasm] No .wasm found under publish dir; searching project output directories..." >&2
+  WASM_FILE=$(find "$(dirname "$WASM_PROJ")/bin" -name '*.wasm' -type f | head -n 1)
 fi
 
 if [[ -z "$WASM_FILE" || ! -f "$WASM_FILE" ]]; then

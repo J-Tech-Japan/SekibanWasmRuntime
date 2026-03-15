@@ -1,6 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
-
-  <Sdk Name="Aspire.AppHost.Sdk" Version="9.0.0" />
+<Project Sdk="Aspire.AppHost.Sdk/13.1.2">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -12,7 +10,6 @@
 
   <ItemGroup>
     <PackageReference Include="Aspire.Hosting" />
-    <PackageReference Include="Aspire.Hosting.AppHost" />
     <PackageReference Include="Aspire.Hosting.Azure.Storage" />
     <PackageReference Include="Aspire.Hosting.Orleans" />
     <PackageReference Include="Aspire.Hosting.PostgreSQL" />
@@ -21,6 +18,10 @@
   <ItemGroup>
     <ProjectReference Include="..\SekibanWasm.Rust.WasmServer\SekibanWasm.Rust.WasmServer.csproj" />
     <ProjectReference Include="..\SekibanWasm.Rust.Web\SekibanWasm.Rust.Web.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\AppHostShared\AppHostInfrastructure.cs" Link="AppHostInfrastructure.cs" />
   </ItemGroup>
 
 </Project>

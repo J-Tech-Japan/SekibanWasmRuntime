@@ -1,4 +1,5 @@
 using Projects;
+using SekibanWasm.AppHostShared;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
@@ -12,6 +13,13 @@ var queue = storage.AddQueues("SekibanRustQueue");
 var postgres = builder
     .AddPostgres("sekibanRustPostgres")
     .AddDatabase("SekibanRustDb");
+
+var dbGatePort = AppHostInfrastructure.ResolveConfiguredPort(6300, "E2E_DBGATE_PORT", "DBGATE_PORT");
+builder.AddDbGateForPostgres(
+    name: "dbgate",
+    postgresDatabase: postgres,
+    label: "Rust Weather Postgres",
+    hostPort: dbGatePort);
 
 var orleans = builder
     .AddOrleans("default")
@@ -41,11 +49,16 @@ var wasmServerBuilder = builder
     .WaitFor(postgres)
     .WithEnvironment("Wasm__DefaultModulePath", wasmModulePath);
 
-var e2eApiPort = Environment.GetEnvironmentVariable("E2E_API_PORT");
-if (!string.IsNullOrWhiteSpace(e2eApiPort))
-{
-    wasmServerBuilder = wasmServerBuilder.WithEnvironment("ASPNETCORE_URLS", $"http://127.0.0.1:{e2eApiPort}");
-}
+var wasmApiPort = AppHostInfrastructure.ResolveConfiguredPort(6199, "E2E_API_PORT");
+wasmServerBuilder = wasmServerBuilder
+    .WithEndpoint("http", endpoint =>
+    {
+        endpoint.Port = wasmApiPort;
+        endpoint.TargetPort = wasmApiPort;
+        endpoint.UriScheme = "http";
+        endpoint.IsProxied = false;
+    })
+    .WithEnvironment("ASPNETCORE_URLS", "http://127.0.0.1:" + wasmApiPort);
 
 var wasmServer = wasmServerBuilder;
 
@@ -59,22 +72,15 @@ var clientApiBuilder = builder
         "clientapi",
         "cargo",
         rustClientApiDir,
-        new[] { "run", "--release" });
+        new[] { "run", "--release" })
+    .WithEnvironment("WASM_SERVER_URL", "http://127.0.0.1:" + wasmApiPort);
 
-var e2eClientApiPort = Environment.GetEnvironmentVariable("E2E_CLIENT_API_PORT");
-if (!string.IsNullOrWhiteSpace(e2eClientApiPort))
-{
-    clientApiBuilder = clientApiBuilder.WithHttpEndpoint(port: int.Parse(e2eClientApiPort), env: "PORT");
-}
-else
-{
-    clientApiBuilder = clientApiBuilder.WithHttpEndpoint(env: "PORT");
-}
-
-if (!string.IsNullOrWhiteSpace(e2eApiPort))
-{
-    clientApiBuilder = clientApiBuilder.WithEnvironment("WASM_SERVER_URL", $"http://127.0.0.1:{e2eApiPort}");
-}
+var clientApiPort = AppHostInfrastructure.ResolveConfiguredPort(6198, "E2E_CLIENT_API_PORT");
+clientApiBuilder = clientApiBuilder.WithHttpEndpoint(
+    targetPort: clientApiPort,
+    port: clientApiPort,
+    env: "PORT",
+    isProxied: false);
 
 var clientApi = clientApiBuilder
     .WithEnvironment("RUST_LOG", "info")
@@ -84,20 +90,19 @@ var clientApi = clientApiBuilder
 var webFrontend = builder
     .AddProject<SekibanWasm_Rust_Web>("webfrontend")
     .WithReference(clientApi.GetEndpoint("http"))
+    .WithEnvironment("CLIENT_API_URL", "http://127.0.0.1:" + clientApiPort)
     .WaitFor(clientApi);
 
-var e2eWebPort = Environment.GetEnvironmentVariable("E2E_WEB_PORT");
-if (!string.IsNullOrWhiteSpace(e2eWebPort))
-{
-    webFrontend.WithEnvironment("ASPNETCORE_URLS", $"http://127.0.0.1:{e2eWebPort}");
-    if (!string.IsNullOrWhiteSpace(e2eClientApiPort))
+var webPort = AppHostInfrastructure.ResolveConfiguredPort(6180, "E2E_WEB_PORT");
+webFrontend
+    .WithEndpoint("http", endpoint =>
     {
-        webFrontend.WithEnvironment("CLIENT_API_URL", $"http://127.0.0.1:{e2eClientApiPort}");
-    }
-}
-else
-{
-    webFrontend.WithExternalHttpEndpoints();
-}
+        endpoint.Port = webPort;
+        endpoint.TargetPort = webPort;
+        endpoint.UriScheme = "http";
+        endpoint.IsProxied = false;
+    })
+    .WithEnvironment("ASPNETCORE_URLS", "http://127.0.0.1:" + webPort);
+webFrontend.WithExternalHttpEndpoints();
 
 builder.Build().Run();
