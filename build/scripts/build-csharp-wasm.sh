@@ -14,7 +14,7 @@ WASM_PROJ_REL="src/internalUsages/cs/SekibanWasm.Cs.Wasm/SekibanWasm.Cs.Wasm.csp
 PUBLISH_DIR_REL="artifacts/csharp-wasm"
 NUGET_WASM_CONFIG_REL="NuGet.wasm.config"
 DOTNET_IMAGE="mcr.microsoft.com/dotnet/sdk:10.0"
-REQUIRED_SDK_PREFIX="10.0.1"
+REQUIRED_SDK_PREFIX="10.0."
 
 HOST_OS="$(uname -s)"
 if [[ "${BUILD_CSHARP_WASM_MODE:-}" == "docker" ]]; then
