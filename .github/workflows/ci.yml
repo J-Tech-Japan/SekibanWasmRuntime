@@ -44,4 +44,4 @@ jobs:
         run: ./scripts/e2e-aspire-playwright.sh
 
       - name: Pack
-        run: dotnet pack src/SekibanWasmRuntime.ci.slnx -c Release -o artifacts/nuget
+        run: dotnet pack src/SekibanWasmRuntime.ci.slnx -c Release -o artifacts/nuget --no-build --no-restore
