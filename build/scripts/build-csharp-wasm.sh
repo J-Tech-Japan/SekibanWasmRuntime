@@ -17,7 +17,13 @@ DOTNET_IMAGE="mcr.microsoft.com/dotnet/sdk:10.0"
 REQUIRED_SDK_PREFIX="10.0.1"
 
 HOST_OS="$(uname -s)"
-if [[ "$HOST_OS" == "Linux" ]]; then
+if [[ "${BUILD_CSHARP_WASM_MODE:-}" == "docker" ]]; then
+  BUILD_MODE="docker"
+elif [[ "${BUILD_CSHARP_WASM_MODE:-}" == "native" ]]; then
+  BUILD_MODE="native"
+elif [[ "${CI:-}" == "true" ]]; then
+  BUILD_MODE="docker"
+elif [[ "$HOST_OS" == "Linux" ]]; then
   BUILD_MODE="native"
 else
   BUILD_MODE="docker"

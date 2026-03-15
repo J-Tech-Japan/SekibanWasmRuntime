@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Tests for NuGet.wasm.config — validates the WASM-specific NuGet configuration.
+# Tests for NuGet.wasm.config — validates the WASM-specific NuGet configuration
+# that includes ILCompiler feeds with packageSourceMapping.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -38,37 +39,37 @@ assert_eq "NuGet.wasm.config exists" "true" "$([[ -f "$NUGET_WASM_CONFIG" ]] && 
 
 CONTENT=$(cat "$NUGET_WASM_CONFIG")
 
-# Test 2: nuget.org feed is present
+# Test 2: All three feeds are present
 echo "[Test: package sources]"
 assert_contains "nuget.org source" "$CONTENT" 'key="nuget.org"'
+assert_contains "dotnet10 source" "$CONTENT" 'key="dotnet10"'
+assert_contains "dotnet-experimental source" "$CONTENT" 'key="dotnet-experimental"'
 source_count=$(grep -c '<add key=' "$NUGET_WASM_CONFIG" || true)
-assert_eq "one package source defined" "1" "$source_count"
+assert_eq "three package sources defined" "3" "$source_count"
 
-# Test 3: no packageSourceMapping section is present
-echo "[Test: no packageSourceMapping section]"
-if [[ "$CONTENT" == *"<packageSourceMapping>"* ]]; then
-  echo "  FAIL: packageSourceMapping should be absent" >&2
-  FAIL=$((FAIL + 1))
-else
-  echo "  PASS: packageSourceMapping is absent"
-  PASS=$((PASS + 1))
-fi
+# Test 3: packageSourceMapping section exists
+echo "[Test: packageSourceMapping section]"
+assert_contains "has packageSourceMapping" "$CONTENT" "<packageSourceMapping>"
+assert_contains "has closing tag" "$CONTENT" "</packageSourceMapping>"
 
 # Test 4: nuget.org has wildcard pattern
 echo "[Test: nuget.org wildcard]"
-if [[ "$CONTENT" == *'pattern="*"'* ]]; then
-  echo "  FAIL: wildcard mapping should be absent" >&2
-  FAIL=$((FAIL + 1))
-else
-  echo "  PASS: wildcard mapping is absent"
-  PASS=$((PASS + 1))
-fi
+assert_contains "nuget.org wildcard pattern" "$CONTENT" 'pattern="*"'
 
-# Test 5: <clear /> is present to reset inherited sources
+# Test 5: dotnet10 maps ILCompiler packages
+echo "[Test: dotnet10 feed mapping]"
+assert_contains "dotnet10 ILCompiler pattern" "$CONTENT" 'pattern="Microsoft.DotNet.ILCompiler.*"'
+assert_contains "dotnet10 runtime pattern" "$CONTENT" 'pattern="runtime.*.microsoft.dotnet.ilcompiler.*"'
+
+# Test 6: dotnet-experimental maps ILCompiler packages
+echo "[Test: dotnet-experimental feed mapping]"
+assert_contains "dotnet-experimental source in mapping" "$CONTENT" 'key="dotnet-experimental"'
+
+# Test 7: <clear /> is present to reset inherited sources
 echo "[Test: clear directive]"
 assert_contains "clear directive present" "$CONTENT" "<clear />"
 
-# Test 6: Valid XML (basic well-formedness check)
+# Test 8: Valid XML (basic well-formedness check)
 echo "[Test: XML well-formedness]"
 if command -v xmllint &>/dev/null; then
   if xmllint --noout "$NUGET_WASM_CONFIG" 2>/dev/null; then

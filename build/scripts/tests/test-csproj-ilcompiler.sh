@@ -38,15 +38,15 @@ CONTENT=$(cat "$CSPROJ")
 # Test 1: Linux runtime package is unconditional
 echo "[Test: Linux runtime is unconditional]"
 # Extract the line with runtime.linux-x64
-linux_line=$(grep 'runtime.linux-x64.Microsoft.DotNet.ILCompiler' "$CSPROJ" || true)
-assert_contains "linux-x64 package present" "$linux_line" "runtime.linux-x64.Microsoft.DotNet.ILCompiler"
+linux_line=$(grep 'runtime.linux-x64.microsoft.dotnet.ilcompiler.llvm' "$CSPROJ" || true)
+assert_contains "linux-x64 package present" "$linux_line" "runtime.linux-x64.microsoft.dotnet.ilcompiler.llvm"
 assert_not_contains "linux-x64 has no Condition" "$linux_line" "Condition="
 
 # Test 2: macOS runtime package is opt-in via EnableMacIlCompilerRuntime
 echo "[Test: macOS runtime is opt-in]"
 # Condition may span multiple lines; use grep -A1 to capture the next line too
-osx_block=$(grep -A1 'runtime.osx-arm64.Microsoft.DotNet.ILCompiler' "$CSPROJ" || true)
-assert_contains "osx-arm64 package present" "$osx_block" "runtime.osx-arm64.Microsoft.DotNet.ILCompiler"
+osx_block=$(grep -A1 'runtime.osx-arm64.microsoft.dotnet.ilcompiler.llvm' "$CSPROJ" || true)
+assert_contains "osx-arm64 package present" "$osx_block" "runtime.osx-arm64.microsoft.dotnet.ilcompiler.llvm"
 assert_contains "osx-arm64 uses EnableMacIlCompilerRuntime" "$osx_block" "EnableMacIlCompilerRuntime"
 
 # Test 3: macOS runtime does NOT use IsOsPlatform condition
@@ -58,8 +58,8 @@ echo "[Test: no IsOsPlatform for Linux]"
 assert_not_contains "no IsOsPlatform('Linux') on linux-x64 line" "$linux_line" "IsOsPlatform"
 
 # Test 5: Meta-package is always included
-echo "[Test: ILCompiler meta-package present]"
-assert_contains "Microsoft.DotNet.ILCompiler present" "$CONTENT" 'Include="Microsoft.DotNet.ILCompiler"'
+echo "[Test: ILCompiler.LLVM meta-package present]"
+assert_contains "Microsoft.DotNet.ILCompiler.LLVM present" "$CONTENT" 'Include="Microsoft.DotNet.ILCompiler.LLVM"'
 
 # Summary
 echo ""
