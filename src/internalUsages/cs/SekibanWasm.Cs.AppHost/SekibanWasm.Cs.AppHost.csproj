@@ -21,4 +21,8 @@
     <ProjectReference Include="..\SekibanWasm.Cs.Web\SekibanWasm.Cs.Web.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\..\AppHostShared\AppHostInfrastructure.cs" Link="AppHostInfrastructure.cs" />
+  </ItemGroup>
+
 </Project>

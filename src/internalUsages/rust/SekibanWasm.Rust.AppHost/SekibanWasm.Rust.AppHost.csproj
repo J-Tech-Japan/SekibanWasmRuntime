@@ -20,4 +20,8 @@
     <ProjectReference Include="..\SekibanWasm.Rust.Web\SekibanWasm.Rust.Web.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\..\AppHostShared\AppHostInfrastructure.cs" Link="AppHostInfrastructure.cs" />
+  </ItemGroup>
+
 </Project>

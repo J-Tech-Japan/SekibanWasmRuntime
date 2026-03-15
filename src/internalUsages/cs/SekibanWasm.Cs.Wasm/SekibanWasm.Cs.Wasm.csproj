@@ -32,9 +32,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.DotNet.ILCompiler.LLVM" />
-    <PackageReference Include="runtime.linux-x64.microsoft.dotnet.ilcompiler.llvm" />
-    <PackageReference Include="runtime.osx-arm64.microsoft.dotnet.ilcompiler.llvm"
+    <PackageReference Include="Microsoft.DotNet.ILCompiler" />
+    <PackageReference Include="runtime.linux-x64.Microsoft.DotNet.ILCompiler" />
+    <PackageReference Include="runtime.osx-arm64.Microsoft.DotNet.ILCompiler"
                       Condition="'$(EnableMacIlCompilerRuntime)' == 'true'" />
   </ItemGroup>
 

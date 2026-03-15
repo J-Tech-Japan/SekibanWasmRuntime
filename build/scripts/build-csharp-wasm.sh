@@ -84,8 +84,13 @@ echo "[build-csharp-wasm] Publish succeeded. Scanning for .wasm output..."
 
 WASM_FILE="$PUBLISH_DIR/$EXPECTED_WASM_NAME"
 if [[ ! -f "$WASM_FILE" ]]; then
-  echo "[build-csharp-wasm] Expected $EXPECTED_WASM_NAME not found; searching for any .wasm file..." >&2
-  WASM_FILE=$(find "$PUBLISH_DIR" -maxdepth 1 -name '*.wasm' -type f | head -n 1)
+  echo "[build-csharp-wasm] Expected $EXPECTED_WASM_NAME not found at publish root; searching recursively..." >&2
+  WASM_FILE=$(find "$PUBLISH_DIR" -name '*.wasm' -type f | head -n 1)
+fi
+
+if [[ -z "$WASM_FILE" || ! -f "$WASM_FILE" ]]; then
+  echo "[build-csharp-wasm] No .wasm found under publish dir; searching project output directories..." >&2
+  WASM_FILE=$(find "$(dirname "$WASM_PROJ")/bin" -name '*.wasm' -type f | head -n 1)
 fi
 
 if [[ -z "$WASM_FILE" || ! -f "$WASM_FILE" ]]; then
