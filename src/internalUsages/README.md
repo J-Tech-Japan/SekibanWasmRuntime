@@ -51,6 +51,7 @@ src/internalUsages/
 Both configurations share the same architecture: Aspire AppHost orchestrates PostgreSQL, Azure Storage (emulated), Orleans, and the WasmServer + ClientApi + Web frontend.
 
 For non-Aspire usage, a generic runtime host also exists at `src/runtime/Sekiban.Dcb.WasmRuntime.Host` with a compose stack in `docker/sekiban-wasm-runtime/`.
+For Aspire-based local development, use `src/runtime/Sekiban.Dcb.WasmRuntime.AppHost`, which starts the generic runtime host, PostgreSQL, and DBGate.
 
 ## Comparison with DcbOrleans.Web (Sekiban Reference)
 

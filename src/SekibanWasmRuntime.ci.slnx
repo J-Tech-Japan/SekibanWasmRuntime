@@ -22,6 +22,7 @@
   </Folder>
   <Folder Name="/runtime/">
     <Project Path="runtime/Sekiban.Dcb.WasmRuntime.Host/Sekiban.Dcb.WasmRuntime.Host.csproj" />
+    <Project Path="runtime/Sekiban.Dcb.WasmRuntime.AppHost/Sekiban.Dcb.WasmRuntime.AppHost.csproj" />
   </Folder>
   <Project Path="../external/wasmtime-dotnet/src/Wasmtime.csproj" />
 </Solution>

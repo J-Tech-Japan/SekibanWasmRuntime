@@ -4,6 +4,7 @@
 
 - `runtime`: generic ASP.NET host for serialized Sekiban WASM APIs
 - `postgres`: event store for the runtime
+- `dbgate`: browser UI for inspecting PostgreSQL
 
 ## Quick Start
 
@@ -19,6 +20,8 @@ docker compose up --build
 
 - API root: `http://localhost:3000/`
 - Health: `http://localhost:3000/health`
+- DBGate: `http://localhost:3001/`
+- PostgreSQL: `localhost:5432`
 - Serialized tag state: `POST http://localhost:3000/api/sekiban/serialized/tag-state`
 - Serialized commit: `POST http://localhost:3000/api/sekiban/serialized/commit`
 - Serialized query: `POST http://localhost:3000/api/sekiban/serialized/query`
@@ -44,3 +47,4 @@ If another project uses different projector or query names, edit `config/sekiban
 
 - The current runtime can infer a default Weather manifest when `SEKIBAN_MANIFEST_PATH` is missing, but a manifest is still the explicit and recommended way to describe projectors and query mappings.
 - PostgreSQL is exposed on `localhost:5432` with `postgres/postgres` and database `sekiban`.
+- DBGate is exposed on `localhost:3001` and is preconfigured with the `weather` PostgreSQL connection.
