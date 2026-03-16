@@ -1,80 +1,101 @@
-using System.Collections.Concurrent;
 using Sekiban.Dcb.Primitives;
 
 namespace Sekiban.Dcb.WasmRuntime.Host;
 
 public static class InstanceEndpoints
 {
-    private static readonly ConcurrentDictionary<string, IPrimitiveProjectionInstance> Instances = new();
-
     public static void Map(WebApplication app)
     {
-        app.MapPost("/v1/instances", (HttpContext http, CreateInstanceRequest request) =>
+        app.MapPost("/v1/instances", (
+            CreateInstanceRequest request,
+            IPrimitiveProjectionHost host,
+            ProjectionInstanceStore store) =>
         {
-            var host = http.RequestServices.GetRequiredService<IPrimitiveProjectionHost>();
             var instance = host.CreateInstance(request.ProjectorName);
-            var instanceId = Guid.NewGuid().ToString();
-            Instances[instanceId] = instance;
+            var instanceId = store.Add(instance);
             return Results.Ok(new { instanceId });
         });
 
-        app.MapPost("/v1/instances/{id}/events", (string id, ApplyEventsRequest request) =>
+        app.MapPost("/v1/instances/{id}/events", (
+            string id,
+            ApplyEventsRequest request,
+            ProjectionInstanceStore store) =>
         {
-            var instance = GetInstance(id);
+            if (!store.TryGet(id, out var instance))
+            {
+                return Results.NotFound(new { error = $"Instance '{id}' not found." });
+            }
+
             foreach (var ev in request.Events)
             {
-                instance.ApplyEvent(ev.EventType, ev.PayloadJson, ev.Tags, ev.SortableUniqueId);
+                instance!.ApplyEvent(ev.EventType, ev.PayloadJson, ev.Tags, ev.SortableUniqueId);
             }
+
             return Results.Ok();
         });
 
-        app.MapPost("/v1/instances/{id}/query", (string id, QueryRequest request) =>
+        app.MapPost("/v1/instances/{id}/query", (
+            string id,
+            QueryRequest request,
+            ProjectionInstanceStore store) =>
         {
-            var instance = GetInstance(id);
-            var resultJson = instance.ExecuteQuery(request.QueryType, request.QueryParamsJson);
+            if (!store.TryGet(id, out var instance))
+            {
+                return Results.NotFound(new { error = $"Instance '{id}' not found." });
+            }
+
+            var resultJson = instance!.ExecuteQuery(request.QueryType, request.QueryParamsJson);
             return Results.Ok(new { resultJson });
         });
 
-        app.MapPost("/v1/instances/{id}/list-query", (string id, QueryRequest request) =>
+        app.MapPost("/v1/instances/{id}/list-query", (
+            string id,
+            QueryRequest request,
+            ProjectionInstanceStore store) =>
         {
-            var instance = GetInstance(id);
-            var resultJson = instance.ExecuteListQuery(request.QueryType, request.QueryParamsJson);
+            if (!store.TryGet(id, out var instance))
+            {
+                return Results.NotFound(new { error = $"Instance '{id}' not found." });
+            }
+
+            var resultJson = instance!.ExecuteListQuery(request.QueryType, request.QueryParamsJson);
             return Results.Ok(new { resultJson });
         });
 
-        app.MapGet("/v1/instances/{id}/snapshot", (string id) =>
+        app.MapGet("/v1/instances/{id}/snapshot", (string id, ProjectionInstanceStore store) =>
         {
-            var instance = GetInstance(id);
-            var stateJson = instance.SerializeState();
+            if (!store.TryGet(id, out var instance))
+            {
+                return Results.NotFound(new { error = $"Instance '{id}' not found." });
+            }
+
+            var stateJson = instance!.SerializeState();
             return Results.Ok(new { stateJson });
         });
 
-        app.MapPut("/v1/instances/{id}/snapshot", (string id, RestoreStateRequest request) =>
+        app.MapPut("/v1/instances/{id}/snapshot", (
+            string id,
+            RestoreStateRequest request,
+            ProjectionInstanceStore store) =>
         {
-            var instance = GetInstance(id);
-            instance.RestoreState(request.StateJson);
-            return Results.Ok();
-        });
-
-        app.MapDelete("/v1/instances/{id}", (string id) =>
-        {
-            if (Instances.TryRemove(id, out var instance))
+            if (!store.TryGet(id, out var instance))
             {
-                instance.Dispose();
+                return Results.NotFound(new { error = $"Instance '{id}' not found." });
             }
 
+            instance!.RestoreState(request.StateJson);
             return Results.Ok();
         });
-    }
 
-    private static IPrimitiveProjectionInstance GetInstance(string id)
-    {
-        if (!Instances.TryGetValue(id, out var instance))
+        app.MapDelete("/v1/instances/{id}", (string id, ProjectionInstanceStore store) =>
         {
-            throw new KeyNotFoundException($"Instance '{id}' not found");
-        }
+            if (store.Remove(id))
+            {
+                return Results.Ok();
+            }
 
-        return instance;
+            return Results.NotFound(new { error = $"Instance '{id}' not found." });
+        });
     }
 }
 

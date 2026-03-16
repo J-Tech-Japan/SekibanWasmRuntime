@@ -65,6 +65,15 @@ impl Default for HttpSekibanExecutorOptions {
     }
 }
 
+impl HttpSekibanExecutorOptions {
+    fn normalized(self) -> Self {
+        Self {
+            max_attempts: self.max_attempts.max(1),
+            retry_delay: self.retry_delay,
+        }
+    }
+}
+
 #[derive(Clone)]
 struct HttpSekibanTransport {
     base_url: String,
@@ -78,6 +87,7 @@ impl HttpSekibanTransport {
         client: Client,
         options: HttpSekibanExecutorOptions,
     ) -> Self {
+        let options = options.normalized();
         Self {
             base_url: base_url.into().trim_end_matches('/').to_string(),
             client,
@@ -575,5 +585,19 @@ mod tests {
             extract_sortable_unique_id(&nested).as_deref(),
             Some("sort-2")
         );
+    }
+
+    #[test]
+    fn transport_clamps_retry_attempts_to_one() {
+        let transport = HttpSekibanTransport::new(
+            "http://localhost:5000",
+            Client::new(),
+            HttpSekibanExecutorOptions {
+                max_attempts: 0,
+                retry_delay: Duration::from_millis(1),
+            },
+        );
+
+        assert_eq!(transport.options.max_attempts, 1);
     }
 }

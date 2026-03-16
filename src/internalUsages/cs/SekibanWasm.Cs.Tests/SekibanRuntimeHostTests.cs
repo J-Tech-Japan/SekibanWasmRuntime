@@ -73,4 +73,68 @@ public class SekibanRuntimeHostTests
             Directory.Delete(tempDirectory, recursive: true);
         }
     }
+
+    [Fact]
+    public void ManifestPathResolver_Resolve_ShouldThrowForMissingExplicitManifestPath()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Sekiban:ManifestPath"] = "./missing-manifest.json"
+            })
+            .Build();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => ManifestPathResolver.Resolve(configuration));
+        Assert.Contains("missing-manifest.json", ex.Message);
+    }
+
+    [Fact]
+    public void ProjectionInstanceStore_ShouldEvictIdleInstances()
+    {
+        var currentTime = new DateTimeOffset(2026, 3, 15, 12, 0, 0, TimeSpan.Zero);
+        var instance = new StubProjectionInstance();
+        using var store = new ProjectionInstanceStore(
+            TimeSpan.FromMinutes(5),
+            () => currentTime);
+
+        var instanceId = store.Add(instance);
+        Assert.True(store.TryGet(instanceId, out var resolvedInstance));
+        Assert.Same(instance, resolvedInstance);
+
+        currentTime = currentTime.AddMinutes(6);
+
+        Assert.False(store.TryGet(instanceId, out _));
+        Assert.True(instance.Disposed);
+    }
+
+    [Fact]
+    public void ProjectionInstanceStore_Remove_ShouldDisposeInstance()
+    {
+        var instance = new StubProjectionInstance();
+        using var store = new ProjectionInstanceStore(TimeSpan.FromMinutes(5));
+        var instanceId = store.Add(instance);
+
+        Assert.True(store.Remove(instanceId));
+        Assert.True(instance.Disposed);
+        Assert.False(store.Remove(instanceId));
+    }
+
+    private sealed class StubProjectionInstance : Sekiban.Dcb.Primitives.IPrimitiveProjectionInstance
+    {
+        public bool Disposed { get; private set; }
+
+        public void ApplyEvent(
+            string eventType,
+            string eventPayloadJson,
+            IReadOnlyList<string> tags,
+            string? sortableUniqueId)
+        {
+        }
+
+        public string ExecuteQuery(string queryType, string queryParamsJson) => "{}";
+        public string ExecuteListQuery(string queryType, string queryParamsJson) => "[]";
+        public string SerializeState() => "{}";
+        public void RestoreState(string stateJson) { }
+        public void Dispose() => Disposed = true;
+    }
 }

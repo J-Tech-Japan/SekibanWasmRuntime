@@ -14,7 +14,11 @@ fi
 mkdir -p "$MODULES_DIR"
 
 echo "[build-rust-wasm] Building Rust WASM module..."
-cargo build --manifest-path "$RUST_DIR/Cargo.toml" --target wasm32-wasip1 --release
+cargo build \
+  --manifest-path "$RUST_DIR/Cargo.toml" \
+  --package sekiban-wasm-projector \
+  --target wasm32-wasip1 \
+  --release
 
 RUST_TARGET_DIR="$RUST_DIR/target"
 WASM_FILE="$RUST_TARGET_DIR/wasm32-wasip1/release/weather_projector.wasm"

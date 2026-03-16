@@ -22,7 +22,7 @@ using Sekiban.Dcb.WasmRuntime.Wasmtime;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var manifestPath = ResolveManifestPath(builder.Configuration);
+var manifestPath = ManifestPathResolver.Resolve(builder.Configuration);
 var manifest = SekibanRuntimeManifest.Load(builder.Configuration, manifestPath);
 manifest.Validate();
 
@@ -44,6 +44,7 @@ builder.Services.AddSingleton(manifest);
 builder.Services.AddSingleton(domainTypes);
 builder.Services.AddSingleton<JsonSerializerOptions>(jsonOptions);
 builder.Services.AddSingleton(registry);
+builder.Services.AddSingleton<ProjectionInstanceStore>();
 
 builder.Services.AddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
 builder.Services.AddSekibanDcbPostgres(connectionString);
@@ -268,27 +269,6 @@ static async Task<string> DecompressToStringAsync(byte[] compressedData)
     await using var gzip = new GZipStream(input, CompressionMode.Decompress);
     using var reader = new StreamReader(gzip, Encoding.UTF8);
     return await reader.ReadToEndAsync();
-}
-
-static string ResolveManifestPath(IConfiguration configuration)
-{
-    var candidates = new[]
-    {
-        Environment.GetEnvironmentVariable("SEKIBAN_MANIFEST_PATH"),
-        configuration["Sekiban:ManifestPath"],
-        Path.Combine(Directory.GetCurrentDirectory(), "sekiban-manifest.json"),
-        Path.GetFullPath(Path.Combine(
-            Directory.GetCurrentDirectory(),
-            "..",
-            "..",
-            "..",
-            "docker",
-            "sekiban-wasm-runtime",
-            "config",
-            "sekiban-manifest.json"))
-    };
-
-    return candidates.First(static path => !string.IsNullOrWhiteSpace(path))!;
 }
 
 static string ResolveConnectionString(IConfiguration configuration)
