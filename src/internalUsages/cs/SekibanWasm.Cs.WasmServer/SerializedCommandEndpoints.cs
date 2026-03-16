@@ -22,32 +22,68 @@ public class SerializedCommandEndpoints : ISerializedCommandExecutor
     private readonly ISekibanExecutor _executor;
     private readonly SerializedCommandTypeRegistry _registry;
     private readonly JsonSerializerOptions _jsonOptions;
+    private readonly ISekibanCommandCommitRequestBuilder? _commitRequestBuilder;
 
     public SerializedCommandEndpoints(
         ISekibanExecutor executor,
         SerializedCommandTypeRegistry registry,
         JsonSerializerOptions jsonOptions)
+        : this(executor, registry, jsonOptions, null)
+    {
+    }
+
+    public SerializedCommandEndpoints(
+        ISekibanExecutor executor,
+        SerializedCommandTypeRegistry registry,
+        JsonSerializerOptions jsonOptions,
+        ISekibanCommandCommitRequestBuilder? commitRequestBuilder)
     {
         _executor = executor;
         _registry = registry;
         _jsonOptions = jsonOptions;
+        _commitRequestBuilder = commitRequestBuilder;
     }
 
     public async Task<ResultBox<SerializedCommandExecuteResponse>> ExecuteAsync(
         SerializedCommandExecuteRequest request,
         CancellationToken cancellationToken)
     {
+        object command;
+        Type commandType;
+        try
+        {
+            commandType = _registry.GetCommandType(request.CommandName);
+            command = JsonSerializer.Deserialize(request.CommandJson, commandType, _jsonOptions)
+                ?? throw new ArgumentException($"Failed to deserialize command: {request.CommandName}");
+        }
+        catch (Exception ex)
+        {
+            var source = ex is TargetInvocationException tie && tie.InnerException is not null
+                ? tie.InnerException
+                : ex;
+            return ResultBox<SerializedCommandExecuteResponse>.FromException(source);
+        }
+
+        if (_commitRequestBuilder is not null)
+        {
+            try
+            {
+                var commitRequest = await _commitRequestBuilder.BuildCommitRequestAsync(
+                    request.CommandName,
+                    command,
+                    cancellationToken);
+                return ResultBox<SerializedCommandExecuteResponse>.FromValue(
+                    MapCommitRequest(commitRequest));
+            }
+            catch (Exception ex)
+            {
+                return ResultBox<SerializedCommandExecuteResponse>.FromException(ex);
+            }
+        }
+
         ExecutionResult executionResult;
         try
         {
-            var commandType = _registry.GetCommandType(request.CommandName);
-            var command = JsonSerializer.Deserialize(request.CommandJson, commandType, _jsonOptions);
-            if (command is null)
-            {
-                return ResultBox<SerializedCommandExecuteResponse>.FromException(
-                    new ArgumentException($"Failed to deserialize command: {request.CommandName}"));
-            }
-
             var closedMethod = ExecuteAsyncOpenMethod.MakeGenericMethod(commandType);
             var task = (Task<ExecutionResult>)closedMethod.Invoke(_executor, [command, cancellationToken])!;
             executionResult = await task;
@@ -86,6 +122,21 @@ public class SerializedCommandEndpoints : ISerializedCommandExecutor
             CommandResultJson: commandResultJson);
 
         return ResultBox<SerializedCommandExecuteResponse>.FromValue(response);
+    }
+
+    private static SerializedCommandExecuteResponse MapCommitRequest(SerializedCommitRequest commitRequest)
+    {
+        var eventCandidates = commitRequest.EventCandidates
+            .Select(candidate => new SerializedCommandEventCandidate(
+                EventPayloadName: candidate.EventPayloadName,
+                PayloadBase64: Convert.ToBase64String(candidate.Payload),
+                Tags: candidate.Tags))
+            .ToList();
+
+        return new SerializedCommandExecuteResponse(
+            EventCandidates: eventCandidates,
+            ConsistencyTags: commitRequest.ConsistencyTags.ToList(),
+            CommandResultJson: null);
     }
 
     private string SerializeWithFallback(object value)
