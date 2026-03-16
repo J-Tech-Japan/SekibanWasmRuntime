@@ -52,6 +52,7 @@ Both configurations share the same architecture: Aspire AppHost orchestrates Pos
 
 For non-Aspire usage, a generic runtime host also exists at `src/runtime/Sekiban.Dcb.WasmRuntime.Host` with a compose stack in `docker/sekiban-wasm-runtime/`.
 For Aspire-based local development, use `src/runtime/Sekiban.Dcb.WasmRuntime.AppHost`, which starts the generic runtime host, PostgreSQL, and DBGate.
+For a C# sample stack that keeps the existing ClientApi/Web but swaps the backend to the generic runtime host, use `src/internalUsages/cs/SekibanWasm.Cs.GenericAppHost`.
 
 ## Comparison with DcbOrleans.Web (Sekiban Reference)
 

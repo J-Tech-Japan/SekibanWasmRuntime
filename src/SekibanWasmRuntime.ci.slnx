@@ -3,6 +3,7 @@
     <Project Path="internalUsages/cs/SekibanWasm.Cs.WasmServer/SekibanWasm.Cs.WasmServer.csproj" />
     <Project Path="internalUsages/cs/SekibanWasm.Cs.ClientApi/SekibanWasm.Cs.ClientApi.csproj" />
     <Project Path="internalUsages/cs/SekibanWasm.Cs.AppHost/SekibanWasm.Cs.AppHost.csproj" />
+    <Project Path="internalUsages/cs/SekibanWasm.Cs.GenericAppHost/SekibanWasm.Cs.GenericAppHost.csproj" />
     <Project Path="internalUsages/cs/SekibanWasm.Cs.Domain/SekibanWasm.Cs.Domain.csproj" />
     <Project Path="internalUsages/cs/SekibanWasm.Cs.ServiceDefaults/SekibanWasm.Cs.ServiceDefaults.csproj" />
     <Project Path="internalUsages/cs/SekibanWasm.Cs.Tests/SekibanWasm.Cs.Tests.csproj" />
