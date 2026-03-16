@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Orleans.Hosting;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Actors;
@@ -57,6 +58,7 @@ builder.Services.AddSingleton<IEventSubscriptionResolver>(_ =>
 builder.Services.AddSingleton<IMultiProjectionEventStatistics, NoOpMultiProjectionEventStatistics>();
 builder.Services.AddSingleton(new GeneralMultiProjectionActorOptions());
 builder.Services.AddSingleton<IActorObjectAccessor, OrleansActorObjectAccessor>();
+builder.Services.Replace(ServiceDescriptor.Singleton<IProjectionActorHostFactory, WasmProjectionActorHostFactory>());
 builder.Services.AddTransient<OrleansDcbExecutor>();
 builder.Services.AddTransient<ISekibanExecutor>(sp =>
     sp.GetRequiredService<OrleansDcbExecutor>());
@@ -76,6 +78,7 @@ builder.Services.AddWasmTagStateRuntime(options =>
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
+await app.MigrateSekibanDcbDatabaseAsync();
 
 app.MapOpenApi();
 app.MapGet("/", () => Results.Ok(new
