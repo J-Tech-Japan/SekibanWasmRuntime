@@ -76,6 +76,7 @@ runtimeBuilder = runtimeBuilder
         endpoint.IsProxied = false;
     })
     .WithEnvironment("ASPNETCORE_URLS", "http://127.0.0.1:" + runtimePort);
+runtimeBuilder.WithExternalHttpEndpoints();
 
 var runtime = runtimeBuilder;
 

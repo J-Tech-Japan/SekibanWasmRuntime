@@ -89,6 +89,66 @@ public class SekibanRuntimeHostTests
     }
 
     [Fact]
+    public void ManifestPathResolver_Resolve_ShouldUseOnlyCurrentDirectoryManifestByDefault()
+    {
+        var originalCurrentDirectory = Directory.GetCurrentDirectory();
+        var tempDirectory = Path.Combine(
+            Path.GetTempPath(),
+            "sekiban-runtime-manifest-resolver-tests",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDirectory);
+
+        try
+        {
+            Directory.SetCurrentDirectory(tempDirectory);
+            var expectedPath = Path.Combine(Directory.GetCurrentDirectory(), "sekiban-manifest.json");
+
+            var resolvedPath = ManifestPathResolver.Resolve(new ConfigurationBuilder().Build());
+
+            Assert.Equal(expectedPath, resolvedPath);
+        }
+        finally
+        {
+            Directory.SetCurrentDirectory(originalCurrentDirectory);
+            Directory.Delete(tempDirectory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void SekibanRuntimeManifest_Load_ShouldUseConfiguredWasmModuleWhenManifestIsMissing()
+    {
+        var tempDirectory = Path.Combine(
+            Path.GetTempPath(),
+            "sekiban-runtime-default-manifest-tests",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDirectory);
+
+        try
+        {
+            var modulePath = Path.Combine(tempDirectory, "weather.wasm");
+            File.WriteAllBytes(modulePath, []);
+
+            var configuration = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["WASM_MODULE_PATH"] = modulePath
+                })
+                .Build();
+
+            var manifest = SekibanRuntimeManifest.Load(
+                configuration,
+                Path.Combine(tempDirectory, "missing-manifest.json"));
+
+            Assert.Equal(modulePath, manifest.DefaultModulePath);
+            Assert.All(manifest.Projectors, projector => Assert.Equal(modulePath, projector.ModulePath));
+        }
+        finally
+        {
+            Directory.Delete(tempDirectory, recursive: true);
+        }
+    }
+
+    [Fact]
     public void ProjectionInstanceStore_ShouldEvictIdleInstances()
     {
         var currentTime = new DateTimeOffset(2026, 3, 15, 12, 0, 0, TimeSpan.Zero);

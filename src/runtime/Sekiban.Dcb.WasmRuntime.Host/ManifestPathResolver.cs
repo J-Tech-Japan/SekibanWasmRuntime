@@ -22,21 +22,10 @@ internal static class ManifestPathResolver
             return resolvedConfiguredPath;
         }
 
-        var defaultCandidates = new[]
-        {
-            Path.Combine(Directory.GetCurrentDirectory(), "sekiban-manifest.json"),
-            Path.GetFullPath(Path.Combine(
-                Directory.GetCurrentDirectory(),
-                "..",
-                "..",
-                "..",
-                "docker",
-                "sekiban-wasm-runtime",
-                "config",
-                "sekiban-manifest.json"))
-        };
-
-        return defaultCandidates.FirstOrDefault(File.Exists) ?? defaultCandidates[0];
+        // Only probe a manifest colocated with the running host.
+        // Repo-level docker manifests must be opted into explicitly via SEKIBAN_MANIFEST_PATH,
+        // otherwise local development hosts should fall back to the built-in weather manifest.
+        return Path.Combine(Directory.GetCurrentDirectory(), "sekiban-manifest.json");
     }
 
     private static string ResolveRelativeToCurrentDirectory(string path)
