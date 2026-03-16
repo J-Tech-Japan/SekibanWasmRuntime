@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Sekiban.Dcb.WasmRuntime.Host;
 using Xunit;
@@ -179,6 +180,50 @@ public class SekibanRuntimeHostTests
         Assert.False(store.Remove(instanceId));
     }
 
+    [Fact]
+    public async Task InstanceEndpoints_CreateInstance_ShouldReturnBadRequestForInvalidProjector()
+    {
+        using var store = new ProjectionInstanceStore(TimeSpan.FromMinutes(5));
+        var result = InstanceEndpoints.CreateInstanceResult(
+            new CreateInstanceRequest("MissingProjector"),
+            new ThrowingProjectionHost(new InvalidOperationException("Projector 'MissingProjector' is not registered.")),
+            store);
+
+        var (statusCode, body) = await ExecuteResultAsync(result);
+
+        Assert.Equal(StatusCodes.Status400BadRequest, statusCode);
+        Assert.Contains("MissingProjector", body);
+    }
+
+    [Fact]
+    public async Task InstanceEndpoints_CreateInstance_ShouldReturnNotFoundForMissingProjectorCatalogEntry()
+    {
+        using var store = new ProjectionInstanceStore(TimeSpan.FromMinutes(5));
+        var result = InstanceEndpoints.CreateInstanceResult(
+            new CreateInstanceRequest("MissingProjector"),
+            new ThrowingProjectionHost(new KeyNotFoundException("Projector 'MissingProjector' was not found.")),
+            store);
+
+        var (statusCode, body) = await ExecuteResultAsync(result);
+
+        Assert.Equal(StatusCodes.Status404NotFound, statusCode);
+        Assert.Contains("MissingProjector", body);
+    }
+
+    private static async Task<(int StatusCode, string Body)> ExecuteResultAsync(IResult result)
+    {
+        using var app = WebApplication.CreateBuilder().Build();
+        var httpContext = new DefaultHttpContext();
+        httpContext.RequestServices = app.Services;
+        httpContext.Response.Body = new MemoryStream();
+
+        await result.ExecuteAsync(httpContext);
+
+        httpContext.Response.Body.Position = 0;
+        using var reader = new StreamReader(httpContext.Response.Body);
+        return (httpContext.Response.StatusCode, await reader.ReadToEndAsync());
+    }
+
     private sealed class StubProjectionInstance : Sekiban.Dcb.Primitives.IPrimitiveProjectionInstance
     {
         public bool Disposed { get; private set; }
@@ -196,5 +241,11 @@ public class SekibanRuntimeHostTests
         public string SerializeState() => "{}";
         public void RestoreState(string stateJson) { }
         public void Dispose() => Disposed = true;
+    }
+
+    private sealed class ThrowingProjectionHost(Exception exception) : Sekiban.Dcb.Primitives.IPrimitiveProjectionHost
+    {
+        public Sekiban.Dcb.Primitives.IPrimitiveProjectionInstance CreateInstance(string projectorName)
+            => throw exception;
     }
 }

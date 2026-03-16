@@ -10,11 +10,7 @@ public static class InstanceEndpoints
             CreateInstanceRequest request,
             IPrimitiveProjectionHost host,
             ProjectionInstanceStore store) =>
-        {
-            var instance = host.CreateInstance(request.ProjectorName);
-            var instanceId = store.Add(instance);
-            return Results.Ok(new { instanceId });
-        });
+            CreateInstanceResult(request, host, store));
 
         app.MapPost("/v1/instances/{id}/events", (
             string id,
@@ -96,6 +92,31 @@ public static class InstanceEndpoints
 
             return Results.NotFound(new { error = $"Instance '{id}' not found." });
         });
+    }
+
+    internal static IResult CreateInstanceResult(
+        CreateInstanceRequest request,
+        IPrimitiveProjectionHost host,
+        ProjectionInstanceStore store)
+    {
+        try
+        {
+            var instance = host.CreateInstance(request.ProjectorName);
+            var instanceId = store.Add(instance);
+            return Results.Ok(new { instanceId });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return Results.NotFound(new { error = ex.Message });
+        }
+        catch (ArgumentException ex)
+        {
+            return Results.BadRequest(new { error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.BadRequest(new { error = ex.Message });
+        }
     }
 }
 

@@ -3,7 +3,7 @@ use std::{collections::HashMap, collections::HashSet, sync::Arc, time::Duration}
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
 use sekiban_core::{CommandContext, CommandError, CommandMeta, CommandOutput};
 use sekiban_core::{ListQuery, Query, StatePayload, Tag};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -54,6 +54,8 @@ impl TagStateProjectorResolver for StaticTagProjectorResolver {
 pub struct HttpSekibanExecutorOptions {
     pub max_attempts: usize,
     pub retry_delay: Duration,
+    pub request_timeout: Duration,
+    pub connect_timeout: Duration,
 }
 
 impl Default for HttpSekibanExecutorOptions {
@@ -61,15 +63,28 @@ impl Default for HttpSekibanExecutorOptions {
         Self {
             max_attempts: 5,
             retry_delay: Duration::from_millis(250),
+            request_timeout: Duration::from_secs(30),
+            connect_timeout: Duration::from_secs(5),
         }
     }
 }
 
 impl HttpSekibanExecutorOptions {
     fn normalized(self) -> Self {
+        let defaults = Self::default();
         Self {
             max_attempts: self.max_attempts.max(1),
             retry_delay: self.retry_delay,
+            request_timeout: if self.request_timeout.is_zero() {
+                defaults.request_timeout
+            } else {
+                self.request_timeout
+            },
+            connect_timeout: if self.connect_timeout.is_zero() {
+                defaults.connect_timeout
+            } else {
+                self.connect_timeout
+            },
         }
     }
 }
@@ -265,12 +280,13 @@ where
         builder: B,
         resolver: impl TagStateProjectorResolver + 'static,
     ) -> Self {
+        let options = HttpSekibanExecutorOptions::default();
         Self::with_client_and_options(
             base_url,
-            Client::new(),
+            build_default_http_client(&options),
             builder,
             resolver,
-            HttpSekibanExecutorOptions::default(),
+            options,
         )
     }
 
@@ -412,8 +428,8 @@ where
             .post_with_retry("/api/sekiban/serialized/query", &request)
             .await
             .context("serialized query request failed")?;
-        let response = response.error_for_status()?;
-        let body: SerializedQueryResponse = response.json().await?;
+        let body: SerializedQueryResponse =
+            deserialize_success_json(response, "serialized query request").await?;
         Ok(serde_json::from_str(&body.result_json)?)
     }
 
@@ -426,10 +442,58 @@ where
             .post_with_retry("/api/sekiban/serialized/list-query", &request)
             .await
             .context("serialized list query request failed")?;
-        let response = response.error_for_status()?;
-        let body: SerializedListQueryResponse = response.json().await?;
+        let body: SerializedListQueryResponse =
+            deserialize_success_json(response, "serialized list-query request").await?;
         Ok(serde_json::from_str(&body.items_json)?)
     }
+}
+
+fn build_default_http_client(options: &HttpSekibanExecutorOptions) -> Client {
+    Client::builder()
+        .timeout(options.request_timeout)
+        .connect_timeout(options.connect_timeout)
+        .build()
+        .expect("default HTTP client configuration should be valid")
+}
+
+async fn deserialize_success_json<T: DeserializeOwned>(
+    response: reqwest::Response,
+    operation: &str,
+) -> anyhow::Result<T> {
+    let status = response.status();
+    if !status.is_success() {
+        let body = response
+            .text()
+            .await
+            .unwrap_or_else(|err| format!("<failed to read error body: {err}>"));
+        return Err(format_unsuccessful_response(operation, status, &body));
+    }
+
+    response
+        .json::<T>()
+        .await
+        .with_context(|| format!("invalid {operation} response"))
+}
+
+fn format_unsuccessful_response(operation: &str, status: StatusCode, body: &str) -> anyhow::Error {
+    let detail = extract_error_detail(body).unwrap_or_else(|| {
+        let trimmed = body.trim();
+        if trimmed.is_empty() {
+            "<empty response body>".to_string()
+        } else {
+            trimmed.to_string()
+        }
+    });
+
+    anyhow!("{operation} failed with status {status}: {detail}")
+}
+
+fn extract_error_detail(body: &str) -> Option<String> {
+    let value = serde_json::from_str::<Value>(body).ok()?;
+    value
+        .get("error")
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned)
 }
 
 pub async fn build_commit_request_from_output(
@@ -595,9 +659,53 @@ mod tests {
             HttpSekibanExecutorOptions {
                 max_attempts: 0,
                 retry_delay: Duration::from_millis(1),
+                request_timeout: Duration::from_secs(30),
+                connect_timeout: Duration::from_secs(5),
             },
         );
 
         assert_eq!(transport.options.max_attempts, 1);
+    }
+
+    #[test]
+    fn executor_options_restore_default_timeouts_when_zero() {
+        let normalized = HttpSekibanExecutorOptions {
+            max_attempts: 1,
+            retry_delay: Duration::from_millis(1),
+            request_timeout: Duration::ZERO,
+            connect_timeout: Duration::ZERO,
+        }
+        .normalized();
+
+        assert_eq!(normalized.request_timeout, Duration::from_secs(30));
+        assert_eq!(normalized.connect_timeout, Duration::from_secs(5));
+    }
+
+    #[test]
+    fn format_unsuccessful_response_prefers_json_error_field() {
+        let error = format_unsuccessful_response(
+            "serialized query request",
+            StatusCode::BAD_REQUEST,
+            r#"{"error":"projector is not registered"}"#,
+        );
+
+        assert_eq!(
+            error.to_string(),
+            "serialized query request failed with status 400 Bad Request: projector is not registered"
+        );
+    }
+
+    #[test]
+    fn format_unsuccessful_response_falls_back_to_plain_text_body() {
+        let error = format_unsuccessful_response(
+            "serialized list-query request",
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "unexpected failure",
+        );
+
+        assert_eq!(
+            error.to_string(),
+            "serialized list-query request failed with status 500 Internal Server Error: unexpected failure"
+        );
     }
 }
