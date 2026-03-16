@@ -8,14 +8,14 @@ namespace Sekiban.Dcb.WasmRuntime.Wasmtime;
 
 public sealed class WasmtimeProjectionWarmupService(
     IServiceProvider services,
-    ILogger<WasmtimeProjectionWarmupService> logger) : IHostedService
+    ILogger<WasmtimeProjectionWarmupService> logger) : BackgroundService
 {
-    public Task StartAsync(CancellationToken cancellationToken)
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var registry = services.GetService<WasmProjectorRegistry>();
         if (registry is null)
         {
-            return Task.CompletedTask;
+            return;
         }
 
         var projectorNames = registry.GetAllProjectorNames()
@@ -23,17 +23,19 @@ public sealed class WasmtimeProjectionWarmupService(
             .ToArray();
         if (projectorNames.Length == 0)
         {
-            return Task.CompletedTask;
+            return;
         }
+
+        // Do not block API readiness on Wasmtime component extraction/shim initialization.
+        await Task.Yield();
 
         var host = services.GetRequiredService<IPrimitiveProjectionHost>();
         foreach (var projectorName in projectorNames)
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            stoppingToken.ThrowIfCancellationRequested();
 
             try
             {
-                // Component extraction can be too expensive for the first Orleans request.
                 logger.LogInformation("Warming up Wasmtime projector {ProjectorName}", projectorName);
                 using var instance = host.CreateInstance(projectorName);
                 _ = instance.SerializeState();
@@ -41,12 +43,8 @@ public sealed class WasmtimeProjectionWarmupService(
             catch (Exception ex)
             {
                 logger.LogError(ex, "Failed to warm up Wasmtime projector {ProjectorName}", projectorName);
-                throw;
+                return;
             }
         }
-
-        return Task.CompletedTask;
     }
-
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }

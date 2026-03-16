@@ -37,11 +37,29 @@ public sealed class WasmtimeProjectionWarmupServiceTests
             NullLogger<WasmtimeProjectionWarmupService>.Instance);
 
         await service.StartAsync(CancellationToken.None);
+        await WaitForAsync(() => projectionHost.DisposeCount == 2);
+        await service.StopAsync(CancellationToken.None);
 
         Assert.Equal(
             ["WeatherForecastProjector", "WeatherForecastMultiProjection"],
             projectionHost.CreatedProjectors);
         Assert.Equal(2, projectionHost.DisposeCount);
+    }
+
+    private static async Task WaitForAsync(Func<bool> condition)
+    {
+        var started = DateTime.UtcNow;
+        while (DateTime.UtcNow - started < TimeSpan.FromSeconds(1))
+        {
+            if (condition())
+            {
+                return;
+            }
+
+            await Task.Delay(10);
+        }
+
+        throw new TimeoutException("Condition was not reached in time.");
     }
 
     private sealed class RecordingPrimitiveProjectionHost : IPrimitiveProjectionHost
