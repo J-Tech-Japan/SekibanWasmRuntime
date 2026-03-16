@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Sekiban.Dcb.Actors;
+using Sekiban.Dcb;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Queries;
