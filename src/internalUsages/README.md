@@ -30,6 +30,7 @@ src/internalUsages/
 │   └── modules/                       # Built WASM binary (csharp-weather.wasm)
 └── rust/                  # Rust WASM implementation
     ├── SekibanWasm.Rust.AppHost/      # Aspire orchestrator
+    ├── SekibanWasm.Rust.GenericAppHost/ # Aspire orchestrator using the generic runtime host
     ├── SekibanWasm.Rust.WasmServer/   # WasmServer (Orleans + WASM projection + commands)
     ├── SekibanWasm.Rust.ClientApi/    # ClientApi (Rust/axum HTTP adapter)
     ├── SekibanWasm.Rust.ServiceDefaults/ # Aspire service defaults
@@ -53,6 +54,7 @@ Both configurations share the same architecture: Aspire AppHost orchestrates Pos
 For non-Aspire usage, a generic runtime host also exists at `src/runtime/Sekiban.Dcb.WasmRuntime.Host` with a compose stack in `docker/sekiban-wasm-runtime/`.
 For Aspire-based local development, use `src/runtime/Sekiban.Dcb.WasmRuntime.AppHost`, which starts the generic runtime host, PostgreSQL, and DBGate.
 For a C# sample stack that keeps the existing ClientApi/Web but swaps the backend to the generic runtime host, use `src/internalUsages/cs/SekibanWasm.Cs.GenericAppHost`.
+For a Rust sample stack that keeps the existing ClientApi/Web but swaps the backend to the generic runtime host, use `src/internalUsages/rust/SekibanWasm.Rust.GenericAppHost`.
 
 ## Comparison with DcbOrleans.Web (Sekiban Reference)
 
@@ -115,6 +117,16 @@ dotnet run --project src/internalUsages/cs/SekibanWasm.Cs.AppHost
 
 # Start the system
 dotnet run --project src/internalUsages/rust/SekibanWasm.Rust.AppHost
+```
+
+### Rust Generic Runtime Host System
+
+```bash
+# Build Rust WASM module
+./build/scripts/build-rust-wasm.sh
+
+# Start the system with the shared runtime host
+dotnet run --project src/internalUsages/rust/SekibanWasm.Rust.GenericAppHost
 ```
 
 ### Tests

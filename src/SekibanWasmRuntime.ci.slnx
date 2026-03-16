@@ -12,6 +12,7 @@
   <Folder Name="/internalUsages/rust/">
     <Project Path="internalUsages/rust/SekibanWasm.Rust.WasmServer/SekibanWasm.Rust.WasmServer.csproj" />
     <Project Path="internalUsages/rust/SekibanWasm.Rust.AppHost/SekibanWasm.Rust.AppHost.csproj" />
+    <Project Path="internalUsages/rust/SekibanWasm.Rust.GenericAppHost/SekibanWasm.Rust.GenericAppHost.csproj" />
     <Project Path="internalUsages/rust/SekibanWasm.Rust.ServiceDefaults/SekibanWasm.Rust.ServiceDefaults.csproj" />
     <Project Path="internalUsages/rust/SekibanWasm.Rust.Web/SekibanWasm.Rust.Web.csproj" />
   </Folder>

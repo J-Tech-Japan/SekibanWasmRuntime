@@ -57,6 +57,16 @@ dotnet run --project src/internalUsages/cs/SekibanWasm.Cs.AppHost
 dotnet run --project src/internalUsages/rust/SekibanWasm.Rust.AppHost
 ```
 
+### Rust Generic Runtime Example
+
+```bash
+# 1. Build the Rust WASM module
+./build/scripts/build-rust-wasm.sh
+
+# 2. Start the generic runtime host + Rust ClientApi/Web stack
+dotnet run --project src/internalUsages/rust/SekibanWasm.Rust.GenericAppHost
+```
+
 ### Generic Runtime Container
 
 ```bash
