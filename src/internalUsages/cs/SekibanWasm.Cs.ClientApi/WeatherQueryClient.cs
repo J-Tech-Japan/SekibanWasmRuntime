@@ -1,5 +1,5 @@
-using System.Net.Http.Json;
 using System.Text.Json;
+using Sekiban.Dcb.WasmRuntime;
 using SekibanWasm.Cs.Domain.Weather;
 
 namespace SekibanWasm.Cs.ClientApi;
@@ -11,24 +11,20 @@ public interface IWeatherQueryClient
 
 public sealed class WeatherQueryClient : IWeatherQueryClient
 {
-    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ISerializedQueryClient _queryClient;
     private readonly JsonSerializerOptions _domainJsonOptions;
-    private readonly JsonSerializerOptions _transportJsonOptions;
 
     public WeatherQueryClient(
-        IHttpClientFactory httpClientFactory,
-        DomainSerializerOptions domainJsonOptions,
-        TransportSerializerOptions transportJsonOptions)
+        ISerializedQueryClient queryClient,
+        DomainSerializerOptions domainJsonOptions)
     {
-        _httpClientFactory = httpClientFactory;
+        _queryClient = queryClient;
         _domainJsonOptions = domainJsonOptions.Value;
-        _transportJsonOptions = transportJsonOptions.Value;
     }
 
     public async Task<WeatherForecastItem?> GetForecastAsync(string forecastId, CancellationToken ct)
     {
-        var client = _httpClientFactory.CreateClient("wasmserver");
-        var request = new SerializedListQueryRequest(
+        var request = new SerializedQueryRequest(
             QueryType: nameof(GetWeatherForecastListQuery),
             QueryParamsJson: JsonSerializer.Serialize(
                 new GetWeatherForecastListQuery
@@ -39,34 +35,12 @@ public sealed class WeatherQueryClient : IWeatherQueryClient
                 },
                 _domainJsonOptions));
 
-        var response = await client.PostAsJsonAsync(
-            "/api/sekiban/serialized/list-query",
-            request,
-            _transportJsonOptions,
-            ct);
-        response.EnsureSuccessStatusCode();
-
-        var result = await response.Content.ReadFromJsonAsync<SerializedListQueryResponse>(
-            _transportJsonOptions,
-            ct);
-        if (result is null)
+        var result = await _queryClient.ExecuteListQueryAsync<List<WeatherForecastItem>>(request, ct);
+        if (!result.IsSuccess)
         {
-            throw new InvalidOperationException("Failed to parse serialized list-query response.");
+            throw result.GetException();
         }
 
-        var items = JsonSerializer.Deserialize<List<WeatherForecastItem>>(result.ItemsJson, _domainJsonOptions);
-        return items?.SingleOrDefault();
+        return result.GetValue().SingleOrDefault();
     }
-
-    private sealed record SerializedListQueryRequest(
-        string QueryType,
-        string QueryParamsJson,
-        string? WaitForSortableUniqueId = null);
-
-    private sealed record SerializedListQueryResponse(
-        string ItemsJson,
-        int? TotalCount,
-        int? TotalPages,
-        int? CurrentPage,
-        int? PageSize);
 }

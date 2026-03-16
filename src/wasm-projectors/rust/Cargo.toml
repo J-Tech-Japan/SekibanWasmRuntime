@@ -2,6 +2,7 @@
 members = [
   "sekiban-core",
   "sekiban-derive",
+  "sekiban-executor",
   "sekiban-wasm",
   "domain",
   "wasm-projector",

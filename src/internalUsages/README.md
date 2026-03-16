@@ -11,7 +11,7 @@ Each configuration (CS and Rust) uses a three-service topology:
 ```
 
 - **WasmServer**: Hosts Orleans silo, PostgreSQL EventStore, Wasmtime-based WASM projection runtime, command execution endpoints (`/api/weatherforecast/*`), and the `/v1/instances/*` projection instance HTTP API.
-- **ClientApi**: A thin HTTP adapter that forwards `/api/weatherforecast/*` requests to WasmServer. CS uses ASP.NET, Rust uses `axum`.
+- **ClientApi**: A thin HTTP adapter that forwards `/api/weatherforecast/*` requests to WasmServer. CS uses ASP.NET, Rust uses `axum`. Both now sit on shared `SekibanExecutor` abstractions instead of hand-written transport code.
 - **Web**: Blazor Server frontend that consumes the ClientApi.
 
 ## Directory Structure
@@ -49,6 +49,8 @@ src/internalUsages/
 | Projection Host | WasmServer with WasmProjectionRuntime | WasmServer with WasmProjectionRuntime |
 
 Both configurations share the same architecture: Aspire AppHost orchestrates PostgreSQL, Azure Storage (emulated), Orleans, and the WasmServer + ClientApi + Web frontend.
+
+For non-Aspire usage, a generic runtime host also exists at `src/runtime/Sekiban.Dcb.WasmRuntime.Host` with a compose stack in `docker/sekiban-wasm-runtime/`.
 
 ## Comparison with DcbOrleans.Web (Sekiban Reference)
 
