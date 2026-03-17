@@ -9,6 +9,10 @@
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <PackageId>Sekiban.Dcb.WasmRuntime.Wasmtime</PackageId>
     <Description>Sekiban DCB WASM runtime Wasmtime in-process host</Description>
+    <WasmtimeDotnetTargetFramework Condition="'$(WasmtimeDotnetTargetFramework)' == ''">net9.0</WasmtimeDotnetTargetFramework>
+    <WasmtimeNativeLibraryFileName Condition="$([MSBuild]::IsOsPlatform('OSX'))">libwasmtime.dylib</WasmtimeNativeLibraryFileName>
+    <WasmtimeNativeLibraryFileName Condition="$([MSBuild]::IsOsPlatform('Linux'))">libwasmtime.so</WasmtimeNativeLibraryFileName>
+    <WasmtimeNativeLibraryFileName Condition="$([MSBuild]::IsOsPlatform('Windows'))">wasmtime.dll</WasmtimeNativeLibraryFileName>
   </PropertyGroup>
 
   <ItemGroup>
@@ -26,5 +30,18 @@
     <PackageReference Include="Microsoft.Extensions.Options" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
+
+  <Target Name="IncludeWasmtimeNativeLibrary"
+          BeforeTargets="GetCopyToOutputDirectoryItems;ComputeFilesToPublish">
+    <ItemGroup Condition="'$(WasmtimeNativeLibraryFileName)' != ''">
+      <Content Include="$(WasmtimeDotnetPath)/bin/$(Configuration)/$(WasmtimeDotnetTargetFramework)/$(WasmtimeNativeLibraryFileName)"
+               Condition="Exists('$(WasmtimeDotnetPath)/bin/$(Configuration)/$(WasmtimeDotnetTargetFramework)/$(WasmtimeNativeLibraryFileName)')">
+        <Link>$(WasmtimeNativeLibraryFileName)</Link>
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+        <Visible>false</Visible>
+      </Content>
+    </ItemGroup>
+  </Target>
 
 </Project>
