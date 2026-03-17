@@ -29,7 +29,17 @@ public sealed class WasmtimeProjectionWarmupService(
         // Do not block API readiness on Wasmtime component extraction/shim initialization.
         await Task.Yield();
 
-        var host = services.GetRequiredService<IPrimitiveProjectionHost>();
+        IPrimitiveProjectionHost host;
+        try
+        {
+            host = services.GetRequiredService<IPrimitiveProjectionHost>();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to initialize Wasmtime projection host for warmup");
+            return;
+        }
+
         foreach (var projectorName in projectorNames)
         {
             stoppingToken.ThrowIfCancellationRequested();
