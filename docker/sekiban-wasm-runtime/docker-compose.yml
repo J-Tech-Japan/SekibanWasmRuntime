@@ -1,0 +1,54 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: sekiban
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d sekiban"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  dbgate:
+    image: dbgate/dbgate:7.1.2-alpine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      CONNECTIONS: weather
+      LABEL_weather: Sekiban Runtime Postgres
+      ENGINE_weather: postgres@dbgate-plugin-postgres
+      SERVER_weather: postgres
+      PORT_weather: "5432"
+      DATABASE_weather: sekiban
+      USER_weather: postgres
+      PASSWORD_weather: postgres
+    ports:
+      - "3001:3000"
+
+  runtime:
+    build:
+      context: ../..
+      dockerfile: src/runtime/Sekiban.Dcb.WasmRuntime.Host/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_URLS: http://0.0.0.0:8080
+      ConnectionStrings__SekibanDcb: Host=postgres;Port=5432;Database=sekiban;Username=postgres;Password=postgres
+      SEKIBAN_MANIFEST_PATH: /app/config/sekiban-manifest.json
+      WASM_MODULE_PATH: /app/modules/weather.wasm
+    ports:
+      - "3000:8080"
+    volumes:
+      - ./config:/app/config:ro
+      - ./modules:/app/modules:ro
+
+volumes:
+  postgres-data:

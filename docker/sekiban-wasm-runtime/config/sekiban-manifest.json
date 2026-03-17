@@ -1,0 +1,30 @@
+{
+  "defaultModulePath": "/app/modules/weather.wasm",
+  "queryAssemblyVersion": "wasm",
+  "eventTypes": [
+    "WeatherForecastCreated",
+    "WeatherForecastLocationUpdated",
+    "WeatherForecastDeleted"
+  ],
+  "projectors": [
+    {
+      "projectorName": "WeatherForecastProjector",
+      "modulePath": "/app/modules/weather.wasm",
+      "abiKind": "wasi-preview1",
+      "moduleVersion": "1.0.0",
+      "projectorVersion": "v1"
+    },
+    {
+      "projectorName": "WeatherForecastMultiProjection",
+      "modulePath": "/app/modules/weather.wasm",
+      "abiKind": "wasi-preview1",
+      "moduleVersion": "1.0.0",
+      "projectorVersion": "1.0.0"
+    }
+  ],
+  "queryProjectors": {
+    "GetWeatherForecastCountQuery": "WeatherForecastMultiProjection",
+    "GetWeatherForecastListQuery": "WeatherForecastMultiProjection",
+    "WeatherForecastListQuery": "WeatherForecastMultiProjection"
+  }
+}

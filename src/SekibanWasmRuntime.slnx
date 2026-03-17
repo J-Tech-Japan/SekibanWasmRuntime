@@ -3,6 +3,7 @@
     <Project Path="internalUsages/cs/SekibanWasm.Cs.WasmServer/SekibanWasm.Cs.WasmServer.csproj" />
     <Project Path="internalUsages/cs/SekibanWasm.Cs.ClientApi/SekibanWasm.Cs.ClientApi.csproj" />
     <Project Path="internalUsages/cs/SekibanWasm.Cs.AppHost/SekibanWasm.Cs.AppHost.csproj" />
+    <Project Path="internalUsages/cs/SekibanWasm.Cs.GenericAppHost/SekibanWasm.Cs.GenericAppHost.csproj" />
     <Project Path="internalUsages/cs/SekibanWasm.Cs.Domain/SekibanWasm.Cs.Domain.csproj" />
     <Project Path="internalUsages/cs/SekibanWasm.Cs.ServiceDefaults/SekibanWasm.Cs.ServiceDefaults.csproj" />
     <Project Path="internalUsages/cs/SekibanWasm.Cs.Tests/SekibanWasm.Cs.Tests.csproj" />
@@ -12,6 +13,7 @@
   <Folder Name="/internalUsages/rust/">
     <Project Path="internalUsages/rust/SekibanWasm.Rust.WasmServer/SekibanWasm.Rust.WasmServer.csproj" />
     <Project Path="internalUsages/rust/SekibanWasm.Rust.AppHost/SekibanWasm.Rust.AppHost.csproj" />
+    <Project Path="internalUsages/rust/SekibanWasm.Rust.GenericAppHost/SekibanWasm.Rust.GenericAppHost.csproj" />
     <Project Path="internalUsages/rust/SekibanWasm.Rust.ServiceDefaults/SekibanWasm.Rust.ServiceDefaults.csproj" />
     <Project Path="internalUsages/rust/SekibanWasm.Rust.Web/SekibanWasm.Rust.Web.csproj" />
   </Folder>
@@ -20,6 +22,10 @@
     <Project Path="lib/Sekiban.Dcb.WasmRuntime.Wasmtime/Sekiban.Dcb.WasmRuntime.Wasmtime.csproj" />
     <Project Path="lib/Sekiban.Dcb.WasmRuntime/Sekiban.Dcb.WasmRuntime.csproj" />
     <Project Path="lib/SekibanWasm.Rust.ServerBridge/SekibanWasm.Rust.ServerBridge.csproj" />
+  </Folder>
+  <Folder Name="/runtime/">
+    <Project Path="runtime/Sekiban.Dcb.WasmRuntime.Host/Sekiban.Dcb.WasmRuntime.Host.csproj" />
+    <Project Path="runtime/Sekiban.Dcb.WasmRuntime.AppHost/Sekiban.Dcb.WasmRuntime.AppHost.csproj" />
   </Folder>
   <Project Path="../external/wasmtime-dotnet/src/Wasmtime.csproj" />
 </Solution>

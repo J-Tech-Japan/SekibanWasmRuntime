@@ -1,6 +1,6 @@
-using System.Net;
-using System.Text;
 using System.Text.Json;
+using ResultBoxes;
+using Sekiban.Dcb.WasmRuntime;
 using SekibanWasm.Cs.ClientApi;
 using SekibanWasm.Cs.Domain.Weather;
 using Xunit;
@@ -17,7 +17,7 @@ public class WeatherQueryClientTests
     [Fact]
     public async Task GetForecastAsync_ShouldSendSerializedListQuery_AndParseFirstItem()
     {
-        var itemsJson = JsonSerializer.Serialize(new[]
+        var expectedItems = new List<WeatherForecastItem>
         {
             new WeatherForecastItem(
                 ForecastId: "f-1",
@@ -25,36 +25,24 @@ public class WeatherQueryClientTests
                 TemperatureC: 20,
                 Summary: "Cloudy",
                 CreatedAt: DateTimeOffset.Parse("2026-03-11T23:00:00+00:00"))
-        }, DomainJsonOptions);
-        var responseBody = JsonSerializer.Serialize(new
+        };
+        var queryClient = new StubSerializedQueryClient
         {
-            itemsJson,
-            totalCount = 1,
-            totalPages = 1,
-            currentPage = 1,
-            pageSize = 1
-        });
-
-        var handler = new StubHttpMessageHandler(HttpStatusCode.OK, responseBody);
+            ResultToReturn = expectedItems
+        };
         var client = new WeatherQueryClient(
-            new StubHttpClientFactory(new HttpClient(handler)
-            {
-                BaseAddress = new Uri("https://localhost:5001")
-            }),
-            new DomainSerializerOptions(DomainJsonOptions),
-            new TransportSerializerOptions(new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+            queryClient,
+            new DomainSerializerOptions(DomainJsonOptions));
 
         var result = await client.GetForecastAsync("f-1", CancellationToken.None);
 
         Assert.NotNull(result);
         Assert.Equal("f-1", result.ForecastId);
         Assert.Equal("Tokyo", result.Location);
-        Assert.NotNull(handler.LastRequestBody);
+        Assert.NotNull(queryClient.LastRequest);
+        Assert.Equal("GetWeatherForecastListQuery", queryClient.LastRequest.QueryType);
 
-        using var document = JsonDocument.Parse(handler.LastRequestBody);
-        Assert.Equal("GetWeatherForecastListQuery", document.RootElement.GetProperty("queryType").GetString());
-
-        var queryJson = document.RootElement.GetProperty("queryParamsJson").GetString();
+        var queryJson = queryClient.LastRequest.QueryParamsJson;
         Assert.False(string.IsNullOrWhiteSpace(queryJson));
         using var queryDocument = JsonDocument.Parse(queryJson!);
         Assert.Equal("f-1", queryDocument.RootElement.GetProperty("forecastId").GetString());
@@ -62,28 +50,26 @@ public class WeatherQueryClientTests
         Assert.Equal(1, queryDocument.RootElement.GetProperty("pageSize").GetInt32());
     }
 
-    private sealed class StubHttpClientFactory(HttpClient client) : IHttpClientFactory
+    private sealed class StubSerializedQueryClient : ISerializedQueryClient
     {
-        public HttpClient CreateClient(string name) => client;
-    }
+        public SerializedQueryRequest? LastRequest { get; private set; }
+        public List<WeatherForecastItem> ResultToReturn { get; init; } = [];
 
-    private sealed class StubHttpMessageHandler(HttpStatusCode statusCode, string responseBody) : HttpMessageHandler
-    {
-        public string? LastRequestBody { get; private set; }
-
-        protected override async Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request,
-            CancellationToken cancellationToken)
+        public Task<ResultBox<TResult>> ExecuteQueryAsync<TResult>(
+            SerializedQueryRequest request,
+            CancellationToken cancellationToken = default)
+            where TResult : notnull
         {
-            if (request.Content is not null)
-            {
-                LastRequestBody = await request.Content.ReadAsStringAsync(cancellationToken);
-            }
+            throw new NotSupportedException();
+        }
 
-            return new HttpResponseMessage(statusCode)
-            {
-                Content = new StringContent(responseBody, Encoding.UTF8, "application/json")
-            };
+        public Task<ResultBox<TResult>> ExecuteListQueryAsync<TResult>(
+            SerializedQueryRequest request,
+            CancellationToken cancellationToken = default)
+            where TResult : notnull
+        {
+            LastRequest = request;
+            return Task.FromResult(ResultBox<TResult>.FromValue((TResult)(object)ResultToReturn));
         }
     }
 }

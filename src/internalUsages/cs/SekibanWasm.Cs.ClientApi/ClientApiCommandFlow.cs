@@ -7,7 +7,7 @@ using SekibanWasm.Cs.Domain.Weather;
 
 namespace SekibanWasm.Cs.ClientApi;
 
-public class ClientApiCommandFlow
+public class ClientApiCommandFlow : ISekibanCommandCommitRequestBuilder
 {
     private readonly ISerializedDcbClient _client;
     private readonly IWeatherQueryClient _queryClient;
@@ -45,7 +45,7 @@ public class ClientApiCommandFlow
         }
     }
 
-    private async Task<SerializedCommitRequest> BuildCommitRequestAsync(
+    public async Task<SerializedCommitRequest> BuildCommitRequestAsync(
         string commandName,
         object command,
         CancellationToken ct)

@@ -189,7 +189,63 @@ public class SerializedCommandEndpointsExecuteTests
         Assert.All(response.ConsistencyTags, ct => Assert.Equal("uid-002", ct.LastSortableUniqueId));
     }
 
+    [Fact]
+    public async Task ExecuteAsync_ShouldUseCommitRequestBuilder_WhenAvailable()
+    {
+        var commitRequest = new SerializedCommitRequest(
+            EventCandidates:
+            [
+                new SerializableEventCandidate(
+                    Payload: Encoding.UTF8.GetBytes("""{"forecastId":"f-1"}"""),
+                    EventPayloadName: nameof(WeatherForecastCreated),
+                    Tags: ["weather:f-1"])
+            ],
+            ConsistencyTags:
+            [
+                new ConsistencyTagEntry("weather:f-1", string.Empty)
+            ]);
+
+        var stubExecutor = new StubSekibanExecutor();
+        var stubBuilder = new StubCommitRequestBuilder { RequestToReturn = commitRequest };
+        var endpoints = new SerializedCommandEndpoints(
+            stubExecutor,
+            CreateRegistryWithWeatherCommands(),
+            JsonOptions,
+            stubBuilder);
+
+        var request = new SerializedCommandExecuteRequest(
+            CommandName: "CreateWeatherForecast",
+            CommandJson: JsonSerializer.Serialize(
+                new CreateWeatherForecast("f-1", "Tokyo", 22, "Warm"), JsonOptions),
+            ConsistencyTags: null,
+            Options: null);
+
+        var result = await endpoints.ExecuteAsync(request, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(nameof(CreateWeatherForecast), stubBuilder.LastCommandName);
+        Assert.Single(result.GetValue().EventCandidates);
+        Assert.Equal("weather:f-1", result.GetValue().ConsistencyTags[0].Tag);
+    }
+
     private record TestEventPayload(string ForecastId, string Location) : IEventPayload;
+
+    private sealed class StubCommitRequestBuilder : ISekibanCommandCommitRequestBuilder
+    {
+        public string? LastCommandName { get; private set; }
+        public object? LastCommand { get; private set; }
+        public SerializedCommitRequest RequestToReturn { get; init; } = new([], []);
+
+        public Task<SerializedCommitRequest> BuildCommitRequestAsync(
+            string commandName,
+            object command,
+            CancellationToken cancellationToken = default)
+        {
+            LastCommandName = commandName;
+            LastCommand = command;
+            return Task.FromResult(RequestToReturn);
+        }
+    }
 
     private sealed class StubSekibanExecutor : ISekibanExecutor
     {

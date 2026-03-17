@@ -22,11 +22,15 @@ src/
 │   ├── Sekiban.Dcb.WasmRuntime/       # Runtime abstractions
 │   ├── Sekiban.Dcb.WasmRuntime.Remote/    # Remote runtime support
 │   └── Sekiban.Dcb.WasmRuntime.Wasmtime/  # Wasmtime host integration
+├── runtime/
+│   └── Sekiban.Dcb.WasmRuntime.Host/  # Self-contained runtime host for containers
 ├── internalUsages/
 │   ├── cs/                            # C# WASM example (Aspire + Blazor)
 │   └── rust/                          # Rust WASM example (Aspire + Blazor)
-└── wasm-projectors/
-    └── rust/                          # Rust WASM projector source
+├── wasm-projectors/
+│   └── rust/                          # Rust WASM projector source
+└── docker/
+    └── sekiban-wasm-runtime/          # Docker compose stack for runtime + Postgres
 ```
 
 See [src/internalUsages/README.md](src/internalUsages/README.md) for detailed architecture and comparison with the Sekiban reference implementation.
@@ -52,6 +56,29 @@ dotnet run --project src/internalUsages/cs/SekibanWasm.Cs.AppHost
 # 2. Start the Aspire-orchestrated system
 dotnet run --project src/internalUsages/rust/SekibanWasm.Rust.AppHost
 ```
+
+### Rust Generic Runtime Example
+
+```bash
+# 1. Build the Rust WASM module
+./build/scripts/build-rust-wasm.sh
+
+# 2. Start the generic runtime host + Rust ClientApi/Web stack
+dotnet run --project src/internalUsages/rust/SekibanWasm.Rust.GenericAppHost
+```
+
+### Generic Runtime Container
+
+```bash
+# 1. Put your Weather module here
+cp src/internalUsages/cs/modules/csharp-weather.wasm docker/sekiban-wasm-runtime/modules/weather.wasm
+
+# 2. Start runtime + postgres
+cd docker/sekiban-wasm-runtime
+docker compose up --build
+```
+
+See [docker/sekiban-wasm-runtime/README.md](docker/sekiban-wasm-runtime/README.md) for manifest details.
 
 ## Testing
 
@@ -95,6 +122,11 @@ Use `HttpSerializedDcbClient` for this mode. It calls the API service's serializ
 - `POST /api/sekiban/serialized/commit` - Commit serialized events with consistency tags
 
 Both modes implement `ISerializedDcbClient`, so application code is transport-agnostic.
+
+For higher-level application code, the repository now also provides common executor abstractions:
+
+- C#: `ISekibanWasmExecutor`, `ISekibanCommandCommitRequestBuilder`, `ISerializedQueryClient`
+- Rust: `sekiban-executor::HttpSekibanExecutor`, `SekibanExecutor`, `SekibanCommandCommitRequestBuilder`
 
 ## Submodules
 

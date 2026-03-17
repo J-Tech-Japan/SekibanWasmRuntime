@@ -1,0 +1,26 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.1.2">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsAspireHost>true</IsAspireHost>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting" />
+    <PackageReference Include="Aspire.Hosting.PostgreSQL" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\runtime\Sekiban.Dcb.WasmRuntime.Host\Sekiban.Dcb.WasmRuntime.Host.csproj" />
+    <ProjectReference Include="..\SekibanWasm.Cs.ClientApi\SekibanWasm.Cs.ClientApi.csproj" />
+    <ProjectReference Include="..\SekibanWasm.Cs.Web\SekibanWasm.Cs.Web.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\AppHostShared\AppHostInfrastructure.cs" Link="AppHostInfrastructure.cs" />
+  </ItemGroup>
+
+</Project>

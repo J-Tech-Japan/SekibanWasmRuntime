@@ -3,7 +3,6 @@ using System.Net.Http.Json;
 using SekibanWasm.Cs.ClientApi;
 using SekibanWasm.Cs.Domain;
 using SekibanWasm.Cs.Domain.Weather;
-using System.Text.Json.Nodes;
 using Sekiban.Dcb.WasmRuntime;
 using Sekiban.Dcb.WasmRuntime.Remote;
 
@@ -23,13 +22,28 @@ builder.Services.AddHttpClient("wasmserver", client =>
     client.BaseAddress = new Uri(wasmServerBaseUrl);
 });
 builder.Services.AddHttpClient("serialized-dcb");
+builder.Services.AddHttpClient("serialized-query");
 builder.Services.AddScoped<ISerializedDcbClient>(sp =>
     new HttpSerializedDcbClient(
         sp.GetRequiredService<IHttpClientFactory>().CreateClient("serialized-dcb"),
         new SerializedDcbClientOptions { BaseUrl = wasmServerBaseUrl },
         sp.GetRequiredService<TransportSerializerOptions>().Value));
+builder.Services.AddScoped<ISerializedQueryClient>(sp =>
+    new HttpSerializedQueryClient(
+        sp.GetRequiredService<IHttpClientFactory>().CreateClient("serialized-query"),
+        new SerializedDcbClientOptions { BaseUrl = wasmServerBaseUrl },
+        sp.GetRequiredService<TransportSerializerOptions>().Value,
+        sp.GetRequiredService<DomainSerializerOptions>().Value));
 builder.Services.AddScoped<IWeatherQueryClient, WeatherQueryClient>();
 builder.Services.AddScoped<ClientApiCommandFlow>();
+builder.Services.AddScoped<ISekibanCommandCommitRequestBuilder>(sp =>
+    sp.GetRequiredService<ClientApiCommandFlow>());
+builder.Services.AddScoped<ISekibanWasmExecutor>(sp =>
+    new SekibanWasmExecutor(
+        sp.GetRequiredService<ISerializedDcbClient>(),
+        sp.GetRequiredService<ISerializedQueryClient>(),
+        sp.GetRequiredService<ISekibanCommandCommitRequestBuilder>(),
+        sp.GetRequiredService<DomainSerializerOptions>().Value));
 
 builder.Services.AddOpenApi();
 
@@ -45,55 +59,23 @@ app.MapGet("/api/weatherforecast", async Task<IResult> (
     int? pageSize,
     CancellationToken ct) =>
 {
-    var client = http.RequestServices.GetRequiredService<IHttpClientFactory>().CreateClient("wasmserver");
-    var jsonOptions = http.RequestServices.GetRequiredService<DomainSerializerOptions>().Value;
-    var transportJsonOptions = http.RequestServices.GetRequiredService<TransportSerializerOptions>().Value;
-    try
-    {
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeout.CancelAfter(TimeSpan.FromSeconds(2));
-        var listQuery = new GetWeatherForecastListQuery
+    var executor = http.RequestServices.GetRequiredService<ISekibanWasmExecutor>();
+    var result = await executor.ExecuteListQueryAsync<List<WeatherForecastItem>>(
+        nameof(GetWeatherForecastListQuery),
+        new GetWeatherForecastListQuery
         {
             PageNumber = pageNumber,
             PageSize = pageSize
-        };
-        var request = new SerializedQueryRequest(
-            QueryType: nameof(GetWeatherForecastListQuery),
-            QueryParamsJson: JsonSerializer.Serialize(listQuery, listQuery.GetType(), jsonOptions),
-            WaitForSortableUniqueId: waitForSortableId);
-        var response = await client.PostAsJsonAsync(
-            "/api/sekiban/serialized/list-query",
-            request,
-            transportJsonOptions,
-            timeout.Token);
-        if (!response.IsSuccessStatusCode)
-        {
-            var body = await response.Content.ReadAsStringAsync(timeout.Token);
-            return Results.Json(new { error = body }, statusCode: (int)response.StatusCode);
-        }
+        },
+        waitForSortableId,
+        ct);
 
-        var result = await response.Content.ReadFromJsonAsync<SerializedListQueryResponse>(
-            transportJsonOptions,
-            timeout.Token);
-        if (result is null)
-        {
-            return Results.BadRequest(new { error = "Failed to parse serialized list-query response." });
-        }
+    if (!result.IsSuccess)
+    {
+        return Results.BadRequest(new { error = result.GetException().Message });
+    }
 
-        return Results.Content(result.ItemsJson, "application/json", statusCode: 200);
-    }
-    catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-    {
-        return Results.StatusCode(StatusCodes.Status504GatewayTimeout);
-    }
-    catch (HttpRequestException ex)
-    {
-        return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status502BadGateway);
-    }
-    catch (Exception ex)
-    {
-        return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status500InternalServerError);
-    }
+    return Results.Ok(result.GetValue());
 });
 
 app.MapPost("/api/weatherforecast", async (
@@ -101,8 +83,7 @@ app.MapPost("/api/weatherforecast", async (
     CreateWeatherForecast command,
     CancellationToken ct) =>
 {
-    var flow = http.RequestServices.GetRequiredService<ClientApiCommandFlow>();
-    return await flow.ExecuteAndCommit("CreateWeatherForecast", command, ct);
+    return await ExecuteCommandAsync(http, "CreateWeatherForecast", command, ct);
 });
 
 app.MapPost("/api/weatherforecast/delete", async (
@@ -111,8 +92,7 @@ app.MapPost("/api/weatherforecast/delete", async (
     CancellationToken ct) =>
 {
     var command = new DeleteWeatherForecast(request.ForecastId);
-    var flow = http.RequestServices.GetRequiredService<ClientApiCommandFlow>();
-    return await flow.ExecuteAndCommit("DeleteWeatherForecast", command, ct);
+    return await ExecuteCommandAsync(http, "DeleteWeatherForecast", command, ct);
 });
 
 app.MapPost("/api/weatherforecast/update-location", async (
@@ -121,11 +101,26 @@ app.MapPost("/api/weatherforecast/update-location", async (
     CancellationToken ct) =>
 {
     var command = new UpdateWeatherForecastLocation(request.ForecastId, request.NewLocation);
-    var flow = http.RequestServices.GetRequiredService<ClientApiCommandFlow>();
-    return await flow.ExecuteAndCommit("UpdateWeatherForecastLocation", command, ct);
+    return await ExecuteCommandAsync(http, "UpdateWeatherForecastLocation", command, ct);
 });
 
 app.Run();
+
+static async Task<IResult> ExecuteCommandAsync(
+    HttpContext http,
+    string commandName,
+    object command,
+    CancellationToken ct)
+{
+    var executor = http.RequestServices.GetRequiredService<ISekibanWasmExecutor>();
+    var result = await executor.ExecuteCommandAsync(commandName, command, ct);
+    if (!result.IsSuccess)
+    {
+        return Results.BadRequest(new { error = result.GetException().Message });
+    }
+
+    return Results.Ok(result.GetValue());
+}
 
 static string ResolveWasmServerBase(IConfiguration configuration)
 {
@@ -149,16 +144,5 @@ static string ResolveWasmServerBase(IConfiguration configuration)
 
     return "http://127.0.0.1:3000";
 }
-
 public record DeleteWeatherForecastRequest(string ForecastId);
 public record UpdateLocationRequest(string ForecastId, string NewLocation);
-public record SerializedQueryRequest(
-    string QueryType,
-    string QueryParamsJson,
-    string? WaitForSortableUniqueId = null);
-public record SerializedListQueryResponse(
-    string ItemsJson,
-    int? TotalCount,
-    int? TotalPages,
-    int? CurrentPage,
-    int? PageSize);

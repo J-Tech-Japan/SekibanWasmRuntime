@@ -1,5 +1,6 @@
-use std::{collections::HashSet, env, net::SocketAddr, time::Duration};
+use std::{env, net::SocketAddr, sync::Arc};
 
+use anyhow::Result;
 use async_trait::async_trait;
 use axum::{
     extract::{Query as AxumQuery, State},
@@ -8,9 +9,11 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use base64::{engine::general_purpose::STANDARD, Engine as _};
-use reqwest::Client;
 use sekiban_core::prelude::*;
+use sekiban_executor::{
+    build_commit_request_from_output, ExecuteCommandError, HttpCommandContext, HttpSekibanExecutor,
+    SekibanCommandCommitRequestBuilder, StaticTagProjectorResolver,
+};
 use sekiban_wasm_domain::{
     CountResult, CreateWeatherForecast, DeleteWeatherForecast, GetWeatherForecastCountQuery,
     GetWeatherForecastListQuery, UpdateWeatherForecastLocation, WeatherForecastItem,
@@ -18,20 +21,16 @@ use sekiban_wasm_domain::{
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{json, Value};
 
-const WEATHER_PROJECTOR_NAME: &str = "WeatherForecastProjector";
-
 #[derive(Clone)]
 struct AppState {
-    wasmserver_base: String,
-    client: Client,
+    executor: Arc<HttpSekibanExecutor<WeatherCommandCommitRequestBuilder>>,
 }
 
-struct HttpCommandContext {
-    state: AppState,
-}
+#[derive(Clone, Copy, Default)]
+struct WeatherCommandCommitRequestBuilder;
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<()> {
     init_tracing();
 
     let port = env::var("PORT")
@@ -41,6 +40,12 @@ async fn main() -> anyhow::Result<()> {
 
     let wasmserver_base = resolve_wasmserver_base();
     tracing::info!(%wasmserver_base, "resolved wasmserver base");
+
+    let executor = Arc::new(HttpSekibanExecutor::new(
+        wasmserver_base,
+        WeatherCommandCommitRequestBuilder,
+        StaticTagProjectorResolver::new().with_tag_group("weather", "WeatherForecastProjector"),
+    ));
 
     let app = Router::new()
         .route("/health", get(health))
@@ -54,10 +59,7 @@ async fn main() -> anyhow::Result<()> {
             "/api/weatherforecast/update-location",
             post(update_location),
         )
-        .with_state(AppState {
-            wasmserver_base,
-            client: Client::new(),
-        });
+        .with_state(AppState { executor });
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     tracing::info!(%addr, "Rust ClientApi listening");
@@ -65,6 +67,32 @@ async fn main() -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
     Ok(())
+}
+
+#[async_trait]
+impl SekibanCommandCommitRequestBuilder for WeatherCommandCommitRequestBuilder {
+    async fn build_commit_request(
+        &self,
+        context: &HttpCommandContext,
+        command_name: &str,
+        command_payload: &Value,
+    ) -> Result<Option<sekiban_executor::CommitRequest>, CommandError> {
+        match command_name {
+            CreateWeatherForecast::COMMAND_TYPE => {
+                build_commit_request::<CreateWeatherForecast>(context, command_payload).await
+            }
+            UpdateWeatherForecastLocation::COMMAND_TYPE => {
+                build_commit_request::<UpdateWeatherForecastLocation>(context, command_payload)
+                    .await
+            }
+            DeleteWeatherForecast::COMMAND_TYPE => {
+                build_commit_request::<DeleteWeatherForecast>(context, command_payload).await
+            }
+            _ => Err(CommandError::Validation(format!(
+                "unsupported command: {command_name}"
+            ))),
+        }
+    }
 }
 
 async fn health() -> impl IntoResponse {
@@ -89,7 +117,11 @@ async fn get_forecasts(
         wait_for_sortable_unique_id: query.wait_for_sortable_id,
     };
 
-    match execute_list_query::<_, Vec<WeatherForecastItem>>(&state, &list_query).await {
+    match state
+        .executor
+        .execute_list_query::<_, Vec<WeatherForecastItem>>(&list_query)
+        .await
+    {
         Ok(items) => (StatusCode::OK, Json(items)).into_response(),
         Err(err) => {
             tracing::warn!(error = %err, "list query failed");
@@ -111,7 +143,11 @@ async fn get_forecast_count(
         wait_for_sortable_unique_id: query.wait_for_sortable_id,
     };
 
-    match execute_query::<_, CountResult>(&state, &count_query).await {
+    match state
+        .executor
+        .execute_query::<_, CountResult>(&count_query)
+        .await
+    {
         Ok(result) => (StatusCode::OK, Json(result)).into_response(),
         Err(err) => {
             tracing::warn!(error = %err, "count query failed");
@@ -129,7 +165,7 @@ async fn create_forecast(
     Json(command): Json<CreateWeatherForecast>,
 ) -> impl IntoResponse {
     let forecast_id = command.forecast_id.map(|id| id.to_string());
-    execute_and_commit(&state, &command, forecast_id).await
+    execute_command(&state, forecast_id, &command).await
 }
 
 #[derive(Deserialize)]
@@ -147,7 +183,7 @@ async fn delete_forecast(
         Err(response) => return response,
     };
     let command = DeleteWeatherForecast { forecast_id };
-    execute_and_commit(&state, &command, Some(body.forecast_id)).await
+    execute_command(&state, Some(body.forecast_id), &command).await
 }
 
 #[derive(Deserialize)]
@@ -169,68 +205,71 @@ async fn update_location(
         forecast_id,
         new_location: body.new_location,
     };
-    execute_and_commit(&state, &command, Some(body.forecast_id)).await
+    execute_command(&state, Some(body.forecast_id), &command).await
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct TagStateRequest {
-    tag_state_id: String,
+async fn execute_command<T>(
+    state: &AppState,
+    forecast_id: Option<String>,
+    command: &T,
+) -> axum::response::Response
+where
+    T: CommandMeta + Serialize + Send + Sync,
+{
+    match state.executor.execute_command(command).await {
+        Ok(result) => {
+            let status = StatusCode::from_u16(result.status_code)
+                .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+            (
+                status,
+                Json(CommandResponse {
+                    success: result.success,
+                    error: (!result.success).then(|| result.response_body.to_string()),
+                    sortable_unique_id: result.sortable_unique_id,
+                    forecast_id,
+                }),
+            )
+                .into_response()
+        }
+        Err(ExecuteCommandError::Build(err)) => (
+            StatusCode::BAD_REQUEST,
+            Json(CommandResponse {
+                success: false,
+                error: Some(err.to_string()),
+                sortable_unique_id: None,
+                forecast_id,
+            }),
+        )
+            .into_response(),
+        Err(ExecuteCommandError::Transport(err)) => (
+            StatusCode::BAD_GATEWAY,
+            Json(CommandResponse {
+                success: false,
+                error: Some(err.to_string()),
+                sortable_unique_id: None,
+                forecast_id,
+            }),
+        )
+            .into_response(),
+    }
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct SerializableTagStateResponse {
-    payload: String,
-    version: i32,
-    last_sorted_unique_id: String,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct SerializedQueryRequest {
-    query_type: String,
-    query_params_json: String,
-    wait_for_sortable_unique_id: Option<String>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct SerializedQueryResponse {
-    result_json: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[allow(dead_code)]
-struct SerializedListQueryResponse {
-    items_json: String,
-    total_count: Option<i32>,
-    total_pages: Option<i32>,
-    current_page: Option<i32>,
-    page_size: Option<i32>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct CommitRequest {
-    event_candidates: Vec<CommitEventCandidate>,
-    consistency_tags: Vec<ConsistencyTag>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct CommitEventCandidate {
-    payload: String,
-    event_payload_name: String,
-    tags: Vec<String>,
-}
-
-#[derive(Clone, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct ConsistencyTag {
-    tag: String,
-    last_sortable_unique_id: String,
+async fn build_commit_request<T>(
+    context: &HttpCommandContext,
+    payload: &Value,
+) -> Result<Option<sekiban_executor::CommitRequest>, CommandError>
+where
+    T: CommandHandler + DeserializeOwned,
+{
+    let command: T = serde_json::from_value(payload.clone())
+        .map_err(|err| CommandError::Serialization(err.to_string()))?;
+    let output = command.handle(context).await?;
+    match output {
+        Some(output) => build_commit_request_from_output(context, output)
+            .await
+            .map(Some),
+        None => Ok(None),
+    }
 }
 
 #[derive(Serialize)]
@@ -240,269 +279,6 @@ struct CommandResponse {
     error: Option<String>,
     sortable_unique_id: Option<String>,
     forecast_id: Option<String>,
-}
-
-impl HttpCommandContext {
-    fn new(state: AppState) -> Self {
-        Self { state }
-    }
-
-    async fn get_tag_state(&self, tag: &str) -> Result<SerializableTagStateResponse, CommandError> {
-        let (tag_group, tag_id) = parse_tag(tag)
-            .ok_or_else(|| CommandError::Validation(format!("invalid tag format: {tag}")))?;
-        let request = TagStateRequest {
-            tag_state_id: format!("{tag_group}:{tag_id}:{WEATHER_PROJECTOR_NAME}"),
-        };
-        let url = format!(
-            "{}/api/sekiban/serialized/tag-state",
-            self.state.wasmserver_base
-        );
-        let response = post_with_retry(&self.state.client, &url, &request)
-            .await
-            .map_err(|err| CommandError::Validation(format!("tag-state request failed: {err}")))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|err| format!("<failed to read error body: {err}>"));
-            return Err(CommandError::Validation(format!(
-                "tag-state request failed with status {}: {}",
-                status, body
-            )));
-        }
-
-        response
-            .json::<SerializableTagStateResponse>()
-            .await
-            .map_err(|err| {
-                CommandError::Serialization(format!("invalid tag-state response: {err}"))
-            })
-    }
-}
-
-#[async_trait]
-impl CommandContext for HttpCommandContext {
-    async fn get_state<S: StatePayload, T: Tag>(&self, tag: &T) -> Result<(S, i32), CommandError> {
-        let response = self.get_tag_state(&tag.to_tag_string()).await?;
-        if response.payload.is_empty() {
-            return Ok((S::default(), response.version));
-        }
-
-        let bytes = STANDARD
-            .decode(response.payload)
-            .map_err(|err| CommandError::Serialization(format!("invalid state payload: {err}")))?;
-        if bytes.is_empty() {
-            return Ok((S::default(), response.version));
-        }
-
-        let state = serde_json::from_slice::<S>(&bytes)
-            .map_err(|err| CommandError::Serialization(format!("invalid state json: {err}")))?;
-        Ok((state, response.version))
-    }
-
-    async fn tag_exists<T: Tag>(&self, tag: &T) -> Result<bool, CommandError> {
-        let response = self.get_tag_state(&tag.to_tag_string()).await?;
-        Ok(!response.payload.is_empty())
-    }
-}
-
-async fn execute_and_commit<T>(
-    state: &AppState,
-    command: &T,
-    forecast_id: Option<String>,
-) -> axum::response::Response
-where
-    T: CommandHandler + Serialize + Sync,
-{
-    let context = HttpCommandContext::new(state.clone());
-    let output = match command.handle(&context).await {
-        Ok(Some(output)) => output,
-        Ok(None) => {
-            return (
-                StatusCode::OK,
-                Json(CommandResponse {
-                    success: true,
-                    error: None,
-                    sortable_unique_id: None,
-                    forecast_id,
-                }),
-            )
-                .into_response();
-        }
-        Err(err) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(CommandResponse {
-                    success: false,
-                    error: Some(err.to_string()),
-                    sortable_unique_id: None,
-                    forecast_id,
-                }),
-            )
-                .into_response();
-        }
-    };
-
-    let commit_req = match build_commit_request(&context, output).await {
-        Ok(req) => req,
-        Err(err) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(CommandResponse {
-                    success: false,
-                    error: Some(err.to_string()),
-                    sortable_unique_id: None,
-                    forecast_id,
-                }),
-            )
-                .into_response();
-        }
-    };
-
-    let commit_url = format!("{}/api/sekiban/serialized/commit", state.wasmserver_base);
-    let commit_resp = match post_with_retry(&state.client, &commit_url, &commit_req).await {
-        Ok(resp) => resp,
-        Err(err) => {
-            tracing::error!(error = %err, "commit request failed");
-            return (
-                StatusCode::BAD_GATEWAY,
-                Json(CommandResponse {
-                    success: false,
-                    error: Some(format!("commit request failed: {err}")),
-                    sortable_unique_id: None,
-                    forecast_id,
-                }),
-            )
-                .into_response();
-        }
-    };
-
-    let status = commit_resp.status();
-    let body: Value = commit_resp
-        .json()
-        .await
-        .unwrap_or(json!({ "error": "failed to read commit response" }));
-    let sortable_unique_id = extract_sortable_unique_id(&body);
-
-    (
-        StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
-        Json(CommandResponse {
-            success: status.is_success(),
-            error: (!status.is_success()).then(|| body.to_string()),
-            sortable_unique_id,
-            forecast_id,
-        }),
-    )
-        .into_response()
-}
-
-async fn build_commit_request(
-    context: &HttpCommandContext,
-    output: CommandOutput,
-) -> Result<CommitRequest, CommandError> {
-    let event_candidates = output
-        .events
-        .into_iter()
-        .map(|event| CommitEventCandidate {
-            payload: STANDARD.encode(event.payload.as_bytes()),
-            event_payload_name: event.event_type,
-            tags: output.tags.clone(),
-        })
-        .collect();
-
-    let mut seen = HashSet::new();
-    let mut consistency_tags = Vec::new();
-    for tag in output.consistency_tags {
-        if !seen.insert(tag.clone()) {
-            continue;
-        }
-        let state = context.get_tag_state(&tag).await?;
-        consistency_tags.push(ConsistencyTag {
-            tag,
-            last_sortable_unique_id: state.last_sorted_unique_id,
-        });
-    }
-
-    Ok(CommitRequest {
-        event_candidates,
-        consistency_tags,
-    })
-}
-
-async fn execute_query<Q, R>(state: &AppState, query: &Q) -> anyhow::Result<R>
-where
-    Q: sekiban_core::query::Query + Serialize,
-    R: DeserializeOwned,
-{
-    let request = SerializedQueryRequest {
-        query_type: Q::QUERY_TYPE.to_string(),
-        query_params_json: serde_json::to_string(query)?,
-        wait_for_sortable_unique_id: query.wait_for_sortable_id().map(ToOwned::to_owned),
-    };
-    let url = format!("{}/api/sekiban/serialized/query", state.wasmserver_base);
-    let response = post_with_retry(&state.client, &url, &request).await?;
-    let response = response.error_for_status()?;
-    let body: SerializedQueryResponse = response.json().await?;
-    Ok(serde_json::from_str(&body.result_json)?)
-}
-
-async fn execute_list_query<Q, R>(state: &AppState, query: &Q) -> anyhow::Result<R>
-where
-    Q: sekiban_core::query::ListQuery + Serialize,
-    R: DeserializeOwned,
-{
-    let request = SerializedQueryRequest {
-        query_type: Q::QUERY_TYPE.to_string(),
-        query_params_json: serde_json::to_string(query)?,
-        wait_for_sortable_unique_id: query.wait_for_sortable_id().map(ToOwned::to_owned),
-    };
-    let url = format!(
-        "{}/api/sekiban/serialized/list-query",
-        state.wasmserver_base
-    );
-    let response = post_with_retry(&state.client, &url, &request).await?;
-    let response = response.error_for_status()?;
-    let body: SerializedListQueryResponse = response.json().await?;
-    Ok(serde_json::from_str(&body.items_json)?)
-}
-
-fn extract_sortable_unique_id(body: &Value) -> Option<String> {
-    body.get("sortableUniqueId")
-        .and_then(Value::as_str)
-        .map(ToOwned::to_owned)
-        .or_else(|| {
-            body.get("writtenEvents")
-                .and_then(Value::as_array)
-                .and_then(|events| events.first())
-                .and_then(|event| event.get("sortableUniqueIdValue"))
-                .and_then(Value::as_str)
-                .map(ToOwned::to_owned)
-        })
-}
-
-async fn post_with_retry<T: Serialize>(
-    client: &Client,
-    url: &str,
-    body: &T,
-) -> Result<reqwest::Response, reqwest::Error> {
-    let max_attempts = 5;
-    let mut last_err: Option<reqwest::Error> = None;
-
-    for attempt in 1..=max_attempts {
-        match client.post(url).json(body).send().await {
-            Ok(resp) => return Ok(resp),
-            Err(err) => {
-                last_err = Some(err);
-                if attempt < max_attempts {
-                    tokio::time::sleep(Duration::from_millis(250)).await;
-                }
-            }
-        }
-    }
-
-    Err(last_err.expect("retry loop should capture at least one error"))
 }
 
 fn resolve_wasmserver_base() -> String {

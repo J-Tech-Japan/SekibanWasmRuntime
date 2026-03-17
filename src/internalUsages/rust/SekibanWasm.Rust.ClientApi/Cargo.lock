@@ -987,6 +987,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "sekiban-executor"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "base64",
+ "reqwest",
+ "sekiban-core",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "sekiban-wasm-domain"
 version = "0.1.0"
 dependencies = [
@@ -1006,9 +1021,8 @@ dependencies = [
  "anyhow",
  "async-trait",
  "axum",
- "base64",
- "reqwest",
  "sekiban-core",
+ "sekiban-executor",
  "sekiban-wasm-domain",
  "serde",
  "serde_json",

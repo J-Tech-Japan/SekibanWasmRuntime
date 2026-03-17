@@ -83,6 +83,7 @@ builder.Services.AddTransient<SerializedCommandEndpoints>();
 builder.Services.AddTransient<ISerializedCommandExecutor>(sp =>
     sp.GetRequiredService<SerializedCommandEndpoints>());
 builder.Services.AddTransient<ISerializedDcbClient, InProcSerializedDcbClient>();
+builder.Services.AddTransient<ISekibanCommandCommitRequestBuilder, WeatherSerializedCommandCommitRequestBuilder>();
 
 var wasmModulePath = builder.Configuration["Wasm:DefaultModulePath"]
     ?? throw new InvalidOperationException(

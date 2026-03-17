@@ -31,6 +31,13 @@ public sealed class WasmtimeModuleCache
 
     private string GetOrExtractCoreModule(string componentPath)
     {
+        if (!WasmBinaryFormatDetector.IsComponentFile(componentPath))
+        {
+            return componentPath;
+        }
+
+        WasmtimePreview2ShimResolver.EnsureAvailable();
+
         return _extractedCorePaths.GetOrAdd(componentPath, path =>
         {
             var hash = ComputeFileHash(path);
@@ -44,15 +51,24 @@ public sealed class WasmtimeModuleCache
             try
             {
                 ComponentCoreExtractor.ExtractMainModule(path, coreModulePath);
+                if (!WasmBinaryFormatDetector.IsCoreModuleFile(coreModulePath))
+                {
+                    throw new InvalidOperationException(
+                        $"Extracted core module '{coreModulePath}' is not a valid WebAssembly core module.");
+                }
                 return coreModulePath;
             }
-            catch
+            catch (Exception ex)
             {
                 if (File.Exists(coreModulePath))
                 {
                     try { File.Delete(coreModulePath); } catch { }
                 }
-                return path;
+
+                throw new InvalidOperationException(
+                    $"Failed to extract a core WebAssembly module from component '{path}'. " +
+                    "Ensure the Wasmtime preview2 shim is available, or set WASMTIME_PREVIEW2_SHIM_PATH to the built native library.",
+                    ex);
             }
         });
     }
