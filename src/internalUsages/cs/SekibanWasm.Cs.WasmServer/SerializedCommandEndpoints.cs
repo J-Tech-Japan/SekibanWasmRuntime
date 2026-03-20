@@ -121,7 +121,7 @@ public class SerializedCommandEndpoints : ISerializedCommandExecutor
             ConsistencyTags: consistencyTags,
             CommandResultJson: commandResultJson,
             FirstEventId: executionResult.EventId,
-            LastSortableUniqueId: executionResult.SortableUniqueId);
+            LastSortableUniqueId: sortableUniqueId);
 
         return ResultBox<SerializedCommandExecuteResponse>.FromValue(response);
     }

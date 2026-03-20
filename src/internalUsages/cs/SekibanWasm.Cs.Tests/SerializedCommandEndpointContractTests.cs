@@ -161,6 +161,8 @@ public class SerializedCommandEndpointContractTests
         Assert.Empty(response.EventCandidates);
         Assert.Empty(response.ConsistencyTags);
         Assert.Null(response.CommandResultJson);
+        Assert.Null(response.FirstEventId);
+        Assert.Null(response.LastSortableUniqueId);
     }
 
     [Fact]
