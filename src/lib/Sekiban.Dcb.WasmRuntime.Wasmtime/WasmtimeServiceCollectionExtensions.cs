@@ -16,7 +16,6 @@ public static class WasmtimeServiceCollectionExtensions
         services.AddSingleton<WasmtimeRuntime>();
         services.AddSingleton<WasmtimeModuleCache>();
         services.AddSingleton<IPrimitiveProjectionHost, WasmtimePrimitiveProjectionHost>();
-        services.AddHostedService<WasmtimeProjectionWarmupService>();
 
         return services;
     }

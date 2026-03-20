@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using Sekiban.Dcb.Commands;
+using Sekiban.Dcb.Events;
 using Sekiban.Dcb.WasmRuntime;
 using Xunit;
 
@@ -237,6 +238,31 @@ public class SerializedCommandEndpointContractTests
         Assert.NotNull(registry.GetCommandType("CreateWeatherForecast"));
         Assert.NotNull(registry.GetCommandType("DeleteWeatherForecast"));
         Assert.NotNull(registry.GetCommandType("UpdateWeatherForecastLocation"));
+    }
+
+    [Fact]
+    public void CommandTypeRegistry_FromAssemblies_ShouldCloseSingleCandidateGenericCommands()
+    {
+        // Given / When
+        var registry = SerializedCommandTypeRegistry.FromAssemblies(typeof(GenericCommandWithSingleConstraint<>).Assembly);
+
+        // Then
+        Assert.Equal(
+            typeof(GenericCommandWithSingleConstraint<TestModuleFactory>),
+            registry.GetCommandType("GenericCommandWithSingleConstraint`1"));
+    }
+
+    private interface ITestModuleFactory;
+
+    private sealed class TestModuleFactory : ITestModuleFactory;
+
+    private sealed record GenericCommandWithSingleConstraint<TModuleFactory>()
+        : ICommandWithHandler<GenericCommandWithSingleConstraint<TModuleFactory>>
+        where TModuleFactory : ITestModuleFactory
+    {
+        public static Task<EventOrNone> HandleAsync(
+            GenericCommandWithSingleConstraint<TModuleFactory> command,
+            ICommandContext context) => Task.FromResult(EventOrNone.Empty);
     }
 
 }

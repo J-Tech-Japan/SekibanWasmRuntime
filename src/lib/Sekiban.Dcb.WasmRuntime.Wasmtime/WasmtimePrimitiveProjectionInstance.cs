@@ -6,9 +6,11 @@ namespace Sekiban.Dcb.WasmRuntime.Wasmtime;
 
 public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
 {
+    private readonly object _syncRoot;
     private readonly Store _store;
     private readonly Instance _instance;
     private readonly Memory _memory;
+    private bool _disposed;
 
     private readonly Func<int, int, int>? _createInstance;
     private readonly Action<int, int, int, int, int>? _applyEvent;
@@ -20,39 +22,43 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
     private readonly Action<int, int>? _free;
     private readonly int _instanceId = -1;
 
-    public WasmtimePrimitiveProjectionInstance(Store store, Instance instance, string projectorType)
+    public WasmtimePrimitiveProjectionInstance(Store store, Instance instance, string projectorType, object syncRoot)
     {
+        _syncRoot = syncRoot;
         _store = store;
         _instance = instance;
         _memory = instance.GetMemory("memory")
             ?? throw new InvalidOperationException("WASM module does not export memory");
 
-        var initialize = instance.GetAction("_initialize");
-        initialize?.Invoke();
-
-        _createInstance = instance.GetFunction<int, int, int>("create_instance");
-        _applyEvent = instance.GetAction<int, int, int, int, int>("apply_event");
-        _executeQuery = instance.GetFunction<int, int, int, int, int, long>("execute_query");
-        _executeListQuery = instance.GetFunction<int, int, int, int, int, long>("execute_list_query");
-        _serializeState = instance.GetFunction<int, long>("serialize_state");
-        _restoreState = instance.GetAction<int, int, int>("restore_state");
-
-        _alloc = instance.GetFunction<int, int>("alloc");
-        _free = instance.GetAction<int, int>("dealloc") ?? instance.GetAction<int, int>("free");
-
-        if (_createInstance == null)
+        lock (_syncRoot)
         {
-            throw new InvalidOperationException("WASM module does not export create_instance.");
-        }
+            var initialize = instance.GetAction("_initialize");
+            initialize?.Invoke();
 
-        var (ptr, len) = WriteString(projectorType);
-        var instanceId = _createInstance(ptr, len);
-        Free(ptr, len);
-        if (instanceId < 0)
-        {
-            throw new InvalidOperationException($"create_instance failed with code {instanceId}");
+            _createInstance = instance.GetFunction<int, int, int>("create_instance");
+            _applyEvent = instance.GetAction<int, int, int, int, int>("apply_event");
+            _executeQuery = instance.GetFunction<int, int, int, int, int, long>("execute_query");
+            _executeListQuery = instance.GetFunction<int, int, int, int, int, long>("execute_list_query");
+            _serializeState = instance.GetFunction<int, long>("serialize_state");
+            _restoreState = instance.GetAction<int, int, int>("restore_state");
+
+            _alloc = instance.GetFunction<int, int>("alloc");
+            _free = instance.GetAction<int, int>("dealloc") ?? instance.GetAction<int, int>("free");
+
+            if (_createInstance == null)
+            {
+                throw new InvalidOperationException("WASM module does not export create_instance.");
+            }
+
+            var (ptr, len) = WriteString(projectorType);
+            var instanceId = _createInstance(ptr, len);
+            Free(ptr, len);
+            if (instanceId < 0)
+            {
+                throw new InvalidOperationException($"create_instance failed with code {instanceId}");
+            }
+            _instanceId = instanceId;
         }
-        _instanceId = instanceId;
     }
 
     public void ApplyEvent(
@@ -61,60 +67,80 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
         IReadOnlyList<string> tags,
         string? sortableUniqueId)
     {
-        EnsureExport(_applyEvent, nameof(_applyEvent));
-        var (eventTypePtr, eventTypeLen) = WriteString(eventType);
-        var (payloadPtr, payloadLen) = WriteString(eventPayloadJson);
+        lock (_syncRoot)
+        {
+            ThrowIfDisposed();
+            EnsureExport(_applyEvent, nameof(_applyEvent));
+            var (eventTypePtr, eventTypeLen) = WriteString(eventType);
+            var (payloadPtr, payloadLen) = WriteString(eventPayloadJson);
 
-        _applyEvent!(_instanceId, eventTypePtr, eventTypeLen, payloadPtr, payloadLen);
-        Free(eventTypePtr, eventTypeLen);
-        Free(payloadPtr, payloadLen);
+            _applyEvent!(_instanceId, eventTypePtr, eventTypeLen, payloadPtr, payloadLen);
+            Free(eventTypePtr, eventTypeLen);
+            Free(payloadPtr, payloadLen);
+        }
     }
 
     public string ExecuteQuery(string queryType, string queryParamsJson)
     {
-        EnsureExport(_executeQuery, nameof(_executeQuery));
-        var (queryTypePtr, queryTypeLen) = WriteString(queryType);
-        var (paramsPtr, paramsLen) = WriteString(queryParamsJson);
+        lock (_syncRoot)
+        {
+            ThrowIfDisposed();
+            EnsureExport(_executeQuery, nameof(_executeQuery));
+            var (queryTypePtr, queryTypeLen) = WriteString(queryType);
+            var (paramsPtr, paramsLen) = WriteString(queryParamsJson);
 
-        var packed = _executeQuery!(_instanceId, queryTypePtr, queryTypeLen, paramsPtr, paramsLen);
-        Free(queryTypePtr, queryTypeLen);
-        Free(paramsPtr, paramsLen);
+            var packed = _executeQuery!(_instanceId, queryTypePtr, queryTypeLen, paramsPtr, paramsLen);
+            Free(queryTypePtr, queryTypeLen);
+            Free(paramsPtr, paramsLen);
 
-        return ReadPackedString(packed);
+            return ReadPackedString(packed);
+        }
     }
 
     public string ExecuteListQuery(string queryType, string queryParamsJson)
     {
-        EnsureExport(_executeListQuery, nameof(_executeListQuery));
-        var (queryTypePtr, queryTypeLen) = WriteString(queryType);
-        var (paramsPtr, paramsLen) = WriteString(queryParamsJson);
+        lock (_syncRoot)
+        {
+            ThrowIfDisposed();
+            EnsureExport(_executeListQuery, nameof(_executeListQuery));
+            var (queryTypePtr, queryTypeLen) = WriteString(queryType);
+            var (paramsPtr, paramsLen) = WriteString(queryParamsJson);
 
-        var packed = _executeListQuery!(_instanceId, queryTypePtr, queryTypeLen, paramsPtr, paramsLen);
-        Free(queryTypePtr, queryTypeLen);
-        Free(paramsPtr, paramsLen);
+            var packed = _executeListQuery!(_instanceId, queryTypePtr, queryTypeLen, paramsPtr, paramsLen);
+            Free(queryTypePtr, queryTypeLen);
+            Free(paramsPtr, paramsLen);
 
-        return ReadPackedString(packed);
+            return ReadPackedString(packed);
+        }
     }
 
     public string SerializeState()
     {
-        if (_serializeState == null)
+        lock (_syncRoot)
         {
-            return "{}";
+            ThrowIfDisposed();
+            if (_serializeState == null)
+            {
+                return "{}";
+            }
+            var packed = _serializeState(_instanceId);
+            return ReadPackedString(packed);
         }
-        var packed = _serializeState(_instanceId);
-        return ReadPackedString(packed);
     }
 
     public void RestoreState(string stateJson)
     {
-        if (_restoreState == null)
+        lock (_syncRoot)
         {
-            return;
+            ThrowIfDisposed();
+            if (_restoreState == null)
+            {
+                return;
+            }
+            var (ptr, len) = WriteString(stateJson);
+            _restoreState(_instanceId, ptr, len);
+            Free(ptr, len);
         }
-        var (ptr, len) = WriteString(stateJson);
-        _restoreState(_instanceId, ptr, len);
-        Free(ptr, len);
     }
 
     private (int ptr, int len) WriteString(string value)
@@ -168,6 +194,23 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
 
     public void Dispose()
     {
-        _store.Dispose();
+        lock (_syncRoot)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            _store.Dispose();
+        }
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+        {
+            throw new ObjectDisposedException(nameof(WasmtimePrimitiveProjectionInstance));
+        }
     }
 }
