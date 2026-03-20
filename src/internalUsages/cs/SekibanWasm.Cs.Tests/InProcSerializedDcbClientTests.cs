@@ -175,7 +175,9 @@ public class InProcSerializedDcbClientTests
             {
                 new(Tag: "weather:f-1", LastSortableUniqueId: "uid-001")
             },
-            CommandResultJson: null);
+            CommandResultJson: null,
+            FirstEventId: Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            LastSortableUniqueId: "uid-001");
 
         var commandExecutor = new StubCommandExecutor
         {
@@ -237,6 +239,8 @@ public class InProcSerializedDcbClientTests
             ResponseToReturn = ResultBox.FromValue(new SerializedCommandExecuteResponse(
                 new List<SerializedCommandEventCandidate>(),
                 new List<ConsistencyTagEntry>(),
+                null,
+                null,
                 null))
         };
         var executor = new StubSerializedSekibanDcbExecutor();

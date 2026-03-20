@@ -119,7 +119,9 @@ public class SerializedCommandEndpoints : ISerializedCommandExecutor
         var response = new SerializedCommandExecuteResponse(
             EventCandidates: eventCandidates,
             ConsistencyTags: consistencyTags,
-            CommandResultJson: commandResultJson);
+            CommandResultJson: commandResultJson,
+            FirstEventId: executionResult.EventId,
+            LastSortableUniqueId: executionResult.SortableUniqueId);
 
         return ResultBox<SerializedCommandExecuteResponse>.FromValue(response);
     }

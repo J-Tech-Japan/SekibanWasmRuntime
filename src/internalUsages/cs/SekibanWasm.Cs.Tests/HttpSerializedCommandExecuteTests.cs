@@ -37,7 +37,9 @@ public class HttpSerializedCommandExecuteTests
             {
                 new(Tag: "weather:f-1", LastSortableUniqueId: "uid-001")
             },
-            CommandResultJson: null);
+            CommandResultJson: null,
+            FirstEventId: Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            LastSortableUniqueId: "uid-001");
 
         var handler = new StubHttpMessageHandler(
             HttpStatusCode.OK,
@@ -62,6 +64,8 @@ public class HttpSerializedCommandExecuteTests
         Assert.Equal(payloadBase64, response.EventCandidates[0].PayloadBase64);
         Assert.Single(response.ConsistencyTags);
         Assert.Equal("weather:f-1", response.ConsistencyTags[0].Tag);
+        Assert.Equal(Guid.Parse("11111111-1111-1111-1111-111111111111"), response.FirstEventId);
+        Assert.Equal("uid-001", response.LastSortableUniqueId);
     }
 
     [Fact]
@@ -74,6 +78,8 @@ public class HttpSerializedCommandExecuteTests
                 new SerializedCommandExecuteResponse(
                     new List<SerializedCommandEventCandidate>(),
                     new List<ConsistencyTagEntry>(),
+                    null,
+                    null,
                     null),
                 JsonOptions));
 
@@ -105,6 +111,8 @@ public class HttpSerializedCommandExecuteTests
                 new SerializedCommandExecuteResponse(
                     new List<SerializedCommandEventCandidate>(),
                     new List<ConsistencyTagEntry>(),
+                    null,
+                    null,
                     null),
                 JsonOptions));
 
@@ -189,6 +197,8 @@ public class HttpSerializedCommandExecuteTests
                 new SerializedCommandExecuteResponse(
                     new List<SerializedCommandEventCandidate>(),
                     new List<ConsistencyTagEntry>(),
+                    null,
+                    null,
                     null),
                 JsonOptions));
 
