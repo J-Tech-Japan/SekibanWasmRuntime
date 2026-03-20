@@ -5,20 +5,24 @@ namespace Sekiban.Dcb.WasmRuntime.Wasmtime;
 public sealed class WasmtimeRuntime : IDisposable
 {
     public Engine Engine { get; }
-    public Linker Linker { get; }
+    public object SyncRoot { get; } = new();
 
     public WasmtimeRuntime()
     {
-        var config = new Config().WithWasmThreads(true);
+        var config = new Config();
         Engine = new Engine(config);
-        Linker = new Linker(Engine);
-        Linker.DefineWasi();
-        Linker.DefineWasiPreview2Stubs();
+    }
+
+    public Linker CreateLinker()
+    {
+        var linker = new Linker(Engine);
+        linker.DefineWasi();
+        linker.DefineWasiPreview2Stubs();
+        return linker;
     }
 
     public void Dispose()
     {
-        Linker.Dispose();
         Engine.Dispose();
     }
 }

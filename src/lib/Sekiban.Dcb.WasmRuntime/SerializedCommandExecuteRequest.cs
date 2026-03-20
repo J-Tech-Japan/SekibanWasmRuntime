@@ -6,7 +6,10 @@ public record SerializedCommandExecuteRequest(
     string CommandName,
     string CommandJson,
     IReadOnlyList<ConsistencyTagEntry>? ConsistencyTags,
-    SerializedCommandOptions? Options);
+    SerializedCommandOptions? Options)
+{
+    public IReadOnlyDictionary<string, string>? SupplementalProperties { get; init; }
+}
 
 public record SerializedCommandOptions(
     bool DryRun,

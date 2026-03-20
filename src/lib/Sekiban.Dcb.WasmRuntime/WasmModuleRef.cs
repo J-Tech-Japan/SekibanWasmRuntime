@@ -5,4 +5,5 @@ public record WasmModuleRef(
     string ModulePath,
     string AbiKind,
     string ModuleVersion,
-    string ProjectorVersion);
+    string ProjectorVersion,
+    string? TagPayloadName = null);

@@ -73,6 +73,8 @@ public class SerializedCommandEndpointsExecuteTests
         Assert.Single(response.ConsistencyTags);
         Assert.Equal("weather:f-1", response.ConsistencyTags[0].Tag);
         Assert.Equal("uid-001", response.ConsistencyTags[0].LastSortableUniqueId);
+        Assert.Equal(executionResult.EventId, response.FirstEventId);
+        Assert.Equal("uid-001", response.LastSortableUniqueId);
 
         var decodedPayload = Encoding.UTF8.GetString(
             Convert.FromBase64String(response.EventCandidates[0].PayloadBase64));
@@ -187,6 +189,8 @@ public class SerializedCommandEndpointsExecuteTests
         Assert.Equal("weather:f-1", response.ConsistencyTags[0].Tag);
         Assert.Equal("forecast:global", response.ConsistencyTags[1].Tag);
         Assert.All(response.ConsistencyTags, ct => Assert.Equal("uid-002", ct.LastSortableUniqueId));
+        Assert.Equal(executionResult.EventId, response.FirstEventId);
+        Assert.Equal("uid-002", response.LastSortableUniqueId);
     }
 
     [Fact]
@@ -226,6 +230,8 @@ public class SerializedCommandEndpointsExecuteTests
         Assert.Equal(nameof(CreateWeatherForecast), stubBuilder.LastCommandName);
         Assert.Single(result.GetValue().EventCandidates);
         Assert.Equal("weather:f-1", result.GetValue().ConsistencyTags[0].Tag);
+        Assert.Null(result.GetValue().FirstEventId);
+        Assert.Null(result.GetValue().LastSortableUniqueId);
     }
 
     private record TestEventPayload(string ForecastId, string Location) : IEventPayload;

@@ -21,20 +21,24 @@ public sealed class WasmtimePrimitiveProjectionHost : IPrimitiveProjectionHost
 
     public IPrimitiveProjectionInstance CreateInstance(string projectorName)
     {
-        var modulePath = _options.ResolveModulePath(projectorName);
-        if (string.IsNullOrWhiteSpace(modulePath))
+        lock (_runtime.SyncRoot)
         {
-            throw new InvalidOperationException(
-                $"No WASM module path configured for projector '{projectorName}'.");
+            var modulePath = _options.ResolveModulePath(projectorName);
+            if (string.IsNullOrWhiteSpace(modulePath))
+            {
+                throw new InvalidOperationException(
+                    $"No WASM module path configured for projector '{projectorName}'.");
+            }
+
+            var module = _moduleCache.GetOrLoad(modulePath);
+            var store = new Store(_runtime.Engine);
+            store.SetWasiConfiguration(new WasiConfiguration()
+                .WithInheritedStandardOutput()
+                .WithInheritedStandardError());
+
+            using var linker = _runtime.CreateLinker();
+            var instance = linker.Instantiate(store, module);
+            return new WasmtimePrimitiveProjectionInstance(store, instance, projectorName, _runtime.SyncRoot);
         }
-
-        var module = _moduleCache.GetOrLoad(modulePath);
-        var store = new Store(_runtime.Engine);
-        store.SetWasiConfiguration(new WasiConfiguration()
-            .WithInheritedStandardOutput()
-            .WithInheritedStandardError());
-
-        var instance = _runtime.Linker.Instantiate(store, module);
-        return new WasmtimePrimitiveProjectionInstance(store, instance, projectorName);
     }
 }

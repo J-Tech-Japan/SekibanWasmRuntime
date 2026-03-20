@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using Sekiban.Dcb.Commands;
+using Sekiban.Dcb.Events;
 using Sekiban.Dcb.WasmRuntime;
 using Xunit;
 
@@ -93,7 +94,9 @@ public class SerializedCommandEndpointContractTests
                     "lastSortableUniqueId": "uid-001"
                 }
             ],
-            "commandResultJson": "{\"forecastId\":\"f-1\"}"
+            "commandResultJson": "{\"forecastId\":\"f-1\"}",
+            "firstEventId": "11111111-1111-1111-1111-111111111111",
+            "lastSortableUniqueId": "uid-001"
         }
         """;
 
@@ -110,6 +113,8 @@ public class SerializedCommandEndpointContractTests
         Assert.Single(response.ConsistencyTags);
         Assert.Equal("weather:f-1", response.ConsistencyTags[0].Tag);
         Assert.Equal("{\"forecastId\":\"f-1\"}", response.CommandResultJson);
+        Assert.Equal(Guid.Parse("11111111-1111-1111-1111-111111111111"), response.FirstEventId);
+        Assert.Equal("uid-001", response.LastSortableUniqueId);
     }
 
     [Fact]
@@ -142,7 +147,9 @@ public class SerializedCommandEndpointContractTests
         {
             "eventCandidates": [],
             "consistencyTags": [],
-            "commandResultJson": null
+            "commandResultJson": null,
+            "firstEventId": null,
+            "lastSortableUniqueId": null
         }
         """;
 
@@ -154,6 +161,8 @@ public class SerializedCommandEndpointContractTests
         Assert.Empty(response.EventCandidates);
         Assert.Empty(response.ConsistencyTags);
         Assert.Null(response.CommandResultJson);
+        Assert.Null(response.FirstEventId);
+        Assert.Null(response.LastSortableUniqueId);
     }
 
     [Fact]
@@ -173,7 +182,9 @@ public class SerializedCommandEndpointContractTests
             {
                 new(Tag: "weather:f-1", LastSortableUniqueId: "uid-001")
             },
-            CommandResultJson: null);
+            CommandResultJson: null,
+            FirstEventId: Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            LastSortableUniqueId: "uid-001");
 
         // When
         var json = JsonSerializer.Serialize(response, JsonOptions);
@@ -188,6 +199,8 @@ public class SerializedCommandEndpointContractTests
         Assert.Equal(payloadBase64,
             candidates[0].GetProperty("payloadBase64").GetString());
         Assert.True(root.TryGetProperty("consistencyTags", out _));
+        Assert.Equal("11111111-1111-1111-1111-111111111111", root.GetProperty("firstEventId").GetString());
+        Assert.Equal("uid-001", root.GetProperty("lastSortableUniqueId").GetString());
     }
 
     [Fact]
@@ -227,6 +240,31 @@ public class SerializedCommandEndpointContractTests
         Assert.NotNull(registry.GetCommandType("CreateWeatherForecast"));
         Assert.NotNull(registry.GetCommandType("DeleteWeatherForecast"));
         Assert.NotNull(registry.GetCommandType("UpdateWeatherForecastLocation"));
+    }
+
+    [Fact]
+    public void CommandTypeRegistry_FromAssemblies_ShouldCloseSingleCandidateGenericCommands()
+    {
+        // Given / When
+        var registry = SerializedCommandTypeRegistry.FromAssemblies(typeof(GenericCommandWithSingleConstraint<>).Assembly);
+
+        // Then
+        Assert.Equal(
+            typeof(GenericCommandWithSingleConstraint<TestModuleFactory>),
+            registry.GetCommandType("GenericCommandWithSingleConstraint`1"));
+    }
+
+    private interface ITestModuleFactory;
+
+    private sealed class TestModuleFactory : ITestModuleFactory;
+
+    private sealed record GenericCommandWithSingleConstraint<TModuleFactory>()
+        : ICommandWithHandler<GenericCommandWithSingleConstraint<TModuleFactory>>
+        where TModuleFactory : ITestModuleFactory
+    {
+        public static Task<EventOrNone> HandleAsync(
+            GenericCommandWithSingleConstraint<TModuleFactory> command,
+            ICommandContext context) => Task.FromResult(EventOrNone.Empty);
     }
 
 }

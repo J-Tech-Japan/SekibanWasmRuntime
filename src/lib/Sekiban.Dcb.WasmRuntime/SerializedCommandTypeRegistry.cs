@@ -42,11 +42,55 @@ public class SerializedCommandTypeRegistry
     public static SerializedCommandTypeRegistry FromAssemblies(
         params Assembly[] assemblies)
     {
-        var commandTypes = assemblies
+        var allTypes = assemblies
             .SelectMany(a => a.GetTypes())
-            .Where(IsCommandWithHandler);
+            .Distinct()
+            .ToArray();
+
+        var commandTypes = allTypes
+            .Where(IsCommandWithHandler)
+            .SelectMany(type => ExpandCommandType(type, allTypes));
 
         return new SerializedCommandTypeRegistry(commandTypes);
+    }
+
+    private static IEnumerable<Type> ExpandCommandType(Type type, IReadOnlyCollection<Type> candidateTypes)
+    {
+        if (!type.ContainsGenericParameters)
+        {
+            yield return type;
+            yield break;
+        }
+
+        if (!type.IsGenericTypeDefinition)
+        {
+            yield break;
+        }
+
+        var genericArguments = type.GetGenericArguments();
+        var resolvedArguments = new Type[genericArguments.Length];
+        for (int index = 0; index < genericArguments.Length; index++)
+        {
+            var matches = candidateTypes
+                .Where(candidate => SatisfiesConstraints(genericArguments[index], candidate))
+                .ToArray();
+
+            if (matches.Length == 0)
+            {
+                yield break;
+            }
+
+            if (matches.Length > 1)
+            {
+                throw new ArgumentException(
+                    $"Generic command type '{type.FullName}' is ambiguous for parameter '{genericArguments[index].Name}': "
+                    + string.Join(", ", matches.Select(static match => match.FullName)));
+            }
+
+            resolvedArguments[index] = matches[0];
+        }
+
+        yield return type.MakeGenericType(resolvedArguments);
     }
 
     private static bool IsCommandWithHandler(Type type)
@@ -59,5 +103,36 @@ public class SerializedCommandTypeRegistry
         return type.GetInterfaces().Any(i =>
             i.IsGenericType &&
             i.GetGenericTypeDefinition().FullName == "Sekiban.Dcb.Commands.ICommandWithHandler`1");
+    }
+
+    private static bool SatisfiesConstraints(Type genericParameter, Type candidate)
+    {
+        if (candidate.IsAbstract || candidate.IsInterface || candidate.ContainsGenericParameters)
+        {
+            return false;
+        }
+
+        GenericParameterAttributes attributes = genericParameter.GenericParameterAttributes;
+
+        if (attributes.HasFlag(GenericParameterAttributes.ReferenceTypeConstraint) && candidate.IsValueType)
+        {
+            return false;
+        }
+
+        if (attributes.HasFlag(GenericParameterAttributes.NotNullableValueTypeConstraint) &&
+            (!candidate.IsValueType || Nullable.GetUnderlyingType(candidate) is not null))
+        {
+            return false;
+        }
+
+        if (attributes.HasFlag(GenericParameterAttributes.DefaultConstructorConstraint) &&
+            candidate.GetConstructor(Type.EmptyTypes) is null)
+        {
+            return false;
+        }
+
+        return genericParameter
+            .GetGenericParameterConstraints()
+            .All(constraint => constraint.IsAssignableFrom(candidate));
     }
 }

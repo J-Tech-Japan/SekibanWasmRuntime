@@ -5,7 +5,9 @@ namespace Sekiban.Dcb.WasmRuntime;
 public record SerializedCommandExecuteResponse(
     IReadOnlyList<SerializedCommandEventCandidate> EventCandidates,
     IReadOnlyList<ConsistencyTagEntry> ConsistencyTags,
-    string? CommandResultJson);
+    string? CommandResultJson,
+    Guid? FirstEventId = null,
+    string? LastSortableUniqueId = null);
 
 public record SerializedCommandEventCandidate(
     string EventPayloadName,
