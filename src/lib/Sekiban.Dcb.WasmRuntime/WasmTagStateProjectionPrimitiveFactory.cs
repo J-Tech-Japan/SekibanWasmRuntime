@@ -52,7 +52,8 @@ public sealed class WasmTagStateProjectionPrimitiveFactory : ITagStateProjection
                 tagStateId.TagProjectorName,
                 moduleRef.ProjectorVersion,
                 _eventTypes,
-                _jsonOptions);
+                _jsonOptions,
+                moduleRef.TagPayloadName);
         }
         catch (Exception ex)
         {

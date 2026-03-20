@@ -20,6 +20,7 @@ public class WasmTagStateProjectionPrimitive : ITagStateProjectionAccumulator, I
     private readonly string _projectorVersion;
     private readonly IEventTypes _eventTypes;
     private readonly JsonSerializerOptions _jsonOptions;
+    private readonly string? _defaultTagPayloadName;
 
     private SerializableTagState? _cachedState;
     private int _version;
@@ -34,13 +35,15 @@ public class WasmTagStateProjectionPrimitive : ITagStateProjectionAccumulator, I
         string projectorName,
         string projectorVersion,
         IEventTypes eventTypes,
-        JsonSerializerOptions jsonOptions)
+        JsonSerializerOptions jsonOptions,
+        string? defaultTagPayloadName = null)
     {
         _instance = instance;
         _projectorName = projectorName;
         _projectorVersion = projectorVersion;
         _eventTypes = eventTypes;
         _jsonOptions = jsonOptions;
+        _defaultTagPayloadName = defaultTagPayloadName;
     }
 
     public int Version => _version;
@@ -141,7 +144,7 @@ public class WasmTagStateProjectionPrimitive : ITagStateProjectionAccumulator, I
         var payloadBytes = isEmptyPayload ? Array.Empty<byte>() : Encoding.UTF8.GetBytes(payloadJson);
         var payloadName = isEmptyPayload
             ? nameof(EmptyTagStatePayload)
-            : _tagPayloadName ?? string.Empty;
+            : _tagPayloadName ?? _defaultTagPayloadName ?? string.Empty;
 
         return new SerializableTagState(
             Payload: payloadBytes,
@@ -199,7 +202,7 @@ public class WasmTagStateProjectionPrimitive : ITagStateProjectionAccumulator, I
             _tagContent = string.Empty;
         }
 
-        _tagPayloadName = ev.Payload.GetType().Name;
+        _tagPayloadName = _defaultTagPayloadName ?? ev.Payload.GetType().Name;
     }
 
     public void Dispose() => _instance.Dispose();
