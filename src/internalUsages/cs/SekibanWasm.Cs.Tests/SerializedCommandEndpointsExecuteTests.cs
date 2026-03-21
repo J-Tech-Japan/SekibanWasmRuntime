@@ -7,6 +7,7 @@ using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.WasmRuntime;
+using SekibanWasm.Cs.Domain;
 using SekibanWasm.Cs.Domain.Weather;
 using Xunit;
 
@@ -50,7 +51,8 @@ public class SerializedCommandEndpointsExecuteTests
 
         var stubExecutor = new StubSekibanExecutor { ResultToReturn = executionResult };
         var registry = CreateRegistryWithWeatherCommands();
-        var endpoints = new SerializedCommandEndpoints(stubExecutor, registry, JsonOptions);
+        var eventTypes = DomainType.GetDomainTypes().EventTypes;
+        var endpoints = new SerializedCommandEndpoints(stubExecutor, eventTypes, registry, JsonOptions);
 
         var request = new SerializedCommandExecuteRequest(
             CommandName: "CreateWeatherForecast",
@@ -87,7 +89,11 @@ public class SerializedCommandEndpointsExecuteTests
         // Given
         var stubExecutor = new StubSekibanExecutor();
         var registry = CreateRegistryWithWeatherCommands();
-        var endpoints = new SerializedCommandEndpoints(stubExecutor, registry, JsonOptions);
+        var endpoints = new SerializedCommandEndpoints(
+            stubExecutor,
+            DomainType.GetDomainTypes().EventTypes,
+            registry,
+            JsonOptions);
 
         var request = new SerializedCommandExecuteRequest(
             CommandName: "NonExistentCommand",
@@ -110,7 +116,11 @@ public class SerializedCommandEndpointsExecuteTests
         // Given
         var stubExecutor = new StubSekibanExecutor();
         var registry = CreateRegistryWithWeatherCommands();
-        var endpoints = new SerializedCommandEndpoints(stubExecutor, registry, JsonOptions);
+        var endpoints = new SerializedCommandEndpoints(
+            stubExecutor,
+            DomainType.GetDomainTypes().EventTypes,
+            registry,
+            JsonOptions);
 
         var request = new SerializedCommandExecuteRequest(
             CommandName: "CreateWeatherForecast",
@@ -164,7 +174,11 @@ public class SerializedCommandEndpointsExecuteTests
 
         var stubExecutor = new StubSekibanExecutor { ResultToReturn = executionResult };
         var registry = CreateRegistryWithWeatherCommands();
-        var endpoints = new SerializedCommandEndpoints(stubExecutor, registry, JsonOptions);
+        var endpoints = new SerializedCommandEndpoints(
+            stubExecutor,
+            DomainType.GetDomainTypes().EventTypes,
+            registry,
+            JsonOptions);
 
         var request = new SerializedCommandExecuteRequest(
             CommandName: "CreateWeatherForecast",
@@ -213,6 +227,7 @@ public class SerializedCommandEndpointsExecuteTests
         var stubBuilder = new StubCommitRequestBuilder { RequestToReturn = commitRequest };
         var endpoints = new SerializedCommandEndpoints(
             stubExecutor,
+            DomainType.GetDomainTypes().EventTypes,
             CreateRegistryWithWeatherCommands(),
             JsonOptions,
             stubBuilder);
@@ -232,6 +247,51 @@ public class SerializedCommandEndpointsExecuteTests
         Assert.Equal("weather:f-1", result.GetValue().ConsistencyTags[0].Tag);
         Assert.Null(result.GetValue().FirstEventId);
         Assert.Null(result.GetValue().LastSortableUniqueId);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ShouldNotifyPersistedEventObservers_WhenCommandPersistsEvents()
+    {
+        var executionResult = new ExecutionResult(
+            EventId: Guid.NewGuid(),
+            EventPosition: 1,
+            TagWrites: [new("weather:f-1", 1, DateTimeOffset.UtcNow)],
+            Duration: TimeSpan.FromMilliseconds(10),
+            Events:
+            [
+                new Event(
+                    Payload: new TestEventPayload("f-1", "Tokyo"),
+                    SortableUniqueIdValue: "uid-003",
+                    EventType: "WeatherForecastCreated",
+                    Id: Guid.NewGuid(),
+                    EventMetadata: new EventMetadata("", "", ""),
+                    Tags: ["weather:f-1"])
+            ],
+            Metadata: null,
+            SortableUniqueId: "uid-003");
+
+        var observer = new StubPersistedEventObserver();
+        var endpoints = new SerializedCommandEndpoints(
+            new StubSekibanExecutor { ResultToReturn = executionResult },
+            DomainType.GetDomainTypes().EventTypes,
+            CreateRegistryWithWeatherCommands(),
+            JsonOptions,
+            commitRequestBuilder: null,
+            persistedEventObservers: [observer]);
+
+        var request = new SerializedCommandExecuteRequest(
+            CommandName: "CreateWeatherForecast",
+            CommandJson: JsonSerializer.Serialize(
+                new CreateWeatherForecast("f-1", "Tokyo", 22, "Warm"), JsonOptions),
+            ConsistencyTags: null,
+            Options: null);
+
+        var result = await endpoints.ExecuteAsync(request, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Single(observer.PersistedEvents);
+        Assert.Equal("WeatherForecastCreated", observer.PersistedEvents[0].EventPayloadName);
+        Assert.Equal("uid-003", observer.PersistedEvents[0].SortableUniqueIdValue);
     }
 
     private record TestEventPayload(string ForecastId, string Location) : IEventPayload;
@@ -290,5 +350,18 @@ public class SerializedCommandEndpointsExecuteTests
 
         Task<ListQueryResult<TResult>> ISekibanExecutor.QueryAsync<TResult>(IListQueryCommon<TResult> queryCommon) =>
             throw new NotSupportedException();
+    }
+
+    private sealed class StubPersistedEventObserver : IPersistedSerializableEventObserver
+    {
+        public List<SerializableEvent> PersistedEvents { get; } = [];
+
+        public Task OnPersistedAsync(
+            IReadOnlyList<SerializableEvent> events,
+            CancellationToken cancellationToken)
+        {
+            PersistedEvents.AddRange(events);
+            return Task.CompletedTask;
+        }
     }
 }

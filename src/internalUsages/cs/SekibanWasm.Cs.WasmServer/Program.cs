@@ -56,6 +56,7 @@ builder.UseOrleans(silo =>
 
 var domainTypes = DomainType.GetDomainTypes();
 builder.Services.AddSingleton(domainTypes);
+builder.Services.AddSingleton<Sekiban.Dcb.Domains.IEventTypes>(_ => domainTypes.EventTypes);
 
 builder.Services.AddSingleton<Sekiban.Dcb.ServiceId.IServiceIdProvider, Sekiban.Dcb.ServiceId.DefaultServiceIdProvider>();
 builder.Services.AddSekibanDcbPostgresWithAspire("SekibanCsDb");
