@@ -22,6 +22,12 @@ This repository expects agents to follow these rules when making changes.
 - Always run relevant tests before committing (for example `dotnet test`).
 - If the repository contains multiple ecosystems, run the targeted suite(s) for what you changed.
 
+## Aspire And Browser Tooling
+
+- This repository includes repo-local Aspire agent configuration for MCP-capable tools.
+- For Aspire work in a git worktree, prefer `aspire start --isolated` to avoid shared local state and port collisions.
+- When browser automation is needed, prefer the globally installed `playwright-cli` or the repo Playwright tests under `e2e/playwright/`.
+
 ## Hygiene
 
 - Do not commit OS/editor artifacts (for example `.DS_Store`).

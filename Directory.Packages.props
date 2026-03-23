@@ -6,25 +6,25 @@
 
   <ItemGroup>
     <!-- Aspire -->
-    <PackageVersion Include="Aspire.Azure.Data.Tables" Version="13.1.2" />
-    <PackageVersion Include="Aspire.Azure.Storage.Blobs" Version="13.1.2" />
-    <PackageVersion Include="Aspire.Azure.Storage.Queues" Version="13.1.2" />
-    <PackageVersion Include="Aspire.Hosting" Version="13.1.2" />
-    <PackageVersion Include="Aspire.Hosting.Azure.Storage" Version="13.1.2" />
-    <PackageVersion Include="Aspire.Hosting.Orleans" Version="13.1.2" />
-    <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="13.1.2" />
-    <PackageVersion Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.1.2" />
+    <PackageVersion Include="Aspire.Azure.Data.Tables" Version="13.2.0" />
+    <PackageVersion Include="Aspire.Azure.Storage.Blobs" Version="13.2.0" />
+    <PackageVersion Include="Aspire.Azure.Storage.Queues" Version="13.2.0" />
+    <PackageVersion Include="Aspire.Hosting" Version="13.2.0" />
+    <PackageVersion Include="Aspire.Hosting.Azure.Storage" Version="13.2.0" />
+    <PackageVersion Include="Aspire.Hosting.Orleans" Version="13.2.0" />
+    <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="13.2.0" />
+    <PackageVersion Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.2.0" />
 
     <!-- Microsoft ASP.NET / EF Core -->
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.3" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.5" />
 
     <!-- Microsoft Extensions -->
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.3" />
-    <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.2.0" />
+    <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.4.0" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.3" />
     <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.3" />
-    <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.2.0" />
+    <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.4.0" />
 
     <!-- Microsoft Orleans -->
     <PackageVersion Include="Microsoft.Orleans.Clustering.AzureStorage" Version="10.0.1" />
