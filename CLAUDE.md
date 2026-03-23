@@ -21,6 +21,12 @@
 - Always run the most relevant tests locally before committing.
 - If tests cannot be run (missing SDKs, timeouts, etc.), state exactly why and what you ran instead.
 
+## Aspire And Browser Tooling
+
+- This repository contains repo-local Aspire MCP and skill configuration for agent tooling.
+- In git worktrees, start Aspire with `aspire start --isolated` so concurrent worktrees do not fight over ports or shared local state.
+- For browser automation, use the globally available `playwright-cli` when interactive page control is needed, or use the Playwright suite under `e2e/playwright/`.
+
 ## Quality Bar
 
 - Keep builds and tests green.

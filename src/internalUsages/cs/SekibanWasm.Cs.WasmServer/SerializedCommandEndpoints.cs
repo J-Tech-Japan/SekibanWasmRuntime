@@ -4,6 +4,8 @@ using System.Text.Json;
 using ResultBoxes;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Commands;
+using Sekiban.Dcb.Domains;
+using Sekiban.Dcb.Events;
 using Sekiban.Dcb.WasmRuntime;
 
 public class SerializedCommandEndpoints : ISerializedCommandExecutor
@@ -20,28 +22,35 @@ public class SerializedCommandEndpoints : ISerializedCommandExecutor
                 && m.GetParameters()[1].ParameterType == typeof(CancellationToken));
 
     private readonly ISekibanExecutor _executor;
+    private readonly IEventTypes _eventTypes;
     private readonly SerializedCommandTypeRegistry _registry;
     private readonly JsonSerializerOptions _jsonOptions;
     private readonly ISekibanCommandCommitRequestBuilder? _commitRequestBuilder;
+    private readonly IReadOnlyList<IPersistedSerializableEventObserver> _persistedEventObservers;
 
     public SerializedCommandEndpoints(
         ISekibanExecutor executor,
+        IEventTypes eventTypes,
         SerializedCommandTypeRegistry registry,
         JsonSerializerOptions jsonOptions)
-        : this(executor, registry, jsonOptions, null)
+        : this(executor, eventTypes, registry, jsonOptions, null, [])
     {
     }
 
     public SerializedCommandEndpoints(
         ISekibanExecutor executor,
+        IEventTypes eventTypes,
         SerializedCommandTypeRegistry registry,
         JsonSerializerOptions jsonOptions,
-        ISekibanCommandCommitRequestBuilder? commitRequestBuilder)
+        ISekibanCommandCommitRequestBuilder? commitRequestBuilder,
+        IEnumerable<IPersistedSerializableEventObserver>? persistedEventObservers = null)
     {
         _executor = executor;
+        _eventTypes = eventTypes;
         _registry = registry;
         _jsonOptions = jsonOptions;
         _commitRequestBuilder = commitRequestBuilder;
+        _persistedEventObservers = persistedEventObservers?.ToList() ?? [];
     }
 
     public async Task<ResultBox<SerializedCommandExecuteResponse>> ExecuteAsync(
@@ -122,6 +131,17 @@ public class SerializedCommandEndpoints : ISerializedCommandExecutor
             CommandResultJson: commandResultJson,
             FirstEventId: executionResult.EventId,
             LastSortableUniqueId: sortableUniqueId);
+
+        if (_persistedEventObservers.Count > 0 && executionResult.Events.Any())
+        {
+            IReadOnlyList<SerializableEvent> persistedEvents =
+                PersistedSerializableEventFactory.FromExecutionResult(executionResult, _eventTypes);
+
+            foreach (IPersistedSerializableEventObserver observer in _persistedEventObservers)
+            {
+                await observer.OnPersistedAsync(persistedEvents, cancellationToken);
+            }
+        }
 
         return ResultBox<SerializedCommandExecuteResponse>.FromValue(response);
     }
