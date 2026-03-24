@@ -7,6 +7,11 @@ namespace Sekiban.Dcb.WasmRuntime.Wasmtime;
 
 public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
 {
+    private static readonly JsonDocumentOptions CompactPayloadJsonDocumentOptions = new()
+    {
+        MaxDepth = 256
+    };
+
     private const int BufferedPayloadChunkSize = 16 * 1024;
     private static readonly object TraceFileLock = new();
     private static readonly bool TraceLifecycle =
@@ -160,7 +165,7 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
             try
             {
                 Trace(
-                    $"apply_event:start projectorInstance={_instanceId} eventType={eventType} tagCount={tags.Count} sortableUniqueId={sortableUniqueId ?? string.Empty}");
+                    $"apply_event:start projectorInstance={_instanceId} eventType={eventType} tagCount={tags.Count} sortableUniqueId={sortableUniqueId ?? string.Empty} payloadLength={eventPayloadJson.Length} effectivePayloadLength={effectivePayloadJson.Length}");
                 if (CanUseBufferedPayloadPath(tags.Count > 0))
                 {
                     ApplyEventWithBufferedPayload(effectivePayloadJson, eventTypePtr, eventTypeLen, tags, sortableUniqueId);
@@ -261,16 +266,21 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
 
     private static string TryCompactPayload(string eventType, string eventPayloadJson)
     {
-        if (!string.Equals(eventType, "KanyushaWebServiceApplicationSubmitted", StringComparison.Ordinal) &&
-            !string.Equals(eventType, "KanyushaPaperApplicationSubmitted", StringComparison.Ordinal))
-        {
-            return eventPayloadJson;
-        }
-
         try
         {
-            using JsonDocument document = JsonDocument.Parse(eventPayloadJson);
-            return WriteCompactApplicationSubmittedPayload(document.RootElement, isWebApplication: eventType.Contains("WebService", StringComparison.Ordinal));
+            using JsonDocument document = JsonDocument.Parse(eventPayloadJson, CompactPayloadJsonDocumentOptions);
+            return eventType switch
+            {
+                "KanyushaWebServiceApplicationSubmitted" => WriteCompactApplicationSubmittedPayload(
+                    document.RootElement,
+                    isWebApplication: true),
+                "KanyushaPaperApplicationSubmitted" => WriteCompactApplicationSubmittedPayload(
+                    document.RootElement,
+                    isWebApplication: false),
+                "KeiyakuKakekinShisanCompleted" => WriteCompactKeiyakuKakekinShisanCompletedPayload(
+                    document.RootElement),
+                _ => eventPayloadJson
+            };
         }
         catch
         {
@@ -394,6 +404,42 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
         writer.WriteEndObject();
         writer.WriteEndObject();
         writer.WriteEndObject();
+    }
+
+    private static string WriteCompactKeiyakuKakekinShisanCompletedPayload(JsonElement root)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteStartObject();
+            WriteValueObject(writer, root, "keiyakuId", "value");
+            WriteValueObject(writer, root, "nendoKanyuId", "value");
+
+            if (TryGetNestedProperty(
+                    root,
+                    out JsonElement totalKakekin,
+                    "keisanResult",
+                    "kakekinLine",
+                    "TotalKakekin",
+                    "value"))
+            {
+                writer.WritePropertyName("keisanResult");
+                writer.WriteStartObject();
+                writer.WritePropertyName("kakekinLine");
+                writer.WriteStartObject();
+                writer.WritePropertyName("TotalKakekin");
+                writer.WriteStartObject();
+                writer.WritePropertyName("value");
+                totalKakekin.WriteTo(writer);
+                writer.WriteEndObject();
+                writer.WriteEndObject();
+                writer.WriteEndObject();
+            }
+
+            writer.WriteEndObject();
+        }
+
+        return Encoding.UTF8.GetString(stream.ToArray());
     }
 
     private static bool TryGetNestedProperty(
