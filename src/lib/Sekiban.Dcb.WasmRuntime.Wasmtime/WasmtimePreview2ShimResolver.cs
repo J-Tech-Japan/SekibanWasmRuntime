@@ -118,31 +118,14 @@ internal static class WasmtimePreview2ShimResolver
             }
         }
 
-        foreach (var repoRoot in FindRepositoryRoots())
+        foreach (var shimDirectory in FindShimDirectories())
         {
-            yield return Path.Combine(
-                repoRoot,
-                "external",
-                "wasmtime-dotnet",
-                "native",
-                "wasmtime-preview2-shim",
-                "target",
-                "release",
-                libraryFileName);
-
-            yield return Path.Combine(
-                repoRoot,
-                "external",
-                "wasmtime-dotnet",
-                "native",
-                "wasmtime-preview2-shim",
-                "target",
-                "debug",
-                libraryFileName);
+            yield return Path.Combine(shimDirectory, "target", "release", libraryFileName);
+            yield return Path.Combine(shimDirectory, "target", "debug", libraryFileName);
         }
     }
 
-    private static IEnumerable<string> FindRepositoryRoots()
+    private static IEnumerable<string> FindShimDirectories()
     {
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var startPath in new[]
@@ -160,18 +143,12 @@ internal static class WasmtimePreview2ShimResolver
             var current = new DirectoryInfo(Path.GetFullPath(startPath));
             while (current is not null)
             {
-                var cargoToml = Path.Combine(
-                    current.FullName,
-                    "external",
-                    "wasmtime-dotnet",
-                    "native",
-                    "wasmtime-preview2-shim",
-                    "Cargo.toml");
-
-                if (File.Exists(cargoToml) && seen.Add(current.FullName))
+                foreach (var shimDirectory in EnumerateShimDirectories(current.FullName))
                 {
-                    yield return current.FullName;
-                    break;
+                    if (seen.Add(shimDirectory))
+                    {
+                        yield return shimDirectory;
+                    }
                 }
 
                 current = current.Parent;
@@ -179,22 +156,26 @@ internal static class WasmtimePreview2ShimResolver
         }
     }
 
+    private static IEnumerable<string> EnumerateShimDirectories(string rootPath)
+    {
+        foreach (var relativePath in new[]
+                 {
+                     Path.Combine("external", "wasmtime-dotnet", "native", "wasmtime-preview2-shim"),
+                     Path.Combine("SekibanWasmRuntime", "external", "wasmtime-dotnet", "native", "wasmtime-preview2-shim")
+                 })
+        {
+            var shimDirectory = Path.Combine(rootPath, relativePath);
+            if (File.Exists(Path.Combine(shimDirectory, "Cargo.toml")))
+            {
+                yield return shimDirectory;
+            }
+        }
+    }
+
     private static string? TryBuildShim()
     {
-        foreach (var repoRoot in FindRepositoryRoots())
+        foreach (var shimDirectory in FindShimDirectories())
         {
-            var shimDirectory = Path.Combine(
-                repoRoot,
-                "external",
-                "wasmtime-dotnet",
-                "native",
-                "wasmtime-preview2-shim");
-
-            if (!File.Exists(Path.Combine(shimDirectory, "Cargo.toml")))
-            {
-                continue;
-            }
-
             try
             {
                 using var process = new Process

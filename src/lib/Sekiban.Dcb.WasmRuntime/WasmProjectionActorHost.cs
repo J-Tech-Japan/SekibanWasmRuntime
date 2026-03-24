@@ -33,6 +33,16 @@ public sealed class WasmProjectionActorHostFactory(
 
 public sealed class WasmProjectionActorHost : IProjectionActorHost
 {
+    private static readonly object TraceFileLock = new();
+    private static readonly bool TraceLifecycle =
+        string.Equals(
+            Environment.GetEnvironmentVariable("WASM_RUNTIME_TRACE_LIFECYCLE"),
+            "1",
+            StringComparison.Ordinal);
+    private static readonly string TraceFilePath =
+        Environment.GetEnvironmentVariable("WASM_RUNTIME_TRACE_PATH")
+        ?? Path.Combine(Path.GetTempPath(), "kenbai-wasm-runtime-trace.log");
+
     private readonly IPrimitiveProjectionHost _host;
     private readonly WasmProjectorRegistry _registry;
     private readonly JsonSerializerOptions _jsonOptions;
@@ -71,11 +81,15 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost
         foreach (var serializedEvent in events)
         {
             var payloadJson = Encoding.UTF8.GetString(serializedEvent.Payload);
+            Trace(
+                $"host_add_events:start projector={_projectorName} eventId={serializedEvent.Id} eventType={serializedEvent.EventPayloadName} sortableUniqueId={serializedEvent.SortableUniqueIdValue} tagCount={serializedEvent.Tags.Count}");
             instance.ApplyEvent(
                 serializedEvent.EventPayloadName,
                 payloadJson,
                 serializedEvent.Tags,
                 serializedEvent.SortableUniqueIdValue);
+            Trace(
+                $"host_add_events:completed projector={_projectorName} eventId={serializedEvent.Id} eventType={serializedEvent.EventPayloadName} sortableUniqueId={serializedEvent.SortableUniqueIdValue}");
 
             _version++;
             _lastSortableUniqueId = serializedEvent.SortableUniqueIdValue;
@@ -227,6 +241,10 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost
     }
 
     public void ForcePromoteBufferedEvents()
+    {
+    }
+
+    public void CompactSafeHistory()
     {
     }
 
@@ -404,6 +422,37 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost
         return property.ValueKind == JsonValueKind.Number && property.TryGetInt32(out var value)
             ? value
             : null;
+    }
+
+    private static void Trace(string message)
+    {
+        if (!TraceLifecycle)
+        {
+            return;
+        }
+
+        string line =
+            $"[wasm-host-trace] {DateTimeOffset.UtcNow:O} pid={Environment.ProcessId} {message}";
+        try
+        {
+            Console.WriteLine(line);
+        }
+        catch
+        {
+            // Debug tracing must not affect runtime behavior.
+        }
+
+        try
+        {
+            lock (TraceFileLock)
+            {
+                File.AppendAllText(TraceFilePath, line + Environment.NewLine);
+            }
+        }
+        catch
+        {
+            // Debug tracing must not affect runtime behavior.
+        }
     }
 
     internal sealed record WasmProjectionPayload(string ProjectorName, string StateJson) : IMultiProjectionPayload;
