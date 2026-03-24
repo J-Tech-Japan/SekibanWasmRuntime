@@ -150,13 +150,6 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
             return;
         }
 
-        if (ShouldBypassGuestExecution(eventType))
-        {
-            Trace(
-                $"apply_event:bypassed projectorInstance={_instanceId} eventType={eventType} reason=research_aot_workaround");
-            return;
-        }
-
         lock (_syncRoot)
         {
             ThrowIfDisposed();
@@ -246,23 +239,6 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
         tag.StartsWith("NendoKanyu:", StringComparison.Ordinal) ||
         tag.StartsWith("Keiyaku:", StringComparison.Ordinal) ||
         tag.StartsWith("KanyushaLogin:", StringComparison.Ordinal);
-
-    private bool ShouldBypassGuestExecution(string eventType)
-    {
-        if (!string.Equals(_projectorType, "KanyushaListProjection", StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        return string.Equals(eventType, "KanyushaAccountLoginCreatedAndPasswordChanged", StringComparison.Ordinal) ||
-               string.Equals(eventType, "KanyushaLoginRecorded", StringComparison.Ordinal) ||
-               string.Equals(eventType, "KanyushaEmailConfirmed", StringComparison.Ordinal) ||
-               string.Equals(eventType, "ShozokuKenchikushikaiJohoSeted", StringComparison.Ordinal) ||
-               string.Equals(eventType, "KanyushaJohoSeted", StringComparison.Ordinal) ||
-               string.Equals(eventType, "TaDoushuruiHokenKeiyakuAriNashied", StringComparison.Ordinal) ||
-               string.Equals(eventType, "TaDantaiKeizokuSeted", StringComparison.Ordinal) ||
-               string.Equals(eventType, "TadantaiKeizokuJohoKoshin", StringComparison.Ordinal);
-    }
 
     private static string TryCompactPayload(string eventType, string eventPayloadJson)
     {
