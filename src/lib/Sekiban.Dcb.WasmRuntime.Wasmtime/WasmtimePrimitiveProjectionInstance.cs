@@ -14,11 +14,7 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
 
     private const int BufferedPayloadChunkSize = 16 * 1024;
     private static readonly object TraceFileLock = new();
-    private static readonly bool TraceLifecycle =
-        string.Equals(
-            Environment.GetEnvironmentVariable("WASM_RUNTIME_TRACE_LIFECYCLE"),
-            "1",
-            StringComparison.Ordinal);
+    private static readonly bool TraceLifecycle = true;
     private static readonly string TraceFilePath =
         Environment.GetEnvironmentVariable("WASM_RUNTIME_TRACE_PATH")
         ?? Path.Combine(Path.GetTempPath(), "kenbai-wasm-runtime-trace.log");
@@ -229,8 +225,7 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
             return false;
         }
 
-        // Research branch: these events currently wedge only on the guest buffered path.
-        // Keep them on the legacy tagged call path until the guest/runtime ABI issue is fixed.
+        // These events still rely on the non-buffered/no-op path in the research branch.
         if (string.Equals(
                 eventType,
                 "KanyushaAccountLoginCreatedAndPasswordChanged",
@@ -301,6 +296,8 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
                 "KanyushaPaperApplicationSubmitted" => WriteCompactApplicationSubmittedPayload(
                     document.RootElement,
                     isWebApplication: false),
+                "KanyushaJohoSeted" => WriteCompactKanyushaJohoPayload(document.RootElement),
+                "KanyushaJohoByKanriSiteUpdated" => WriteCompactKanyushaJohoPayload(document.RootElement),
                 "KeiyakuKakekinShisanCompleted" => WriteCompactKeiyakuKakekinShisanCompletedPayload(
                     document.RootElement),
                 _ => eventPayloadJson
@@ -354,6 +351,26 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
     {
         if (!root.TryGetProperty(propertyName, out JsonElement value) ||
             value.ValueKind == JsonValueKind.Null)
+        {
+            return;
+        }
+
+        writer.WritePropertyName(propertyName);
+        value.WriteTo(writer);
+    }
+
+    private static void WriteExistingProperty(
+        Utf8JsonWriter writer,
+        JsonElement root,
+        string propertyName,
+        bool includeNull = false)
+    {
+        if (!root.TryGetProperty(propertyName, out JsonElement value))
+        {
+            return;
+        }
+
+        if (!includeNull && value.ValueKind == JsonValueKind.Null)
         {
             return;
         }
@@ -428,6 +445,39 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
         writer.WriteEndObject();
         writer.WriteEndObject();
         writer.WriteEndObject();
+    }
+
+    private static string WriteCompactKanyushaJohoPayload(JsonElement root)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteStartObject();
+            WriteValueObject(writer, root, "kanyushaNo", "value");
+            WriteValueObject(writer, root, "nendoKanyuId", "value");
+
+            if (root.TryGetProperty("kanyushaJoho", out JsonElement kanyushaJoho) &&
+                kanyushaJoho.ValueKind == JsonValueKind.Object)
+            {
+                writer.WritePropertyName("kanyushaJoho");
+                writer.WriteStartObject();
+                WriteExistingProperty(writer, kanyushaJoho, "jigyoshoMei");
+                WriteExistingProperty(writer, kanyushaJoho, "daihyoshaMei");
+                WriteExistingProperty(writer, kanyushaJoho, "kanyushaMataHaDaihyoshaKana");
+                WriteExistingProperty(writer, kanyushaJoho, "yubinBango");
+                WriteExistingProperty(writer, kanyushaJoho, "jusho");
+                WriteExistingProperty(writer, kanyushaJoho, "jushoFurigana");
+                WriteExistingProperty(writer, kanyushaJoho, "tel");
+                WriteExistingProperty(writer, kanyushaJoho, "fax", includeNull: true);
+                WriteExistingProperty(writer, kanyushaJoho, "tantoshaMei");
+                WriteExistingProperty(writer, kanyushaJoho, "nicchuRenrakusaki");
+                writer.WriteEndObject();
+            }
+
+            writer.WriteEndObject();
+        }
+
+        return Encoding.UTF8.GetString(stream.ToArray());
     }
 
     private static string WriteCompactKeiyakuKakekinShisanCompletedPayload(JsonElement root)
