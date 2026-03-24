@@ -255,7 +255,8 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
                string.Equals(eventType, "ShozokuKenchikushikaiJohoSeted", StringComparison.Ordinal) ||
                string.Equals(eventType, "KanyushaJohoSeted", StringComparison.Ordinal) ||
                string.Equals(eventType, "TaDoushuruiHokenKeiyakuAriNashied", StringComparison.Ordinal) ||
-               string.Equals(eventType, "TaDantaiKeizokuSeted", StringComparison.Ordinal);
+               string.Equals(eventType, "TaDantaiKeizokuSeted", StringComparison.Ordinal) ||
+               string.Equals(eventType, "TadantaiKeizokuJohoKoshin", StringComparison.Ordinal);
     }
 
     private static string TryCompactPayload(string eventType, string eventPayloadJson)
