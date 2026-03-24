@@ -1,3 +1,4 @@
+using System.Collections;
 using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
@@ -34,6 +35,9 @@ public sealed class WasmProjectionActorHostFactory(
 public sealed class WasmProjectionActorHost : IProjectionActorHost
 {
     private static readonly object TraceFileLock = new();
+    private static readonly HashSet<string> SkippedEventTypes = LoadSkippedEventTypes();
+    private static readonly Dictionary<string, HashSet<string>> AllowedEventTypesByProjector =
+        LoadAllowedEventTypesByProjector();
     private static readonly bool TraceLifecycle =
         string.Equals(
             Environment.GetEnvironmentVariable("WASM_RUNTIME_TRACE_LIFECYCLE"),
@@ -83,13 +87,21 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost
             var payloadJson = Encoding.UTF8.GetString(serializedEvent.Payload);
             Trace(
                 $"host_add_events:start projector={_projectorName} eventId={serializedEvent.Id} eventType={serializedEvent.EventPayloadName} sortableUniqueId={serializedEvent.SortableUniqueIdValue} tagCount={serializedEvent.Tags.Count}");
-            instance.ApplyEvent(
-                serializedEvent.EventPayloadName,
-                payloadJson,
-                serializedEvent.Tags,
-                serializedEvent.SortableUniqueIdValue);
-            Trace(
-                $"host_add_events:completed projector={_projectorName} eventId={serializedEvent.Id} eventType={serializedEvent.EventPayloadName} sortableUniqueId={serializedEvent.SortableUniqueIdValue}");
+            if (ShouldSkipEvent(serializedEvent.EventPayloadName))
+            {
+                Trace(
+                    $"host_add_events:skipped projector={_projectorName} eventId={serializedEvent.Id} eventType={serializedEvent.EventPayloadName} sortableUniqueId={serializedEvent.SortableUniqueIdValue}");
+            }
+            else
+            {
+                instance.ApplyEvent(
+                    serializedEvent.EventPayloadName,
+                    payloadJson,
+                    serializedEvent.Tags,
+                    serializedEvent.SortableUniqueIdValue);
+                Trace(
+                    $"host_add_events:completed projector={_projectorName} eventId={serializedEvent.Id} eventType={serializedEvent.EventPayloadName} sortableUniqueId={serializedEvent.SortableUniqueIdValue}");
+            }
 
             _version++;
             _lastSortableUniqueId = serializedEvent.SortableUniqueIdValue;
@@ -324,6 +336,59 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost
         _instance = _host.CreateInstance(_projectorName);
         _logger.LogDebug("Created WASM projection instance for {ProjectorName}", _projectorName);
         return _instance;
+    }
+
+    private bool ShouldSkipEvent(string eventPayloadName)
+    {
+        if (string.IsNullOrWhiteSpace(eventPayloadName))
+        {
+            return false;
+        }
+
+        if (SkippedEventTypes.Contains(eventPayloadName))
+        {
+            return true;
+        }
+
+        return AllowedEventTypesByProjector.TryGetValue(_projectorName, out HashSet<string>? allowedEventTypes) &&
+               !allowedEventTypes.Contains(eventPayloadName);
+    }
+
+    private static HashSet<string> LoadSkippedEventTypes()
+    {
+        string? raw = Environment.GetEnvironmentVariable("WASM_RUNTIME_SKIP_EVENT_TYPES");
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return [];
+        }
+
+        return raw
+            .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .ToHashSet(StringComparer.Ordinal);
+    }
+
+    private static Dictionary<string, HashSet<string>> LoadAllowedEventTypesByProjector()
+    {
+        const string prefix = "WASM_RUNTIME_ALLOWED_EVENT_TYPES__";
+        var result = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+
+        foreach (DictionaryEntry entry in Environment.GetEnvironmentVariables())
+        {
+            if (entry.Key is not string key ||
+                !key.StartsWith(prefix, StringComparison.Ordinal) ||
+                entry.Value is not string raw ||
+                string.IsNullOrWhiteSpace(raw))
+            {
+                continue;
+            }
+
+            string projectorName = key[prefix.Length..];
+            result[projectorName] = raw
+                .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                .ToHashSet(StringComparer.Ordinal);
+        }
+
+        return result;
     }
 
     private string PeekSerializedState() =>

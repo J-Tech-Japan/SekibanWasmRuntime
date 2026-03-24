@@ -233,6 +233,10 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
             string.Equals(
                 eventType,
                 "OsusumeKekkaSet",
+                StringComparison.Ordinal) ||
+            string.Equals(
+                eventType,
+                "GyomuSaigaiSogoTokuyakuKakuninRecorded",
                 StringComparison.Ordinal))
         {
             return false;
