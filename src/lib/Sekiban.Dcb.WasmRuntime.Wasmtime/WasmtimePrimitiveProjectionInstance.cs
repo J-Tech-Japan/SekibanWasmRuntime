@@ -229,11 +229,15 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
             return false;
         }
 
-        // Research branch: this event currently wedges only on the guest buffered path.
-        // Keep it on the legacy tagged call path until the guest/runtime ABI issue is fixed.
+        // Research branch: these events currently wedge only on the guest buffered path.
+        // Keep them on the legacy tagged call path until the guest/runtime ABI issue is fixed.
         if (string.Equals(
                 eventType,
                 "KanyushaAccountLoginCreatedAndPasswordChanged",
+                StringComparison.Ordinal) ||
+            string.Equals(
+                eventType,
+                "OsusumeKekkaSet",
                 StringComparison.Ordinal))
         {
             return false;
@@ -261,11 +265,15 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
             return false;
         }
 
-        // Research branch: this event only bumps LastUpdated in the native list decider,
-        // but currently wedges the WASM guest call path for the list projector.
+        // Research branch: these events only bump LastUpdated in the native list decider,
+        // but currently wedge the WASM guest call path for the list projector.
         if (string.Equals(
                 eventType,
                 "KanyushaAccountLoginCreatedAndPasswordChanged",
+                StringComparison.Ordinal) ||
+            string.Equals(
+                eventType,
+                "OsusumeKekkaSet",
                 StringComparison.Ordinal))
         {
             return true;
