@@ -159,7 +159,7 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
             {
                 Trace(
                     $"apply_event:start projectorInstance={_instanceId} eventType={eventType} tagCount={tags.Count} sortableUniqueId={sortableUniqueId ?? string.Empty} payloadLength={eventPayloadJson.Length} effectivePayloadLength={effectivePayloadJson.Length}");
-                if (CanUseBufferedPayloadPath(tags.Count > 0))
+                if (CanUseBufferedPayloadPath(eventType, effectivePayloadJson.Length, tags.Count > 0))
                 {
                     ApplyEventWithBufferedPayload(effectivePayloadJson, eventTypePtr, eventTypeLen, tags, sortableUniqueId);
                     Trace(
@@ -217,18 +217,58 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
         }
     }
 
-    private bool CanUseBufferedPayloadPath(bool hasTags) =>
-        _beginPayloadBuffer is not null &&
-        _appendPayloadChunk is not null &&
-        (hasTags
-            ? _applyBufferedEventWithTags is not null
-            : _applyBufferedEvent is not null);
+    private bool CanUseBufferedPayloadPath(string eventType, int payloadLength, bool hasTags)
+    {
+        if (_beginPayloadBuffer is null || _appendPayloadChunk is null)
+        {
+            return false;
+        }
+
+        if (hasTags ? _applyBufferedEventWithTags is null : _applyBufferedEvent is null)
+        {
+            return false;
+        }
+
+        // Research branch: this event currently wedges only on the guest buffered path.
+        // Keep it on the legacy tagged call path until the guest/runtime ABI issue is fixed.
+        if (string.Equals(
+                eventType,
+                "KanyushaAccountLoginCreatedAndPasswordChanged",
+                StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return payloadLength > 0;
+    }
 
     private bool ShouldSkipEvent(string eventType, IReadOnlyList<string> tags)
     {
+        if (string.Equals(_projectorType, "KanyushaNumberKanriTagProjector", StringComparison.Ordinal))
+        {
+            return !string.Equals(
+                       eventType,
+                       "KanyushaNumberHaraidashiInitialized",
+                       StringComparison.Ordinal) &&
+                   !string.Equals(
+                       eventType,
+                       "KanyushaNumberHaraidashiSucceeded",
+                       StringComparison.Ordinal);
+        }
+
         if (!string.Equals(_projectorType, "KanyushaListProjection", StringComparison.Ordinal))
         {
             return false;
+        }
+
+        // Research branch: this event only bumps LastUpdated in the native list decider,
+        // but currently wedges the WASM guest call path for the list projector.
+        if (string.Equals(
+                eventType,
+                "KanyushaAccountLoginCreatedAndPasswordChanged",
+                StringComparison.Ordinal))
+        {
+            return true;
         }
 
         return !tags.Any(IsKanyushaListRelevantTag);
