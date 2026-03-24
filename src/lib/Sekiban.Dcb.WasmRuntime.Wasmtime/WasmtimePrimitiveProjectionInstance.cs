@@ -259,26 +259,55 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
                        StringComparison.Ordinal);
         }
 
-        if (!string.Equals(_projectorType, "KanyushaListProjection", StringComparison.Ordinal))
+        if (string.Equals(_projectorType, "KanyushaListProjection", StringComparison.Ordinal))
         {
-            return false;
+            // Research branch: these events only bump LastUpdated in the native list decider,
+            // but currently wedge the WASM guest call path for the list projector.
+            if (string.Equals(
+                    eventType,
+                    "KanyushaAccountLoginCreatedAndPasswordChanged",
+                    StringComparison.Ordinal) ||
+                string.Equals(
+                    eventType,
+                    "OsusumeKekkaSet",
+                    StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            return !tags.Any(IsKanyushaListRelevantTag);
         }
 
-        // Research branch: these events only bump LastUpdated in the native list decider,
-        // but currently wedge the WASM guest call path for the list projector.
-        if (string.Equals(
-                eventType,
-                "KanyushaAccountLoginCreatedAndPasswordChanged",
-                StringComparison.Ordinal) ||
-            string.Equals(
-                eventType,
-                "OsusumeKekkaSet",
-                StringComparison.Ordinal))
+        if (string.Equals(_projectorType, "HokenNendoShosaiListProjection", StringComparison.Ordinal))
         {
-            return true;
+            if (!tags.Any(IsHokenNendoShosaiListRelevantTag))
+            {
+                return true;
+            }
+
+            return !string.Equals(
+                       eventType,
+                       "HokenNendoShosaiRegistered",
+                       StringComparison.Ordinal) &&
+                   !string.Equals(
+                       eventType,
+                       "HokenNendoShosaiReceptionPeriodUpdated",
+                       StringComparison.Ordinal) &&
+                   !string.Equals(
+                       eventType,
+                       "HokenNendoShosaiPaymentScheduleUpdated",
+                       StringComparison.Ordinal) &&
+                   !string.Equals(
+                       eventType,
+                       "HokenNendoShosaiTokuyakuShokenNoUpdated",
+                       StringComparison.Ordinal) &&
+                   !string.Equals(
+                       eventType,
+                       "HokenNendoShosaiHokenShosaisUpdated",
+                       StringComparison.Ordinal);
         }
 
-        return !tags.Any(IsKanyushaListRelevantTag);
+        return false;
     }
 
     private static bool IsKanyushaListRelevantTag(string tag) =>
@@ -286,6 +315,9 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
         tag.StartsWith("NendoKanyu:", StringComparison.Ordinal) ||
         tag.StartsWith("Keiyaku:", StringComparison.Ordinal) ||
         tag.StartsWith("KanyushaLogin:", StringComparison.Ordinal);
+
+    private static bool IsHokenNendoShosaiListRelevantTag(string tag) =>
+        tag.StartsWith("HokenNendoShosai:", StringComparison.Ordinal);
 
     private static string TryCompactPayload(string eventType, string eventPayloadJson)
     {

@@ -35,6 +35,8 @@ public sealed class WasmProjectionActorHostFactory(
 public sealed class WasmProjectionActorHost : IProjectionActorHost
 {
     private static readonly object TraceFileLock = new();
+    private static readonly string HokenTraceFilePath =
+        Path.Combine(Path.GetTempPath(), "kenbai-wasm-hoken.log");
     private static readonly HashSet<string> SkippedEventTypes = LoadSkippedEventTypes();
     private static readonly Dictionary<string, HashSet<string>> AllowedEventTypesByProjector =
         LoadAllowedEventTypesByProjector();
@@ -85,6 +87,10 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost
         foreach (var serializedEvent in events)
         {
             var payloadJson = Encoding.UTF8.GetString(serializedEvent.Payload);
+            bool traceHokenProjection = string.Equals(
+                _projectorName,
+                "HokenNendoShosaiListProjection",
+                StringComparison.Ordinal);
             Trace(
                 $"host_add_events:start projector={_projectorName} eventId={serializedEvent.Id} eventType={serializedEvent.EventPayloadName} sortableUniqueId={serializedEvent.SortableUniqueIdValue} tagCount={serializedEvent.Tags.Count}");
             if (ShouldSkipEvent(serializedEvent.EventPayloadName))
@@ -94,11 +100,37 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost
             }
             else
             {
+                if (traceHokenProjection)
+                {
+                    WriteHokenTraceLine(
+                        $"start projector={_projectorName} eventType={serializedEvent.EventPayloadName} eventId={serializedEvent.Id} sortableUniqueId={serializedEvent.SortableUniqueIdValue} tagCount={serializedEvent.Tags.Count}");
+                    _logger.LogWarning(
+                        "WASM HokenNendo event apply start: Projector={ProjectorName}, EventType={EventType}, EventId={EventId}, SortableUniqueId={SortableUniqueId}, TagCount={TagCount}",
+                        _projectorName,
+                        serializedEvent.EventPayloadName,
+                        serializedEvent.Id,
+                        serializedEvent.SortableUniqueIdValue,
+                        serializedEvent.Tags.Count);
+                }
+
                 instance.ApplyEvent(
                     serializedEvent.EventPayloadName,
                     payloadJson,
                     serializedEvent.Tags,
                     serializedEvent.SortableUniqueIdValue);
+
+                if (traceHokenProjection)
+                {
+                    WriteHokenTraceLine(
+                        $"completed projector={_projectorName} eventType={serializedEvent.EventPayloadName} eventId={serializedEvent.Id} sortableUniqueId={serializedEvent.SortableUniqueIdValue}");
+                    _logger.LogWarning(
+                        "WASM HokenNendo event apply completed: Projector={ProjectorName}, EventType={EventType}, EventId={EventId}, SortableUniqueId={SortableUniqueId}",
+                        _projectorName,
+                        serializedEvent.EventPayloadName,
+                        serializedEvent.Id,
+                        serializedEvent.SortableUniqueIdValue);
+                }
+
                 Trace(
                     $"host_add_events:completed projector={_projectorName} eventId={serializedEvent.Id} eventType={serializedEvent.EventPayloadName} sortableUniqueId={serializedEvent.SortableUniqueIdValue}");
             }
@@ -512,6 +544,23 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost
             lock (TraceFileLock)
             {
                 File.AppendAllText(TraceFilePath, line + Environment.NewLine);
+            }
+        }
+        catch
+        {
+            // Debug tracing must not affect runtime behavior.
+        }
+    }
+
+    private static void WriteHokenTraceLine(string message)
+    {
+        string line =
+            $"[wasm-hoken-trace] {DateTimeOffset.UtcNow:O} pid={Environment.ProcessId} {message}";
+        try
+        {
+            lock (TraceFileLock)
+            {
+                File.AppendAllText(HokenTraceFilePath, line + Environment.NewLine);
             }
         }
         catch
