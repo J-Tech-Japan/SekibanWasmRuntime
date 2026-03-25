@@ -1,3 +1,4 @@
+using System.Collections;
 using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
@@ -33,6 +34,23 @@ public sealed class WasmProjectionActorHostFactory(
 
 public sealed class WasmProjectionActorHost : IProjectionActorHost
 {
+    private static readonly object TraceFileLock = new();
+    private static readonly string HokenTraceFilePath =
+        Path.Combine(Path.GetTempPath(), $"kenbai-wasm-hoken-{Environment.ProcessId}.log");
+    private static readonly HashSet<string> SkippedEventTypes = LoadSkippedEventTypes();
+    private static readonly Dictionary<string, HashSet<string>> AllowedEventTypesByProjector =
+        LoadAllowedEventTypesByProjector();
+    private static readonly bool TraceLifecycle =
+        string.Equals(
+            Environment.GetEnvironmentVariable("WASM_RUNTIME_TRACE_LIFECYCLE"),
+            "1",
+            StringComparison.Ordinal);
+    private static readonly string TraceFilePath =
+        Environment.GetEnvironmentVariable("WASM_RUNTIME_TRACE_PATH")
+        ?? Path.Combine(
+            Path.GetTempPath(),
+            $"kenbai-wasm-runtime-trace-{Environment.ProcessId}.log");
+
     private readonly IPrimitiveProjectionHost _host;
     private readonly WasmProjectorRegistry _registry;
     private readonly JsonSerializerOptions _jsonOptions;
@@ -70,12 +88,54 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost
         var instance = EnsureInstance();
         foreach (var serializedEvent in events)
         {
-            var payloadJson = Encoding.UTF8.GetString(serializedEvent.Payload);
-            instance.ApplyEvent(
-                serializedEvent.EventPayloadName,
-                payloadJson,
-                serializedEvent.Tags,
-                serializedEvent.SortableUniqueIdValue);
+            bool traceHokenProjection = string.Equals(
+                _projectorName,
+                "HokenNendoShosaiListProjection",
+                StringComparison.Ordinal);
+            Trace(
+                $"host_add_events:start projector={_projectorName} eventId={serializedEvent.Id} eventType={serializedEvent.EventPayloadName} sortableUniqueId={serializedEvent.SortableUniqueIdValue} tagCount={serializedEvent.Tags.Count}");
+            if (ShouldSkipEvent(serializedEvent.EventPayloadName))
+            {
+                Trace(
+                    $"host_add_events:skipped projector={_projectorName} eventId={serializedEvent.Id} eventType={serializedEvent.EventPayloadName} sortableUniqueId={serializedEvent.SortableUniqueIdValue}");
+            }
+            else
+            {
+                var payloadJson = Encoding.UTF8.GetString(serializedEvent.Payload);
+                if (traceHokenProjection)
+                {
+                    WriteHokenTraceLine(
+                        $"start projector={_projectorName} eventType={serializedEvent.EventPayloadName} eventId={serializedEvent.Id} sortableUniqueId={serializedEvent.SortableUniqueIdValue} tagCount={serializedEvent.Tags.Count}");
+                    _logger.LogWarning(
+                        "WASM HokenNendo event apply start: Projector={ProjectorName}, EventType={EventType}, EventId={EventId}, SortableUniqueId={SortableUniqueId}, TagCount={TagCount}",
+                        _projectorName,
+                        serializedEvent.EventPayloadName,
+                        serializedEvent.Id,
+                        serializedEvent.SortableUniqueIdValue,
+                        serializedEvent.Tags.Count);
+                }
+
+                instance.ApplyEvent(
+                    serializedEvent.EventPayloadName,
+                    payloadJson,
+                    serializedEvent.Tags,
+                    serializedEvent.SortableUniqueIdValue);
+
+                if (traceHokenProjection)
+                {
+                    WriteHokenTraceLine(
+                        $"completed projector={_projectorName} eventType={serializedEvent.EventPayloadName} eventId={serializedEvent.Id} sortableUniqueId={serializedEvent.SortableUniqueIdValue}");
+                    _logger.LogWarning(
+                        "WASM HokenNendo event apply completed: Projector={ProjectorName}, EventType={EventType}, EventId={EventId}, SortableUniqueId={SortableUniqueId}",
+                        _projectorName,
+                        serializedEvent.EventPayloadName,
+                        serializedEvent.Id,
+                        serializedEvent.SortableUniqueIdValue);
+                }
+
+                Trace(
+                    $"host_add_events:completed projector={_projectorName} eventId={serializedEvent.Id} eventType={serializedEvent.EventPayloadName} sortableUniqueId={serializedEvent.SortableUniqueIdValue}");
+            }
 
             _version++;
             _lastSortableUniqueId = serializedEvent.SortableUniqueIdValue;
@@ -230,6 +290,12 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost
     {
     }
 
+    public void CompactSafeHistory()
+    {
+        // WASM runtime keeps only the current safe state in memory, so there is no
+        // independent safe-history buffer to compact here.
+    }
+
     public void ForcePromoteAllBufferedEvents()
     {
     }
@@ -306,6 +372,59 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost
         _instance = _host.CreateInstance(_projectorName);
         _logger.LogDebug("Created WASM projection instance for {ProjectorName}", _projectorName);
         return _instance;
+    }
+
+    private bool ShouldSkipEvent(string eventPayloadName)
+    {
+        if (string.IsNullOrWhiteSpace(eventPayloadName))
+        {
+            return false;
+        }
+
+        if (SkippedEventTypes.Contains(eventPayloadName))
+        {
+            return true;
+        }
+
+        return AllowedEventTypesByProjector.TryGetValue(_projectorName, out HashSet<string>? allowedEventTypes) &&
+               !allowedEventTypes.Contains(eventPayloadName);
+    }
+
+    private static HashSet<string> LoadSkippedEventTypes()
+    {
+        string? raw = Environment.GetEnvironmentVariable("WASM_RUNTIME_SKIP_EVENT_TYPES");
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return [];
+        }
+
+        return raw
+            .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .ToHashSet(StringComparer.Ordinal);
+    }
+
+    private static Dictionary<string, HashSet<string>> LoadAllowedEventTypesByProjector()
+    {
+        const string prefix = "WASM_RUNTIME_ALLOWED_EVENT_TYPES__";
+        var result = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+
+        foreach (DictionaryEntry entry in Environment.GetEnvironmentVariables())
+        {
+            if (entry.Key is not string key ||
+                !key.StartsWith(prefix, StringComparison.Ordinal) ||
+                entry.Value is not string raw ||
+                string.IsNullOrWhiteSpace(raw))
+            {
+                continue;
+            }
+
+            string projectorName = key[prefix.Length..];
+            result[projectorName] = raw
+                .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                .ToHashSet(StringComparer.Ordinal);
+        }
+
+        return result;
     }
 
     private string PeekSerializedState() =>
@@ -404,6 +523,54 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost
         return property.ValueKind == JsonValueKind.Number && property.TryGetInt32(out var value)
             ? value
             : null;
+    }
+
+    private static void Trace(string message)
+    {
+        if (!TraceLifecycle)
+        {
+            return;
+        }
+
+        string line =
+            $"[wasm-host-trace] {DateTimeOffset.UtcNow:O} pid={Environment.ProcessId} {message}";
+        try
+        {
+            Console.WriteLine(line);
+        }
+        catch
+        {
+            // Debug tracing must not affect runtime behavior.
+        }
+
+        try
+        {
+            lock (TraceFileLock)
+            {
+                File.AppendAllText(TraceFilePath, line + Environment.NewLine);
+            }
+        }
+        catch
+        {
+            // Debug tracing must not affect runtime behavior.
+        }
+    }
+
+    private static void WriteHokenTraceLine(string message)
+    {
+        string line =
+            $"[wasm-hoken-trace] {DateTimeOffset.UtcNow:O} pid={Environment.ProcessId} {message}";
+        try
+        {
+            lock (TraceFileLock)
+            {
+                File.AppendAllText(HokenTraceFilePath, line + Environment.NewLine);
+            }
+        }
+        catch
+        {
+            // Debug tracing must not affect runtime behavior.
+        }
     }
 
     internal sealed record WasmProjectionPayload(string ProjectorName, string StateJson) : IMultiProjectionPayload;
