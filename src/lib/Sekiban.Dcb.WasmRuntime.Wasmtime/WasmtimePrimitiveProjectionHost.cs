@@ -35,18 +35,21 @@ public sealed class WasmtimePrimitiveProjectionHost : IPrimitiveProjectionHost
                 $"No WASM module path configured for projector '{projectorName}'.");
         }
 
-        var module = _moduleCache.GetOrLoad(modulePath);
-        Trace($"host:create_instance:module_loaded projector={projectorName} path={modulePath}");
-        var store = new Store(_runtime.Engine);
-        store.SetWasiConfiguration(new WasiConfiguration()
-            .WithInheritedStandardOutput()
-            .WithInheritedStandardError());
+        lock (_runtime.SyncRoot)
+        {
+            var module = _moduleCache.GetOrLoad(modulePath);
+            Trace($"host:create_instance:module_loaded projector={projectorName} path={modulePath}");
+            var store = new Store(_runtime.Engine);
+            store.SetWasiConfiguration(new WasiConfiguration()
+                .WithInheritedStandardOutput()
+                .WithInheritedStandardError());
 
-        using var linker = _runtime.CreateLinker();
-        Trace($"host:create_instance:before_instantiate projector={projectorName}");
-        var instance = linker.Instantiate(store, module);
-        Trace($"host:create_instance:after_instantiate projector={projectorName}");
-        return new WasmtimePrimitiveProjectionInstance(store, instance, projectorName, new object());
+            using var linker = _runtime.CreateLinker();
+            Trace($"host:create_instance:before_instantiate projector={projectorName}");
+            var instance = linker.Instantiate(store, module);
+            Trace($"host:create_instance:after_instantiate projector={projectorName}");
+            return new WasmtimePrimitiveProjectionInstance(store, instance, projectorName, _runtime.SyncRoot);
+        }
     }
 
     private static void Trace(string message)

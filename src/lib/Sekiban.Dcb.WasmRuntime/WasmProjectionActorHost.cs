@@ -36,7 +36,7 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost
 {
     private static readonly object TraceFileLock = new();
     private static readonly string HokenTraceFilePath =
-        Path.Combine(Path.GetTempPath(), "kenbai-wasm-hoken.log");
+        Path.Combine(Path.GetTempPath(), $"kenbai-wasm-hoken-{Environment.ProcessId}.log");
     private static readonly HashSet<string> SkippedEventTypes = LoadSkippedEventTypes();
     private static readonly Dictionary<string, HashSet<string>> AllowedEventTypesByProjector =
         LoadAllowedEventTypesByProjector();
@@ -47,7 +47,9 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost
             StringComparison.Ordinal);
     private static readonly string TraceFilePath =
         Environment.GetEnvironmentVariable("WASM_RUNTIME_TRACE_PATH")
-        ?? Path.Combine(Path.GetTempPath(), "kenbai-wasm-runtime-trace.log");
+        ?? Path.Combine(
+            Path.GetTempPath(),
+            $"kenbai-wasm-runtime-trace-{Environment.ProcessId}.log");
 
     private readonly IPrimitiveProjectionHost _host;
     private readonly WasmProjectorRegistry _registry;
@@ -86,7 +88,6 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost
         var instance = EnsureInstance();
         foreach (var serializedEvent in events)
         {
-            var payloadJson = Encoding.UTF8.GetString(serializedEvent.Payload);
             bool traceHokenProjection = string.Equals(
                 _projectorName,
                 "HokenNendoShosaiListProjection",
@@ -100,6 +101,7 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost
             }
             else
             {
+                var payloadJson = Encoding.UTF8.GetString(serializedEvent.Payload);
                 if (traceHokenProjection)
                 {
                     WriteHokenTraceLine(
@@ -290,6 +292,8 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost
 
     public void CompactSafeHistory()
     {
+        // WASM runtime keeps only the current safe state in memory, so there is no
+        // independent safe-history buffer to compact here.
     }
 
     public void ForcePromoteAllBufferedEvents()

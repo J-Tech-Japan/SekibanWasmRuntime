@@ -14,10 +14,16 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
 
     private const int BufferedPayloadChunkSize = 16 * 1024;
     private static readonly object TraceFileLock = new();
-    private static readonly bool TraceLifecycle = true;
+    private static readonly bool TraceLifecycle =
+        string.Equals(
+            Environment.GetEnvironmentVariable("WASM_RUNTIME_TRACE_LIFECYCLE"),
+            "1",
+            StringComparison.Ordinal);
     private static readonly string TraceFilePath =
         Environment.GetEnvironmentVariable("WASM_RUNTIME_TRACE_PATH")
-        ?? Path.Combine(Path.GetTempPath(), "kenbai-wasm-runtime-trace.log");
+        ?? Path.Combine(
+            Path.GetTempPath(),
+            $"kenbai-wasm-runtime-trace-{Environment.ProcessId}.log");
 
     private readonly object _syncRoot;
     private readonly Store _store;
@@ -699,8 +705,13 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
 
     private (int ptr, int len) WriteBytes(ReadOnlySpan<byte> bytes)
     {
+        if (bytes.Length == 0)
+        {
+            return (0, 0);
+        }
+
         var ptr = _alloc?.Invoke(bytes.Length) ?? 0;
-        if (ptr == 0 || bytes.Length == 0)
+        if (ptr == 0)
         {
             return (0, 0);
         }
