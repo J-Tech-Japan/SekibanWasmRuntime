@@ -13,6 +13,7 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
     };
 
     private const int BufferedPayloadChunkSize = 16 * 1024;
+    private const int BufferedPayloadThresholdBytes = 8 * 1024;
     private static readonly object TraceFileLock = new();
     private static readonly bool TraceLifecycle =
         string.Equals(
@@ -39,6 +40,7 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
     private readonly Action<int, int, int>? _appendPayloadChunk;
     private readonly Action<int, int, int>? _applyBufferedEvent;
     private readonly Function? _applyBufferedEventWithTags;
+    private readonly Function? _applyBufferedEventWithSortable;
     private readonly Func<int, int, int, int, int, long>? _executeQuery;
     private readonly Func<int, int, int, int, int, long>? _executeListQuery;
     private readonly Func<int, long>? _serializeState;
@@ -114,6 +116,7 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
             _appendPayloadChunk = instance.GetAction<int, int, int>("append_payload_chunk");
             _applyBufferedEvent = instance.GetAction<int, int, int>("apply_buffered_event");
             _applyBufferedEventWithTags = instance.GetFunction("apply_buffered_event_with_tags");
+            _applyBufferedEventWithSortable = instance.GetFunction("apply_buffered_event_with_sortable");
             _executeQuery = instance.GetFunction<int, int, int, int, int, long>("execute_query");
             _executeListQuery = instance.GetFunction<int, int, int, int, int, long>("execute_list_query");
             _serializeState = instance.GetFunction<int, long>("serialize_state");
@@ -161,18 +164,34 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
             {
                 Trace(
                     $"apply_event:start projectorInstance={_instanceId} eventType={eventType} tagCount={tags.Count} sortableUniqueId={sortableUniqueId ?? string.Empty} payloadLength={eventPayloadJson.Length} effectivePayloadLength={effectivePayloadJson.Length}");
+                if (effectivePayloadJson.Length <= 512)
+                {
+                    Trace(
+                        $"apply_event:payload projectorInstance={_instanceId} eventType={eventType} payload={effectivePayloadJson}");
+                }
                 if (CanUseBufferedPayloadPath(eventType, effectivePayloadJson.Length, tags.Count > 0))
                 {
-                    ApplyEventWithBufferedPayload(effectivePayloadJson, eventTypePtr, eventTypeLen, tags, sortableUniqueId);
+                    Trace(
+                        $"apply_event:path projectorInstance={_instanceId} eventType={eventType} mode=buffered");
+                    ApplyEventWithBufferedPayload(eventType, effectivePayloadJson, eventTypePtr, eventTypeLen, tags, sortableUniqueId);
                     Trace(
                         $"apply_event:completed projectorInstance={_instanceId} eventType={eventType} mode=buffered");
                 }
                 else
                 {
+                    Trace(
+                        $"apply_event:path projectorInstance={_instanceId} eventType={eventType} mode=legacy");
                     var (payloadPtr, payloadLen) = WriteString(effectivePayloadJson);
                     try
                     {
-                        if (_applyEventWithTags is not null)
+                        if (ShouldUseLegacyApplyWithoutTags(eventType))
+                        {
+                            EnsureExport(_applyEvent, nameof(_applyEvent));
+                            _applyEvent!(_instanceId, eventTypePtr, eventTypeLen, payloadPtr, payloadLen);
+                            Trace(
+                                $"apply_event:completed projectorInstance={_instanceId} eventType={eventType} mode=legacy_no_tags");
+                        }
+                        else if (_applyEventWithTags is not null)
                         {
                             var tagsJson = System.Text.Json.JsonSerializer.Serialize(tags ?? []);
                             var (tagsPtr, tagsLen) = WriteString(tagsJson);
@@ -243,12 +262,16 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
             string.Equals(
                 eventType,
                 "GyomuSaigaiSogoTokuyakuKakuninRecorded",
+                StringComparison.Ordinal) ||
+            string.Equals(
+                eventType,
+                "KeiyakuKakekinShisanCompleted",
                 StringComparison.Ordinal))
         {
             return false;
         }
 
-        return payloadLength > 0;
+        return payloadLength > BufferedPayloadThresholdBytes || ShouldForceBufferedPayloadPath(eventType);
     }
 
     private bool ShouldSkipEvent(string eventType, IReadOnlyList<string> tags)
@@ -267,21 +290,7 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
 
         if (string.Equals(_projectorType, "KanyushaListProjection", StringComparison.Ordinal))
         {
-            // Research branch: these events only bump LastUpdated in the native list decider,
-            // but currently wedge the WASM guest call path for the list projector.
-            if (string.Equals(
-                    eventType,
-                    "KanyushaAccountLoginCreatedAndPasswordChanged",
-                    StringComparison.Ordinal) ||
-                string.Equals(
-                    eventType,
-                    "OsusumeKekkaSet",
-                    StringComparison.Ordinal))
-            {
-                return true;
-            }
-
-            return !tags.Any(IsKanyushaListRelevantTag);
+            return !tags.Any(IsKanyushaListRelevantTag) || !IsKanyushaListRelevantEvent(eventType);
         }
 
         if (string.Equals(_projectorType, "HokenNendoShosaiListProjection", StringComparison.Ordinal))
@@ -322,6 +331,123 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
         tag.StartsWith("Keiyaku:", StringComparison.Ordinal) ||
         tag.StartsWith("KanyushaLogin:", StringComparison.Ordinal);
 
+    private static bool ShouldForceBufferedPayloadPath(string eventType) =>
+        eventType switch
+        {
+            "KanyushaImported" => true,
+            "NendoKanyuImported" => true,
+            "KanyushaWebServiceApplicationSubmitted" => true,
+            "KanyushaPaperApplicationSubmitted" => true,
+            "KanyushaJohoSeted" => true,
+            "KanyushaJohoByKanriSiteUpdated" => true,
+            _ => false
+        };
+
+    private static bool ShouldUseLegacyApplyWithoutTags(string eventType) =>
+        eventType switch
+        {
+            "KanyushaSakujoed" => true,
+            "NendoKanyuSakujoed" => true,
+            "KeiyakuImported" => true,
+            "KeiyakuReplaced" => true,
+            "KeiyakuKakekinShisanCompleted" => true,
+            "CpdNoSeted" => true,
+            "FurikaeKozaJohoSeted" => true,
+            "KihonShiharaiMethodSeted" => true,
+            "KonnendoShiharaiMethodSeted" => true,
+            "ShozokuKenchikushikaiJohoByKanriSiteUpdated" => true,
+            "KenchikushikaiSaikakuninKanryoed" => true,
+            "KanyushaAccountLoginCreateRequested" => true,
+            "KanyushaAccountLoginCreatedTokenIssued" => true,
+            "KanyushaLoginRecorded" => true,
+            "BunshoInsatsuKirokued" => true,
+            "KanyushaNumberLoginCreated" => true,
+            "KanyushaNumberLoginRequested" => true,
+            _ => false
+        };
+
+    private static bool ShouldBypassTagsForSpecialCaseEvent(string eventType) =>
+        eventType switch
+        {
+            "KanyushaImported" => true,
+            "KanyushaSakujoed" => true,
+            "NendoKanyuImported" => true,
+            "KanyushaWebServiceApplicationSubmitted" => true,
+            "KanyushaPaperApplicationSubmitted" => true,
+            "KanyushaJohoSeted" => true,
+            "KanyushaJohoByKanriSiteUpdated" => true,
+            "KeiyakuImported" => true,
+            _ => false
+        };
+
+    private static bool IsKanyushaListRelevantEvent(string eventType) =>
+        eventType switch
+        {
+            "KanyushaImported" => true,
+            "KanyushaWebServiceApplicationSubmitted" => true,
+            "KanyushaPaperApplicationSubmitted" => true,
+            "KanyushaNoteKoshin" => true,
+            "KenchikushikaiKakuninConfirmed" => true,
+            "KenchikushikaiSaikakuninKanryoed" => true,
+            "KenchikushikaiSaikakuninShippaied" => true,
+            "KanyushaEmailChanged" => true,
+            "KanyushaEmailChangedByKanri" => true,
+            "KanyushaEmailChangeConfirmed" => true,
+            "KanyushaEmailConfirmed" => true,
+            "KanyushaAccountLoginCreatedTokenIssued" => true,
+            "KanyushaNumberLoginCreated" => true,
+            "KanyushaAccountLoginCreatedAndPasswordChanged" => true,
+            "KanyushaLoginMigratedToWeb" => true,
+            "KanyushaJotaiToHaigyogoKeizokuChanged" => true,
+            "KanyushaJotaiToHaitokuChanged" => true,
+            "KanyushaJotaiToHikeizokuUketsukeChanged" => true,
+            "KanyushaJotaiFromHikeizokuUketsukeCanceled" => true,
+            "HaigyogoTokuyakuJohoUpdated" => true,
+            "KanyuMoushikomiTorikeshied" => true,
+            "KeiyakuKaiyakuChutoed" => true,
+            "TadantaiKeizokuJohoKoshin" => true,
+            "TaDantaiKeizokuSeted" => true,
+            "KanyushaLoginRecorded" => true,
+            "KanyushaSakujoed" => true,
+            "NendoKanyuImported" => true,
+            "NendoKoshinKaishi" => true,
+            "KanyushaJohoSeted" => true,
+            "KanyushaJohoByKanriSiteUpdated" => true,
+            "ShozokuKenchikushikaiJohoSeted" => true,
+            "ShozokuKenchikushikaiJohoByKanriSiteUpdated" => true,
+            "ShozokuKenchikushikaiIsekied" => true,
+            "MoushikomiMethodCodeSeted" => true,
+            "CpdNoSeted" => true,
+            "TaDoushuruiHokenKeiyakuAriAried" => true,
+            "TaDoushuruiHokenKeiyakuAriNashied" => true,
+            "FurikomiIraiKakunined" => true,
+            "NendoReminderTantoshaSeted" => true,
+            "NendoReminderTantoshaCleared" => true,
+            "ReminderMemoUpdated" => true,
+            "FurikaeKozaJohoSeted" => true,
+            "FurikaeKozaJohoCleared" => true,
+            "FurikaeKozaKakunined" => true,
+            "KihonShiharaiMethodSeted" => true,
+            "KonnendoShiharaiMethodSeted" => true,
+            "NyukinTorokuked" => true,
+            "NyukinKabusokuChoseied" => true,
+            "HenreikinShiharaiTorokued" => true,
+            "GyomuSaigaiSogoTokuyakuKakuninRecorded" => true,
+            "GyomuSaigaiSogoTokuyakuKakuninDeleted" => true,
+            "KanyujiKakunined" => true,
+            "KenchikushiKakunined" => true,
+            "NendoKanyuConfirmed" => true,
+            "BunshoInsatsuKirokued" => true,
+            "KanyushaShoInsatsuLogDeleted" => true,
+            "NendoKeiyakuMitsumoriMitsumoriTekiyo" => true,
+            "NendoKanyuSakujoed" => true,
+            "KeiyakuImported" => true,
+            "KeiyakuKakekinShisanCompleted" => true,
+            "KeiyakuKakuninZumiNiIko" => true,
+            "KeiyakuKaiyakuManryoed" => true,
+            _ => false
+        };
+
     private static bool IsHokenNendoShosaiListRelevantTag(string tag) =>
         tag.StartsWith("HokenNendoShosai:", StringComparison.Ordinal);
 
@@ -332,6 +458,8 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
             using JsonDocument document = JsonDocument.Parse(eventPayloadJson, CompactPayloadJsonDocumentOptions);
             return eventType switch
             {
+                "KanyushaImported" => WriteCompactKanyushaImportedPayload(document.RootElement),
+                "NendoKanyuImported" => WriteCompactNendoKanyuImportedPayload(document.RootElement),
                 "KanyushaWebServiceApplicationSubmitted" => WriteCompactApplicationSubmittedPayload(
                     document.RootElement,
                     isWebApplication: true),
@@ -340,6 +468,7 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
                     isWebApplication: false),
                 "KanyushaJohoSeted" => WriteCompactKanyushaJohoPayload(document.RootElement),
                 "KanyushaJohoByKanriSiteUpdated" => WriteCompactKanyushaJohoPayload(document.RootElement),
+                "KeiyakuImported" => WriteCompactKeiyakuImportedPayload(document.RootElement),
                 "KeiyakuKakekinShisanCompleted" => WriteCompactKeiyakuKakekinShisanCompletedPayload(
                     document.RootElement),
                 _ => eventPayloadJson
@@ -366,6 +495,262 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
             WriteStringProperty(writer, root, isWebApplication ? "unconfirmedEmail" : "email");
             WriteShonendoTorokuDate(writer, root);
             WriteTotalKakekin(writer, root);
+
+            writer.WriteEndObject();
+        }
+
+        return Encoding.UTF8.GetString(stream.ToArray());
+    }
+
+    private static string WriteCompactKanyushaImportedPayload(JsonElement root)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteStartObject();
+
+            if (root.TryGetProperty("kanyusha", out JsonElement kanyushaRoot) &&
+                kanyushaRoot.ValueKind == JsonValueKind.Object)
+            {
+                writer.WritePropertyName("kanyusha");
+                writer.WriteStartObject();
+                WriteValueObject(writer, kanyushaRoot, "kanyushaNo", "value");
+
+                if (TryGetNestedProperty(kanyushaRoot, out JsonElement emailValue, "emailAddress", "emailValue"))
+                {
+                    writer.WritePropertyName("emailAddress");
+                    writer.WriteStartObject();
+                    writer.WritePropertyName("emailValue");
+                    emailValue.WriteTo(writer);
+                    writer.WriteEndObject();
+                }
+
+                WriteExistingProperty(writer, kanyushaRoot, "shonendoTorokuDate");
+
+                if (TryGetNestedProperty(kanyushaRoot, out JsonElement noteValue, "note", "value"))
+                {
+                    writer.WritePropertyName("note");
+                    writer.WriteStartObject();
+                    writer.WritePropertyName("value");
+                    noteValue.WriteTo(writer);
+                    writer.WriteEndObject();
+                }
+
+                if (TryGetNestedProperty(kanyushaRoot, out JsonElement kanyushaJotaiType, "kanyushaJotai", "$type"))
+                {
+                    writer.WritePropertyName("kanyushaJotai");
+                    writer.WriteStartObject();
+                    writer.WritePropertyName("$type");
+                    kanyushaJotaiType.WriteTo(writer);
+                    writer.WriteEndObject();
+                }
+
+                if (TryGetNestedProperty(kanyushaRoot, out JsonElement kenchikushikaiType, "kenchikushikaiKakunin", "$type"))
+                {
+                    writer.WritePropertyName("kenchikushikaiKakunin");
+                    writer.WriteStartObject();
+                    writer.WritePropertyName("$type");
+                    kenchikushikaiType.WriteTo(writer);
+                    writer.WriteEndObject();
+                }
+
+                if (TryGetNestedProperty(kanyushaRoot, out JsonElement tadantaiType, "tadantaiKeizokuJoho", "$type"))
+                {
+                    writer.WritePropertyName("tadantaiKeizokuJoho");
+                    writer.WriteStartObject();
+                    writer.WritePropertyName("$type");
+                    tadantaiType.WriteTo(writer);
+
+                    if (TryGetNestedProperty(kanyushaRoot, out JsonElement isTadantaiKeizoku, "tadantaiKeizokuJoho", "isTadantaiKeizoku"))
+                    {
+                        writer.WritePropertyName("isTadantaiKeizoku");
+                        isTadantaiKeizoku.WriteTo(writer);
+                    }
+
+                    if (TryGetNestedProperty(kanyushaRoot, out JsonElement tadantaiMujikoJuryoDate, "tadantaiKeizokuJoho", "tadantaiMujikoJuryoDate"))
+                    {
+                        writer.WritePropertyName("tadantaiMujikoJuryoDate");
+                        tadantaiMujikoJuryoDate.WriteTo(writer);
+                    }
+
+                    writer.WriteEndObject();
+                }
+
+                writer.WriteEndObject();
+            }
+
+            writer.WriteEndObject();
+        }
+
+        return Encoding.UTF8.GetString(stream.ToArray());
+    }
+
+    private static string WriteCompactNendoKanyuImportedPayload(JsonElement root)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteStartObject();
+
+            if (root.TryGetProperty("nendoKanyu", out JsonElement nendoKanyuRoot) &&
+                nendoKanyuRoot.ValueKind == JsonValueKind.Object)
+            {
+                writer.WritePropertyName("nendoKanyu");
+                writer.WriteStartObject();
+                WriteValueObject(writer, nendoKanyuRoot, "nendoKanyuId", "value");
+                WriteValueObject(writer, nendoKanyuRoot, "hokenNendoId", "id");
+                WriteValueObject(writer, nendoKanyuRoot, "kanyushaNo", "value");
+
+                if (nendoKanyuRoot.TryGetProperty("kanyuKubun", out JsonElement kanyuKubun) &&
+                    kanyuKubun.ValueKind == JsonValueKind.Object)
+                {
+                    writer.WritePropertyName("kanyuKubun");
+                    writer.WriteStartObject();
+                    WriteExistingProperty(writer, kanyuKubun, "$type");
+                    WriteExistingProperty(writer, kanyuKubun, "label");
+                    writer.WriteEndObject();
+                }
+
+                if (nendoKanyuRoot.TryGetProperty("jotai", out JsonElement jotai) &&
+                    jotai.ValueKind == JsonValueKind.Object)
+                {
+                    writer.WritePropertyName("jotai");
+                    writer.WriteStartObject();
+                    WriteExistingProperty(writer, jotai, "$type");
+                    WriteValueObject(writer, jotai, "activeKeiyakuId", "value");
+                    writer.WriteEndObject();
+                }
+
+                if (TryGetNestedProperty(
+                        nendoKanyuRoot,
+                        out JsonElement kihonShiharaiMethod,
+                        "shiharaiMethodJotai",
+                        "kihonShiharaiMethod",
+                        "value"))
+                {
+                    writer.WritePropertyName("shiharaiMethodJotai");
+                    writer.WriteStartObject();
+                    writer.WritePropertyName("kihonShiharaiMethod");
+                    writer.WriteStartObject();
+                    writer.WritePropertyName("value");
+                    kihonShiharaiMethod.WriteTo(writer);
+                    writer.WriteEndObject();
+                    writer.WriteEndObject();
+                }
+
+                if (TryGetNestedProperty(nendoKanyuRoot, out JsonElement nyukinJotaiType, "nyukinJotai", "$type"))
+                {
+                    writer.WritePropertyName("nyukinJotai");
+                    writer.WriteStartObject();
+                    writer.WritePropertyName("$type");
+                    nyukinJotaiType.WriteTo(writer);
+                    writer.WriteEndObject();
+                }
+
+                if (nendoKanyuRoot.TryGetProperty("shozokuKenchikushikaiJoho", out JsonElement shozokuKenchikushikaiJoho) &&
+                    shozokuKenchikushikaiJoho.ValueKind == JsonValueKind.Object)
+                {
+                    writer.WritePropertyName("shozokuKenchikushikaiJoho");
+                    writer.WriteStartObject();
+                    WriteExistingProperty(writer, shozokuKenchikushikaiJoho, "$type");
+                    WriteValueObject(writer, shozokuKenchikushikaiJoho, "kenchikushikaiCode", "value");
+
+                    if (TryGetNestedProperty(
+                            shozokuKenchikushikaiJoho,
+                            out JsonElement kaiinBangoShinkokuType,
+                            "kaiinBangoShinkoku",
+                            "$type"))
+                    {
+                        writer.WritePropertyName("kaiinBangoShinkoku");
+                        writer.WriteStartObject();
+                        writer.WritePropertyName("$type");
+                        kaiinBangoShinkokuType.WriteTo(writer);
+                        writer.WriteEndObject();
+                    }
+
+                    writer.WriteEndObject();
+                }
+
+                if (TryGetNestedProperty(nendoKanyuRoot, out JsonElement kanyushaJohoHasValue, "kanyushaJoho", "hasValue") &&
+                    kanyushaJohoHasValue.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                {
+                    writer.WritePropertyName("kanyushaJoho");
+                    writer.WriteStartObject();
+                    writer.WritePropertyName("hasValue");
+                    kanyushaJohoHasValue.WriteTo(writer);
+
+                    if (kanyushaJohoHasValue.GetBoolean() &&
+                        TryGetNestedProperty(nendoKanyuRoot, out JsonElement kanyushaJohoValue, "kanyushaJoho", "value") &&
+                        kanyushaJohoValue.ValueKind == JsonValueKind.Object)
+                    {
+                        writer.WritePropertyName("value");
+                        writer.WriteStartObject();
+                        WriteExistingProperty(writer, kanyushaJohoValue, "jigyoshoMei");
+                        WriteExistingProperty(writer, kanyushaJohoValue, "daihyoshaMei");
+                        WriteExistingProperty(writer, kanyushaJohoValue, "kanyushaMataHaDaihyoshaKana");
+                        WriteExistingProperty(writer, kanyushaJohoValue, "yubinBango");
+                        WriteExistingProperty(writer, kanyushaJohoValue, "jusho");
+                        WriteExistingProperty(writer, kanyushaJohoValue, "jushoFurigana");
+                        WriteExistingProperty(writer, kanyushaJohoValue, "tel");
+                        WriteExistingProperty(writer, kanyushaJohoValue, "fax", includeNull: true);
+                        WriteExistingProperty(writer, kanyushaJohoValue, "tantoshaMei");
+                        WriteExistingProperty(writer, kanyushaJohoValue, "nicchuRenrakusaki");
+                        writer.WriteEndObject();
+                    }
+
+                    writer.WriteEndObject();
+                }
+
+                if (TryGetNestedProperty(nendoKanyuRoot, out JsonElement moushikomiMethodCode, "moushikomiMethodCode", "value", "value"))
+                {
+                    writer.WritePropertyName("moushikomiMethodCode");
+                    writer.WriteStartObject();
+                    writer.WritePropertyName("value");
+                    writer.WriteStartObject();
+                    writer.WritePropertyName("value");
+                    moushikomiMethodCode.WriteTo(writer);
+                    writer.WriteEndObject();
+                    writer.WriteEndObject();
+                }
+
+                if (TryGetNestedProperty(
+                        nendoKanyuRoot,
+                        out JsonElement taDoushuruiHokenKeiyakuAriType,
+                        "taDoushuruiHokenKeiyakuAri",
+                        "$type"))
+                {
+                    writer.WritePropertyName("taDoushuruiHokenKeiyakuAri");
+                    writer.WriteStartObject();
+                    writer.WritePropertyName("$type");
+                    taDoushuruiHokenKeiyakuAriType.WriteTo(writer);
+                    writer.WriteEndObject();
+                }
+
+                if (TryGetNestedProperty(
+                        nendoKanyuRoot,
+                        out JsonElement gyomuSaigaiSogoTokuyakuKakuninJotaiType,
+                        "gyomuSaigaiSogoTokuyakuKakuninJotai",
+                        "$type"))
+                {
+                    writer.WritePropertyName("gyomuSaigaiSogoTokuyakuKakuninJotai");
+                    writer.WriteStartObject();
+                    writer.WritePropertyName("$type");
+                    gyomuSaigaiSogoTokuyakuKakuninJotaiType.WriteTo(writer);
+                    writer.WriteEndObject();
+                }
+
+                if (nendoKanyuRoot.TryGetProperty("webMoushikomiKakuteiNichiji", out JsonElement webMoushikomiKakuteiNichiji) &&
+                    webMoushikomiKakuteiNichiji.ValueKind == JsonValueKind.Object)
+                {
+                    writer.WritePropertyName("webMoushikomiKakuteiNichiji");
+                    writer.WriteStartObject();
+                    WriteExistingProperty(writer, webMoushikomiKakuteiNichiji, "hasValue");
+                    WriteExistingProperty(writer, webMoushikomiKakuteiNichiji, "value", includeNull: true);
+                    writer.WriteEndObject();
+                }
+
+                writer.WriteEndObject();
+            }
 
             writer.WriteEndObject();
         }
@@ -558,6 +943,26 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
         return Encoding.UTF8.GetString(stream.ToArray());
     }
 
+    private static string WriteCompactKeiyakuImportedPayload(JsonElement root)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteStartObject();
+
+            if (root.TryGetProperty("keiyaku", out JsonElement keiyakuRoot) &&
+                keiyakuRoot.ValueKind == JsonValueKind.Object)
+            {
+                WriteValueObject(writer, keiyakuRoot, "keiyakuId", "value");
+                WriteValueObject(writer, keiyakuRoot, "nendoKanyuId", "value");
+            }
+
+            writer.WriteEndObject();
+        }
+
+        return Encoding.UTF8.GetString(stream.ToArray());
+    }
+
     private static bool TryGetNestedProperty(
         JsonElement element,
         out JsonElement value,
@@ -580,6 +985,7 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
     }
 
     private void ApplyEventWithBufferedPayload(
+        string eventType,
         string eventPayloadJson,
         int eventTypePtr,
         int eventTypeLen,
@@ -589,7 +995,9 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
         EnsureExport(_beginPayloadBuffer, nameof(_beginPayloadBuffer));
         EnsureExport(_appendPayloadChunk, nameof(_appendPayloadChunk));
 
+        Trace($"apply_buffered:start projectorInstance={_instanceId} payloadLength={eventPayloadJson.Length} tagCount={tags.Count}");
         _beginPayloadBuffer!(_instanceId);
+        Trace($"apply_buffered:after_begin projectorInstance={_instanceId}");
 
         byte[] payloadBytes = Encoding.UTF8.GetBytes(eventPayloadJson ?? string.Empty);
         int offset = 0;
@@ -608,14 +1016,36 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
 
             offset += chunkLength;
         }
+        Trace($"apply_buffered:after_chunks projectorInstance={_instanceId} chunkBytes={payloadBytes.Length}");
 
-        if (_applyBufferedEventWithTags is not null)
+        if (ShouldBypassTagsForSpecialCaseEvent(eventType) &&
+            _applyBufferedEventWithSortable is not null)
+        {
+            var (sortablePtr, sortableLen) = WriteString(sortableUniqueId ?? string.Empty);
+            try
+            {
+                Trace($"apply_buffered:before_invoke_with_sortable projectorInstance={_instanceId}");
+                _applyBufferedEventWithSortable.Invoke(
+                    _instanceId,
+                    eventTypePtr,
+                    eventTypeLen,
+                    sortablePtr,
+                    sortableLen);
+                Trace($"apply_buffered:after_invoke_with_sortable projectorInstance={_instanceId}");
+            }
+            finally
+            {
+                Free(sortablePtr, sortableLen);
+            }
+        }
+        else if (_applyBufferedEventWithTags is not null)
         {
             var tagsJson = System.Text.Json.JsonSerializer.Serialize(tags ?? []);
             var (tagsPtr, tagsLen) = WriteString(tagsJson);
             var (sortablePtr, sortableLen) = WriteString(sortableUniqueId ?? string.Empty);
             try
             {
+                Trace($"apply_buffered:before_invoke_with_tags projectorInstance={_instanceId}");
                 _applyBufferedEventWithTags.Invoke(
                     _instanceId,
                     eventTypePtr,
@@ -624,6 +1054,7 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
                     tagsLen,
                     sortablePtr,
                     sortableLen);
+                Trace($"apply_buffered:after_invoke_with_tags projectorInstance={_instanceId}");
             }
             finally
             {
@@ -634,7 +1065,9 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
         else
         {
             EnsureExport(_applyBufferedEvent, nameof(_applyBufferedEvent));
+            Trace($"apply_buffered:before_invoke projectorInstance={_instanceId}");
             _applyBufferedEvent!(_instanceId, eventTypePtr, eventTypeLen);
+            Trace($"apply_buffered:after_invoke projectorInstance={_instanceId}");
         }
     }
 

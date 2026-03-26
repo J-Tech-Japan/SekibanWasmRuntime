@@ -32,8 +32,15 @@ public sealed class WasmProjectionActorHostFactory(
             logger ?? loggerFactory.CreateLogger<WasmProjectionActorHost>());
 }
 
-public sealed class WasmProjectionActorHost : IProjectionActorHost
+public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
 {
+    public sealed record WasmCheckpointState(
+        string StateJson,
+        int Version,
+        string? LastSortableUniqueId,
+        Guid? LastEventId,
+        bool IsCatchedUp);
+
     private static readonly object TraceFileLock = new();
     private static readonly string HokenTraceFilePath =
         Path.Combine(Path.GetTempPath(), $"kenbai-wasm-hoken-{Environment.ProcessId}.log");
@@ -50,6 +57,26 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost
         ?? Path.Combine(
             Path.GetTempPath(),
             $"kenbai-wasm-runtime-trace-{Environment.ProcessId}.log");
+    private static readonly HashSet<string> KanyushaListOrphanSkippableEventTypes =
+        [
+            "TaDoushuruiHokenKeiyakuAriAried",
+            "TaDoushuruiHokenKeiyakuAriNashied",
+            "TaDantaiKeizokuSeted",
+            "FurikaeKozaJohoSeted",
+            "KihonShiharaiMethodSeted",
+            "KonnendoShiharaiMethodSeted",
+            "CpdNoSeted",
+            "FurikomiIraiKakunined",
+            "NendoReminderTantoshaSeted",
+            "NendoReminderTantoshaCleared",
+            "ReminderMemoUpdated",
+            "NyukinTorokuked",
+            "NyukinKabusokuChoseied",
+            "HenreikinShiharaiTorokued",
+            "MoushikomiMethodCodeSeted",
+            "KenchikushiKakunined",
+            "KanyujiKakunined"
+        ];
 
     private readonly IPrimitiveProjectionHost _host;
     private readonly WasmProjectorRegistry _registry;
@@ -63,6 +90,10 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost
     private string? _lastSortableUniqueId;
     private Guid? _lastEventId;
     private bool _isCatchedUp = true;
+    private string? _cachedSerializedState;
+    private int _cachedSerializedStateVersion = -1;
+    private HashSet<int> _kanyushaListKnownKanyushaNos = [];
+    private Dictionary<string, int> _kanyushaListKnownNendoIndex = new(StringComparer.Ordinal);
 
     public WasmProjectionActorHost(
         IPrimitiveProjectionHost host,
@@ -94,7 +125,7 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost
                 StringComparison.Ordinal);
             Trace(
                 $"host_add_events:start projector={_projectorName} eventId={serializedEvent.Id} eventType={serializedEvent.EventPayloadName} sortableUniqueId={serializedEvent.SortableUniqueIdValue} tagCount={serializedEvent.Tags.Count}");
-            if (ShouldSkipEvent(serializedEvent.EventPayloadName))
+            if (ShouldSkipEvent(serializedEvent.EventPayloadName, serializedEvent.Tags))
             {
                 Trace(
                     $"host_add_events:skipped projector={_projectorName} eventId={serializedEvent.Id} eventType={serializedEvent.EventPayloadName} sortableUniqueId={serializedEvent.SortableUniqueIdValue}");
@@ -102,42 +133,51 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost
             else
             {
                 var payloadJson = Encoding.UTF8.GetString(serializedEvent.Payload);
-                if (traceHokenProjection)
+                if (ShouldSkipOrphanKanyushaListEvent(serializedEvent.EventPayloadName, payloadJson))
                 {
-                    WriteHokenTraceLine(
-                        $"start projector={_projectorName} eventType={serializedEvent.EventPayloadName} eventId={serializedEvent.Id} sortableUniqueId={serializedEvent.SortableUniqueIdValue} tagCount={serializedEvent.Tags.Count}");
-                    _logger.LogWarning(
-                        "WASM HokenNendo event apply start: Projector={ProjectorName}, EventType={EventType}, EventId={EventId}, SortableUniqueId={SortableUniqueId}, TagCount={TagCount}",
-                        _projectorName,
-                        serializedEvent.EventPayloadName,
-                        serializedEvent.Id,
-                        serializedEvent.SortableUniqueIdValue,
-                        serializedEvent.Tags.Count);
+                    Trace(
+                        $"host_add_events:skipped_orphan projector={_projectorName} eventId={serializedEvent.Id} eventType={serializedEvent.EventPayloadName} sortableUniqueId={serializedEvent.SortableUniqueIdValue}");
                 }
-
-                instance.ApplyEvent(
-                    serializedEvent.EventPayloadName,
-                    payloadJson,
-                    serializedEvent.Tags,
-                    serializedEvent.SortableUniqueIdValue);
-
-                if (traceHokenProjection)
+                else
                 {
-                    WriteHokenTraceLine(
-                        $"completed projector={_projectorName} eventType={serializedEvent.EventPayloadName} eventId={serializedEvent.Id} sortableUniqueId={serializedEvent.SortableUniqueIdValue}");
-                    _logger.LogWarning(
-                        "WASM HokenNendo event apply completed: Projector={ProjectorName}, EventType={EventType}, EventId={EventId}, SortableUniqueId={SortableUniqueId}",
-                        _projectorName,
+                    if (traceHokenProjection)
+                    {
+                        WriteHokenTraceLine(
+                            $"start projector={_projectorName} eventType={serializedEvent.EventPayloadName} eventId={serializedEvent.Id} sortableUniqueId={serializedEvent.SortableUniqueIdValue} tagCount={serializedEvent.Tags.Count}");
+                        _logger.LogWarning(
+                            "WASM HokenNendo event apply start: Projector={ProjectorName}, EventType={EventType}, EventId={EventId}, SortableUniqueId={SortableUniqueId}, TagCount={TagCount}",
+                            _projectorName,
+                            serializedEvent.EventPayloadName,
+                            serializedEvent.Id,
+                            serializedEvent.SortableUniqueIdValue,
+                            serializedEvent.Tags.Count);
+                    }
+
+                    instance.ApplyEvent(
                         serializedEvent.EventPayloadName,
-                        serializedEvent.Id,
+                        payloadJson,
+                        serializedEvent.Tags,
                         serializedEvent.SortableUniqueIdValue);
-                }
 
-                Trace(
-                    $"host_add_events:completed projector={_projectorName} eventId={serializedEvent.Id} eventType={serializedEvent.EventPayloadName} sortableUniqueId={serializedEvent.SortableUniqueIdValue}");
+                    if (traceHokenProjection)
+                    {
+                        WriteHokenTraceLine(
+                            $"completed projector={_projectorName} eventType={serializedEvent.EventPayloadName} eventId={serializedEvent.Id} sortableUniqueId={serializedEvent.SortableUniqueIdValue}");
+                        _logger.LogWarning(
+                            "WASM HokenNendo event apply completed: Projector={ProjectorName}, EventType={EventType}, EventId={EventId}, SortableUniqueId={SortableUniqueId}",
+                            _projectorName,
+                            serializedEvent.EventPayloadName,
+                            serializedEvent.Id,
+                            serializedEvent.SortableUniqueIdValue);
+                    }
+
+                    Trace(
+                        $"host_add_events:completed projector={_projectorName} eventId={serializedEvent.Id} eventType={serializedEvent.EventPayloadName} sortableUniqueId={serializedEvent.SortableUniqueIdValue}");
+                }
             }
 
             _version++;
+            InvalidateSerializedStateCache();
             _lastSortableUniqueId = serializedEvent.SortableUniqueIdValue;
             _lastEventId = serializedEvent.Id;
         }
@@ -178,7 +218,7 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost
     {
         try
         {
-            var snapshot = CreateSnapshot();
+            var snapshot = await CreateSnapshotAsync();
             var snapshotBytes = JsonSerializer.SerializeToUtf8Bytes(snapshot, _jsonOptions);
             var inlineState = SerializableMultiProjectionState.FromBytes(
                 payload: snapshotBytes,
@@ -213,11 +253,14 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost
             var snapshot = JsonSerializer.Deserialize<WasmStateSnapshot>(inlineState.GetPayloadBytes(), _jsonOptions)
                 ?? throw new InvalidOperationException("Snapshot stream did not contain a valid WASM state snapshot.");
 
-            EnsureInstance().RestoreState(snapshot.StateJson);
+            string stateJson = await ReadSnapshotStateJsonAsync(snapshot);
+            EnsureInstance().RestoreState(stateJson);
             _version = snapshot.UnsafeVersion;
             _lastSortableUniqueId = snapshot.LastSortableUniqueId;
             _lastEventId = snapshot.LastEventId;
             _isCatchedUp = true;
+            SetSerializedStateCache(stateJson);
+            RefreshKanyushaListShadowState(stateJson);
 
             return ResultBox.FromValue(true);
         }
@@ -362,6 +405,31 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost
         }
     }
 
+    public WasmCheckpointState ExportCheckpointState() =>
+        new(
+            PeekSerializedState(),
+            _version,
+            _lastSortableUniqueId,
+            _lastEventId,
+            _isCatchedUp);
+
+    public void RestoreCheckpointState(WasmCheckpointState checkpoint)
+    {
+        EnsureInstance().RestoreState(checkpoint.StateJson);
+        _version = checkpoint.Version;
+        _lastSortableUniqueId = checkpoint.LastSortableUniqueId;
+        _lastEventId = checkpoint.LastEventId;
+        _isCatchedUp = checkpoint.IsCatchedUp;
+        SetSerializedStateCache(checkpoint.StateJson);
+        RefreshKanyushaListShadowState(checkpoint.StateJson);
+    }
+
+    public void Dispose()
+    {
+        _instance?.Dispose();
+        _instance = null;
+    }
+
     private IPrimitiveProjectionInstance EnsureInstance()
     {
         if (_instance is not null)
@@ -374,7 +442,7 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost
         return _instance;
     }
 
-    private bool ShouldSkipEvent(string eventPayloadName)
+    private bool ShouldSkipEvent(string eventPayloadName, IReadOnlyList<string>? tags)
     {
         if (string.IsNullOrWhiteSpace(eventPayloadName))
         {
@@ -386,9 +454,109 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost
             return true;
         }
 
-        return AllowedEventTypesByProjector.TryGetValue(_projectorName, out HashSet<string>? allowedEventTypes) &&
-               !allowedEventTypes.Contains(eventPayloadName);
+        if (AllowedEventTypesByProjector.TryGetValue(_projectorName, out HashSet<string>? allowedEventTypes) &&
+            !allowedEventTypes.Contains(eventPayloadName))
+        {
+            return true;
+        }
+
+        if (string.Equals(_projectorName, "KanyushaListProjection", StringComparison.Ordinal))
+        {
+            return !HasKanyushaListRelevantTags(tags) || !IsKanyushaListRelevantEvent(eventPayloadName);
+        }
+
+        if (string.Equals(_projectorName, "HokenNendoShosaiListProjection", StringComparison.Ordinal))
+        {
+            return !HasHokenNendoShosaiListRelevantTags(tags) || !IsHokenNendoShosaiListRelevantEvent(eventPayloadName);
+        }
+
+        return false;
     }
+
+    private static bool HasKanyushaListRelevantTags(IReadOnlyList<string>? tags) =>
+        tags?.Any(tag =>
+            tag.StartsWith("Kanyusha:", StringComparison.Ordinal) ||
+            tag.StartsWith("NendoKanyu:", StringComparison.Ordinal) ||
+            tag.StartsWith("Keiyaku:", StringComparison.Ordinal) ||
+            tag.StartsWith("KanyushaLogin:", StringComparison.Ordinal)) == true;
+
+    private static bool HasHokenNendoShosaiListRelevantTags(IReadOnlyList<string>? tags) =>
+        tags?.Any(tag => tag.StartsWith("HokenNendoShosai:", StringComparison.Ordinal)) == true;
+
+    private static bool IsHokenNendoShosaiListRelevantEvent(string eventPayloadName) =>
+        string.Equals(eventPayloadName, "HokenNendoShosaiRegistered", StringComparison.Ordinal) ||
+        string.Equals(eventPayloadName, "HokenNendoShosaiReceptionPeriodUpdated", StringComparison.Ordinal) ||
+        string.Equals(eventPayloadName, "HokenNendoShosaiPaymentScheduleUpdated", StringComparison.Ordinal) ||
+        string.Equals(eventPayloadName, "HokenNendoShosaiTokuyakuShokenNoUpdated", StringComparison.Ordinal) ||
+        string.Equals(eventPayloadName, "HokenNendoShosaiHokenShosaisUpdated", StringComparison.Ordinal);
+
+    private static bool IsKanyushaListRelevantEvent(string eventPayloadName) =>
+        eventPayloadName switch
+        {
+            "KanyushaImported" => true,
+            "KanyushaWebServiceApplicationSubmitted" => true,
+            "KanyushaPaperApplicationSubmitted" => true,
+            "KanyushaNoteKoshin" => true,
+            "KenchikushikaiKakuninConfirmed" => true,
+            "KenchikushikaiSaikakuninKanryoed" => true,
+            "KenchikushikaiSaikakuninShippaied" => true,
+            "KanyushaEmailChanged" => true,
+            "KanyushaEmailChangedByKanri" => true,
+            "KanyushaEmailChangeConfirmed" => true,
+            "KanyushaEmailConfirmed" => true,
+            "KanyushaAccountLoginCreatedTokenIssued" => true,
+            "KanyushaNumberLoginCreated" => true,
+            "KanyushaAccountLoginCreatedAndPasswordChanged" => true,
+            "KanyushaLoginMigratedToWeb" => true,
+            "KanyushaJotaiToHaigyogoKeizokuChanged" => true,
+            "KanyushaJotaiToHaitokuChanged" => true,
+            "KanyushaJotaiToHikeizokuUketsukeChanged" => true,
+            "KanyushaJotaiFromHikeizokuUketsukeCanceled" => true,
+            "HaigyogoTokuyakuJohoUpdated" => true,
+            "KanyuMoushikomiTorikeshied" => true,
+            "KeiyakuKaiyakuChutoed" => true,
+            "TadantaiKeizokuJohoKoshin" => true,
+            "TaDantaiKeizokuSeted" => true,
+            "KanyushaLoginRecorded" => true,
+            "KanyushaSakujoed" => true,
+            "NendoKanyuImported" => true,
+            "NendoKoshinKaishi" => true,
+            "KanyushaJohoSeted" => true,
+            "KanyushaJohoByKanriSiteUpdated" => true,
+            "ShozokuKenchikushikaiJohoSeted" => true,
+            "ShozokuKenchikushikaiJohoByKanriSiteUpdated" => true,
+            "ShozokuKenchikushikaiIsekied" => true,
+            "MoushikomiMethodCodeSeted" => true,
+            "CpdNoSeted" => true,
+            "TaDoushuruiHokenKeiyakuAriAried" => true,
+            "TaDoushuruiHokenKeiyakuAriNashied" => true,
+            "FurikomiIraiKakunined" => true,
+            "NendoReminderTantoshaSeted" => true,
+            "NendoReminderTantoshaCleared" => true,
+            "ReminderMemoUpdated" => true,
+            "FurikaeKozaJohoSeted" => true,
+            "FurikaeKozaJohoCleared" => true,
+            "FurikaeKozaKakunined" => true,
+            "KihonShiharaiMethodSeted" => true,
+            "KonnendoShiharaiMethodSeted" => true,
+            "NyukinTorokuked" => true,
+            "NyukinKabusokuChoseied" => true,
+            "HenreikinShiharaiTorokued" => true,
+            "GyomuSaigaiSogoTokuyakuKakuninRecorded" => true,
+            "GyomuSaigaiSogoTokuyakuKakuninDeleted" => true,
+            "KanyujiKakunined" => true,
+            "KenchikushiKakunined" => true,
+            "NendoKanyuConfirmed" => true,
+            "BunshoInsatsuKirokued" => true,
+            "KanyushaShoInsatsuLogDeleted" => true,
+            "NendoKeiyakuMitsumoriMitsumoriTekiyo" => true,
+            "NendoKanyuSakujoed" => true,
+            "KeiyakuImported" => true,
+            "KeiyakuKakekinShisanCompleted" => true,
+            "KeiyakuKakuninZumiNiIko" => true,
+            "KeiyakuKaiyakuManryoed" => true,
+            _ => false
+        };
 
     private static HashSet<string> LoadSkippedEventTypes()
     {
@@ -427,19 +595,156 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost
         return result;
     }
 
-    private string PeekSerializedState() =>
-        _instance is null ? "{}" : _instance.SerializeState();
+    private string PeekSerializedState()
+    {
+        if (_cachedSerializedState is not null && _cachedSerializedStateVersion == _version)
+        {
+            return _cachedSerializedState;
+        }
 
-    private WasmStateSnapshot CreateSnapshot() =>
-        new(
-            StateJson: EnsureInstance().SerializeState(),
+        if (_instance is null)
+        {
+            return "{}";
+        }
+
+        string stateJson = _instance.SerializeState();
+        SetSerializedStateCache(stateJson);
+        return stateJson;
+    }
+
+    private async Task<WasmStateSnapshot> CreateSnapshotAsync()
+    {
+        string stateJson = PeekSerializedState();
+        byte[] compressedStateJson = await CompressStringAsync(stateJson);
+
+        return new WasmStateSnapshot(
+            StateJson: null,
             SafeVersion: _version,
             UnsafeVersion: _version,
             SafeLastSortableUniqueId: _lastSortableUniqueId,
             LastSortableUniqueId: _lastSortableUniqueId,
             LastEventId: _lastEventId,
             ProjectorVersion: _projectorVersion,
-            TagProjector: _projectorName);
+            TagProjector: _projectorName,
+            CompressedStateJson: compressedStateJson);
+    }
+
+    private static async Task<string> ReadSnapshotStateJsonAsync(WasmStateSnapshot snapshot)
+    {
+        if (snapshot.CompressedStateJson is { Length: > 0 } compressedStateJson)
+        {
+            return await DecompressToStringAsync(compressedStateJson);
+        }
+
+        if (!string.IsNullOrWhiteSpace(snapshot.StateJson))
+        {
+            return snapshot.StateJson;
+        }
+
+        throw new InvalidOperationException("WASM snapshot does not contain any serialized state payload.");
+    }
+
+    private bool ShouldSkipOrphanKanyushaListEvent(string eventType, string payloadJson)
+    {
+        if (!string.Equals(_projectorName, "KanyushaListProjection", StringComparison.Ordinal) ||
+            !KanyushaListOrphanSkippableEventTypes.Contains(eventType) ||
+            !TryReadNendoScopedReference(payloadJson, out string? nendoKanyuId, out int? kanyushaNo))
+        {
+            return false;
+        }
+
+        bool knownByNendo = !string.IsNullOrWhiteSpace(nendoKanyuId) &&
+            _kanyushaListKnownNendoIndex.ContainsKey(nendoKanyuId);
+        bool knownByKanyusha = kanyushaNo is not null && _kanyushaListKnownKanyushaNos.Contains(kanyushaNo.Value);
+
+        return !knownByNendo && !knownByKanyusha;
+    }
+
+    private void RefreshKanyushaListShadowState(string stateJson)
+    {
+        _kanyushaListKnownKanyushaNos.Clear();
+        _kanyushaListKnownNendoIndex.Clear();
+
+        if (!string.Equals(_projectorName, "KanyushaListProjection", StringComparison.Ordinal) ||
+            string.IsNullOrWhiteSpace(stateJson) ||
+            stateJson == "{}")
+        {
+            return;
+        }
+
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(stateJson);
+            JsonElement root = document.RootElement;
+            JsonElement projectionRoot = root.TryGetProperty("Projection", out JsonElement projection)
+                ? projection
+                : root;
+
+            if (projectionRoot.TryGetProperty("KanyushaItems", out JsonElement kanyushaItems) &&
+                kanyushaItems.ValueKind == JsonValueKind.Object)
+            {
+                foreach (JsonProperty property in kanyushaItems.EnumerateObject())
+                {
+                    if (int.TryParse(property.Name, out int kanyushaNo))
+                    {
+                        _kanyushaListKnownKanyushaNos.Add(kanyushaNo);
+                    }
+                }
+            }
+
+            if (root.TryGetProperty("ReverseIndex", out JsonElement reverseIndex) &&
+                reverseIndex.ValueKind == JsonValueKind.Object)
+            {
+                foreach (JsonProperty property in reverseIndex.EnumerateObject())
+                {
+                    if (property.Value.ValueKind == JsonValueKind.Number &&
+                        property.Value.TryGetInt32(out int kanyushaNo))
+                    {
+                        _kanyushaListKnownNendoIndex[property.Name] = kanyushaNo;
+                    }
+                }
+            }
+        }
+        catch
+        {
+            _kanyushaListKnownKanyushaNos.Clear();
+            _kanyushaListKnownNendoIndex.Clear();
+        }
+    }
+
+    private static bool TryReadNendoScopedReference(string payloadJson, out string? nendoKanyuId, out int? kanyushaNo)
+    {
+        nendoKanyuId = null;
+        kanyushaNo = null;
+
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(payloadJson);
+            JsonElement root = document.RootElement;
+
+            if (root.TryGetProperty("nendoKanyuId", out JsonElement nendoKanyuIdElement) &&
+                nendoKanyuIdElement.ValueKind == JsonValueKind.Object &&
+                nendoKanyuIdElement.TryGetProperty("value", out JsonElement nendoKanyuIdValue) &&
+                nendoKanyuIdValue.ValueKind == JsonValueKind.String)
+            {
+                nendoKanyuId = nendoKanyuIdValue.GetString();
+            }
+
+            if (root.TryGetProperty("kanyushaNo", out JsonElement kanyushaNoElement) &&
+                kanyushaNoElement.ValueKind == JsonValueKind.Object &&
+                kanyushaNoElement.TryGetProperty("value", out JsonElement kanyushaNoValue) &&
+                kanyushaNoValue.TryGetInt32(out int parsedKanyushaNo))
+            {
+                kanyushaNo = parsedKanyushaNo;
+            }
+
+            return !string.IsNullOrWhiteSpace(nendoKanyuId) || kanyushaNo is not null;
+        }
+        catch
+        {
+            return false;
+        }
+    }
 
     private static async Task<byte[]> CompressStringAsync(string value)
     {
@@ -464,6 +769,18 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost
         await using var gzip = new GZipStream(input, CompressionMode.Decompress);
         using var reader = new StreamReader(gzip, Encoding.UTF8);
         return await reader.ReadToEndAsync();
+    }
+
+    private void InvalidateSerializedStateCache()
+    {
+        _cachedSerializedState = null;
+        _cachedSerializedStateVersion = -1;
+    }
+
+    private void SetSerializedStateCache(string stateJson)
+    {
+        _cachedSerializedState = stateJson;
+        _cachedSerializedStateVersion = _version;
     }
 
     private async Task<SerializableMultiProjectionStateEnvelope?> DeserializeEnvelopeAsync(
