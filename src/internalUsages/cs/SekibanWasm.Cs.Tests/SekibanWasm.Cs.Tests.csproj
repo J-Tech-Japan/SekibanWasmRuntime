@@ -35,9 +35,12 @@
     <ProjectReference Include="..\..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.WithoutResult\Sekiban.Dcb.WithoutResult.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\SekibanWasm.Cs.WasmServer\SerializedCommandEndpoints.cs" Link="SerializedCommandEndpoints.cs" />
+  </ItemGroup>
+
   <ItemGroup Condition="'$(HasKenbaiSources)' == 'true'">
     <ProjectReference Include="$(KenbaiEventSourceProjectPath)" />
-    <Compile Include="..\SekibanWasm.Cs.WasmServer\SerializedCommandEndpoints.cs" Link="SerializedCommandEndpoints.cs" />
     <Compile Include="..\..\..\..\..\Kenbai\src\Aic.Kenbai.EventSource.Wasm\AicDomainJsonContext.cs" Link="Kenbai\AicDomainJsonContext.cs" />
     <Compile Include="..\..\..\..\..\Kenbai\src\Aic.Kenbai.EventSource.Wasm\AicWasmDomainType.cs" Link="Kenbai\AicWasmDomainType.cs" />
     <Compile Include="..\..\..\..\..\Kenbai\src\Aic.Kenbai.EventSource.Wasm\KenbaiEventTypeRegistrar.cs" Link="Kenbai\KenbaiEventTypeRegistrar.cs" />
