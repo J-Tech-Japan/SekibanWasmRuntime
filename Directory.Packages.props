@@ -17,6 +17,7 @@
 
     <!-- Microsoft ASP.NET / EF Core -->
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.5" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.5" />
 
     <!-- Microsoft Extensions -->
@@ -47,6 +48,7 @@
     <PackageVersion Include="Sekiban.Dcb.Orleans.Core" Version="10.1.9" />
     <PackageVersion Include="Sekiban.Dcb.Orleans.WithoutResult" Version="10.1.9" />
     <PackageVersion Include="Sekiban.Dcb.Postgres" Version="10.1.9" />
+    <PackageVersion Include="Sekiban.Dcb.Sqlite" Version="10.1.9" />
     <PackageVersion Include="Sekiban.Dcb.WithoutResult" Version="10.1.9" />
 
     <!-- Testing -->

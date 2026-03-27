@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Microsoft.Data.Sqlite" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -22,19 +23,24 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Sekiban.Dcb.WithoutResult" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\..\..\lib\Sekiban.Dcb.WasmRuntime\Sekiban.Dcb.WasmRuntime.csproj" />
+    <ProjectReference Include="..\..\..\lib\Sekiban.Dcb.WasmRuntime.Wasmtime\Sekiban.Dcb.WasmRuntime.Wasmtime.csproj" />
     <ProjectReference Include="..\..\..\lib\Sekiban.Dcb.WasmRuntime.Remote\Sekiban.Dcb.WasmRuntime.Remote.csproj" />
     <ProjectReference Include="..\..\..\runtime\Sekiban.Dcb.WasmRuntime.Host\Sekiban.Dcb.WasmRuntime.Host.csproj" />
     <ProjectReference Include="..\SekibanWasm.Cs.Domain\SekibanWasm.Cs.Domain.csproj" />
     <ProjectReference Include="..\SekibanWasm.Cs.ClientApi\SekibanWasm.Cs.ClientApi.csproj" />
+    <ProjectReference Include="..\..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.WithoutResult\Sekiban.Dcb.WithoutResult.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Kenbai\src\Aic.Kenbai.EventSource\Aic.Kenbai.EventSource.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <Compile Include="..\SekibanWasm.Cs.WasmServer\SerializedCommandEndpoints.cs" Link="SerializedCommandEndpoints.cs" />
+    <Compile Include="..\..\..\..\..\Kenbai\src\Aic.Kenbai.EventSource.Wasm\AicDomainJsonContext.cs" Link="Kenbai\AicDomainJsonContext.cs" />
+    <Compile Include="..\..\..\..\..\Kenbai\src\Aic.Kenbai.EventSource.Wasm\AicWasmDomainType.cs" Link="Kenbai\AicWasmDomainType.cs" />
+    <Compile Include="..\..\..\..\..\Kenbai\src\Aic.Kenbai.EventSource.Wasm\KenbaiEventTypeRegistrar.cs" Link="Kenbai\KenbaiEventTypeRegistrar.cs" />
+    <Compile Include="..\..\..\..\..\Kenbai\src\Aic.Kenbai.EventSource.Wasm\WasmListQueryResponse.cs" Link="Kenbai\WasmListQueryResponse.cs" />
+    <Compile Include="..\..\..\..\..\Kenbai\src\Aic.Kenbai.EventSource.Wasm\WasmHokenNendoListQueryResponse.cs" Link="Kenbai\WasmHokenNendoListQueryResponse.cs" />
+    <Compile Include="..\..\..\..\..\Kenbai\src\Aic.Kenbai.EventSource.Wasm\WasmBufferedEventMetadata.cs" Link="Kenbai\WasmBufferedEventMetadata.cs" />
   </ItemGroup>
 
 </Project>

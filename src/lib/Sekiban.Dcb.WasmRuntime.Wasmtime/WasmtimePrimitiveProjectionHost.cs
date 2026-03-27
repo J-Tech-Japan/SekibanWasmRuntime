@@ -5,6 +5,9 @@ namespace Sekiban.Dcb.WasmRuntime.Wasmtime;
 
 public sealed class WasmtimePrimitiveProjectionHost : IPrimitiveProjectionHost
 {
+    private const string DefaultNullDevicePath = "/dev/null";
+    private const string DefaultStdoutDevicePath = "/dev/stdout";
+    private const string DefaultStderrDevicePath = "/dev/stderr";
     private static readonly bool TraceLifecycle =
         string.Equals(
             Environment.GetEnvironmentVariable("WASM_RUNTIME_TRACE_LIFECYCLE"),
@@ -40,9 +43,13 @@ public sealed class WasmtimePrimitiveProjectionHost : IPrimitiveProjectionHost
             var module = _moduleCache.GetOrLoad(modulePath);
             Trace($"host:create_instance:module_loaded projector={projectorName} path={modulePath}");
             var store = new Store(_runtime.Engine);
-            store.SetWasiConfiguration(new WasiConfiguration()
-                .WithInheritedStandardOutput()
-                .WithInheritedStandardError());
+            var wasiConfiguration = new WasiConfiguration()
+                .WithStandardOutput(ResolveWasiOutputPath("WASM_RUNTIME_STDOUT_PATH"))
+                .WithStandardError(ResolveWasiOutputPath("WASM_RUNTIME_STDERR_PATH"));
+            wasiConfiguration = wasiConfiguration.WithEnvironmentVariables(
+                _options.ResolveGuestEnvironmentVariables()
+                    .Select(pair => (pair.Key, pair.Value)));
+            store.SetWasiConfiguration(wasiConfiguration);
 
             using var linker = _runtime.CreateLinker();
             Trace($"host:create_instance:before_instantiate projector={projectorName}");
@@ -60,5 +67,27 @@ public sealed class WasmtimePrimitiveProjectionHost : IPrimitiveProjectionHost
         }
 
         Console.WriteLine($"[wasmtime-trace] {message}");
+    }
+
+    private static string ResolveWasiOutputPath(string environmentVariableName)
+    {
+        var configuredPath = Environment.GetEnvironmentVariable(environmentVariableName);
+        if (!string.IsNullOrWhiteSpace(configuredPath))
+        {
+            return configuredPath;
+        }
+
+        bool guestTraceEnabled = string.Equals(
+            Environment.GetEnvironmentVariable("KENBAI_WASM_GUEST_TRACE"),
+            "1",
+            StringComparison.Ordinal);
+        if (!guestTraceEnabled)
+        {
+            return DefaultNullDevicePath;
+        }
+
+        return string.Equals(environmentVariableName, "WASM_RUNTIME_STDERR_PATH", StringComparison.Ordinal)
+            ? DefaultStderrDevicePath
+            : DefaultStdoutDevicePath;
     }
 }
