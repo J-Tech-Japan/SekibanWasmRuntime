@@ -7,6 +7,10 @@ namespace Sekiban.Dcb.WasmRuntime.Wasmtime;
 
 public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
 {
+    private sealed record BufferedEventMetadata(
+        string[] Tags,
+        string? SortableUniqueId);
+
     private static readonly JsonDocumentOptions CompactPayloadJsonDocumentOptions = new()
     {
         MaxDepth = 256
@@ -18,6 +22,16 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
     private static readonly bool TraceLifecycle =
         string.Equals(
             Environment.GetEnvironmentVariable("WASM_RUNTIME_TRACE_LIFECYCLE"),
+            "1",
+            StringComparison.Ordinal);
+    private static readonly bool EnableLegacyPayloadCompaction =
+        string.Equals(
+            Environment.GetEnvironmentVariable("WASM_RUNTIME_ENABLE_LEGACY_PAYLOAD_COMPACTION"),
+            "1",
+            StringComparison.Ordinal);
+    private static readonly bool DebugBypassTagsForSubmitted =
+        string.Equals(
+            Environment.GetEnvironmentVariable("WASM_RUNTIME_DEBUG_BYPASS_TAGS_FOR_SUBMITTED"),
             "1",
             StringComparison.Ordinal);
     private static readonly string TraceFilePath =
@@ -35,12 +49,17 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
 
     private readonly Func<int, int, int>? _createInstance;
     private readonly Action<int, int, int, int, int>? _applyEvent;
-    private readonly Function? _applyEventWithTags;
+    private readonly Action<int, int, int, int, int, int, int>? _applyEventWithMetadata;
+    private readonly Action<int, int, int, int, int, int, int>? _applyEventWithSortable;
+    private readonly Action<int, int, int, int, int, int, int, int, int>? _applyEventWithTags;
     private readonly Action<int>? _beginPayloadBuffer;
     private readonly Action<int, int, int>? _appendPayloadChunk;
+    private readonly Action<int>? _beginMetadataBuffer;
+    private readonly Action<int, int, int>? _appendMetadataChunk;
     private readonly Action<int, int, int>? _applyBufferedEvent;
-    private readonly Function? _applyBufferedEventWithTags;
-    private readonly Function? _applyBufferedEventWithSortable;
+    private readonly Action<int, int, int, int, int>? _applyBufferedEventWithMetadata;
+    private readonly Action<int, int, int, int, int, int, int>? _applyBufferedEventWithTags;
+    private readonly Action<int, int, int, int, int>? _applyBufferedEventWithSortable;
     private readonly Func<int, int, int, int, int, long>? _executeQuery;
     private readonly Func<int, int, int, int, int, long>? _executeListQuery;
     private readonly Func<int, long>? _serializeState;
@@ -111,12 +130,21 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
 
             _createInstance = instance.GetFunction<int, int, int>("create_instance");
             _applyEvent = instance.GetAction<int, int, int, int, int>("apply_event");
-            _applyEventWithTags = instance.GetFunction("apply_event_with_tags");
+            _applyEventWithMetadata = instance.GetFunction("apply_event_with_metadata")
+                ?.WrapAction<int, int, int, int, int, int, int>();
+            _applyEventWithSortable = instance.GetFunction("apply_event_with_sortable")
+                ?.WrapAction<int, int, int, int, int, int, int>();
+            _applyEventWithTags = instance.GetFunction("apply_event_with_tags")
+                ?.WrapAction<int, int, int, int, int, int, int, int, int>();
             _beginPayloadBuffer = instance.GetAction<int>("begin_payload_buffer");
             _appendPayloadChunk = instance.GetAction<int, int, int>("append_payload_chunk");
+            _beginMetadataBuffer = instance.GetAction<int>("begin_metadata_buffer");
+            _appendMetadataChunk = instance.GetAction<int, int, int>("append_metadata_chunk");
             _applyBufferedEvent = instance.GetAction<int, int, int>("apply_buffered_event");
-            _applyBufferedEventWithTags = instance.GetFunction("apply_buffered_event_with_tags");
-            _applyBufferedEventWithSortable = instance.GetFunction("apply_buffered_event_with_sortable");
+            _applyBufferedEventWithMetadata = instance.GetAction<int, int, int, int, int>("apply_buffered_event_with_metadata");
+            _applyBufferedEventWithTags = instance.GetFunction("apply_buffered_event_with_tags")
+                ?.WrapAction<int, int, int, int, int, int, int>();
+            _applyBufferedEventWithSortable = instance.GetAction<int, int, int, int, int>("apply_buffered_event_with_sortable");
             _executeQuery = instance.GetFunction<int, int, int, int, int, long>("execute_query");
             _executeListQuery = instance.GetFunction<int, int, int, int, int, long>("execute_list_query");
             _serializeState = instance.GetFunction<int, long>("serialize_state");
@@ -124,6 +152,9 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
 
             _alloc = instance.GetFunction<int, int>("alloc");
             _free = instance.GetAction<int, int>("dealloc") ?? instance.GetAction<int, int>("free");
+
+            Trace(
+                $"constructor:exports projector={projectorType} applyEventWithMetadata={(_applyEventWithMetadata is not null ? 1 : 0)} applyBufferedEventWithMetadata={(_applyBufferedEventWithMetadata is not null ? 1 : 0)} applyEventWithTags={(_applyEventWithTags is not null ? 1 : 0)} applyBufferedEventWithTags={(_applyBufferedEventWithTags is not null ? 1 : 0)}");
 
             if (_createInstance == null)
             {
@@ -159,6 +190,7 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
         {
             ThrowIfDisposed();
             string effectivePayloadJson = TryCompactPayload(eventType, eventPayloadJson);
+            bool bypassTags = ShouldBypassTagsForSpecialCaseEvent(eventType);
             var (eventTypePtr, eventTypeLen) = WriteString(eventType);
             try
             {
@@ -169,7 +201,7 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
                     Trace(
                         $"apply_event:payload projectorInstance={_instanceId} eventType={eventType} payload={effectivePayloadJson}");
                 }
-                if (CanUseBufferedPayloadPath(eventType, effectivePayloadJson.Length, tags.Count > 0))
+                if (CanUseBufferedPayloadPath(eventType, effectivePayloadJson.Length, tags.Count > 0 && !bypassTags))
                 {
                     Trace(
                         $"apply_event:path projectorInstance={_instanceId} eventType={eventType} mode=buffered");
@@ -184,12 +216,59 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
                     var (payloadPtr, payloadLen) = WriteString(effectivePayloadJson);
                     try
                     {
-                        if (ShouldUseLegacyApplyWithoutTags(eventType))
+                        if (bypassTags && _applyEventWithSortable is not null)
+                        {
+                            var (sortablePtr, sortableLen) = WriteString(sortableUniqueId ?? string.Empty);
+                            try
+                            {
+                                Trace(
+                                    $"apply_event:before_invoke_with_sortable projectorInstance={_instanceId} eventType={eventType} payloadLength={effectivePayloadJson.Length}");
+                                _applyEventWithSortable(
+                                    _instanceId,
+                                    eventTypePtr,
+                                    eventTypeLen,
+                                    payloadPtr,
+                                    payloadLen,
+                                    sortablePtr,
+                                    sortableLen);
+                                Trace(
+                                    $"apply_event:after_invoke_with_sortable projectorInstance={_instanceId} eventType={eventType} mode=legacy_with_sortable");
+                            }
+                            finally
+                            {
+                                Free(sortablePtr, sortableLen);
+                            }
+                        }
+                        else if (ShouldUseLegacyApplyWithoutTags(eventType))
                         {
                             EnsureExport(_applyEvent, nameof(_applyEvent));
                             _applyEvent!(_instanceId, eventTypePtr, eventTypeLen, payloadPtr, payloadLen);
                             Trace(
                                 $"apply_event:completed projectorInstance={_instanceId} eventType={eventType} mode=legacy_no_tags");
+                        }
+                        else if (_applyEventWithMetadata is not null)
+                        {
+                            string metadataJson = CreateBufferedEventMetadataJson(tags, sortableUniqueId);
+                            var (metadataPtr, metadataLen) = WriteString(metadataJson);
+                            try
+                            {
+                                Trace(
+                                    $"apply_event:before_invoke_with_metadata projectorInstance={_instanceId} eventType={eventType} payloadLength={effectivePayloadJson.Length} metadataLength={metadataJson.Length}");
+                                _applyEventWithMetadata!(
+                                    _instanceId,
+                                    eventTypePtr,
+                                    eventTypeLen,
+                                    payloadPtr,
+                                    payloadLen,
+                                    metadataPtr,
+                                    metadataLen);
+                                Trace(
+                                    $"apply_event:after_invoke_with_metadata projectorInstance={_instanceId} eventType={eventType} mode=legacy_with_metadata");
+                            }
+                            finally
+                            {
+                                Free(metadataPtr, metadataLen);
+                            }
                         }
                         else if (_applyEventWithTags is not null)
                         {
@@ -198,7 +277,9 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
                             var (sortablePtr, sortableLen) = WriteString(sortableUniqueId ?? string.Empty);
                             try
                             {
-                                _applyEventWithTags.Invoke(
+                                Trace(
+                                    $"apply_event:before_invoke_with_tags projectorInstance={_instanceId} eventType={eventType} payloadLength={effectivePayloadJson.Length} tagsJsonLength={tagsJson.Length}");
+                                _applyEventWithTags!(
                                     _instanceId,
                                     eventTypePtr,
                                     eventTypeLen,
@@ -209,7 +290,7 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
                                     sortablePtr,
                                     sortableLen);
                                 Trace(
-                                    $"apply_event:completed projectorInstance={_instanceId} eventType={eventType} mode=legacy_with_tags");
+                                    $"apply_event:after_invoke_with_tags projectorInstance={_instanceId} eventType={eventType} mode=legacy_with_tags");
                             }
                             finally
                             {
@@ -245,7 +326,14 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
             return false;
         }
 
-        if (hasTags ? _applyBufferedEventWithTags is null : _applyBufferedEvent is null)
+        if (hasTags)
+        {
+            if (_applyBufferedEventWithMetadata is null && _applyBufferedEventWithTags is null)
+            {
+                return false;
+            }
+        }
+        else if (_applyBufferedEvent is null)
         {
             return false;
         }
@@ -343,40 +431,16 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
             _ => false
         };
 
-    private static bool ShouldUseLegacyApplyWithoutTags(string eventType) =>
-        eventType switch
-        {
-            "KanyushaSakujoed" => true,
-            "NendoKanyuSakujoed" => true,
-            "KeiyakuImported" => true,
-            "KeiyakuReplaced" => true,
-            "KeiyakuKakekinShisanCompleted" => true,
-            "CpdNoSeted" => true,
-            "FurikaeKozaJohoSeted" => true,
-            "KihonShiharaiMethodSeted" => true,
-            "KonnendoShiharaiMethodSeted" => true,
-            "ShozokuKenchikushikaiJohoByKanriSiteUpdated" => true,
-            "KenchikushikaiSaikakuninKanryoed" => true,
-            "KanyushaAccountLoginCreateRequested" => true,
-            "KanyushaAccountLoginCreatedTokenIssued" => true,
-            "KanyushaLoginRecorded" => true,
-            "BunshoInsatsuKirokued" => true,
-            "KanyushaNumberLoginCreated" => true,
-            "KanyushaNumberLoginRequested" => true,
-            _ => false
-        };
+    private static bool ShouldUseLegacyApplyWithoutTags(string eventType) => false;
 
     private static bool ShouldBypassTagsForSpecialCaseEvent(string eventType) =>
         eventType switch
         {
-            "KanyushaImported" => true,
-            "KanyushaSakujoed" => true,
             "NendoKanyuImported" => true,
-            "KanyushaWebServiceApplicationSubmitted" => true,
-            "KanyushaPaperApplicationSubmitted" => true,
-            "KanyushaJohoSeted" => true,
-            "KanyushaJohoByKanriSiteUpdated" => true,
+            "NendoKanyuReplaced" => true,
             "KeiyakuImported" => true,
+            "KeiyakuReplaced" => true,
+            "KanyushaWebServiceApplicationSubmitted" when DebugBypassTagsForSubmitted => true,
             _ => false
         };
 
@@ -453,6 +517,11 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
 
     private static string TryCompactPayload(string eventType, string eventPayloadJson)
     {
+        if (!EnableLegacyPayloadCompaction)
+        {
+            return eventPayloadJson;
+        }
+
         try
         {
             using JsonDocument document = JsonDocument.Parse(eventPayloadJson, CompactPayloadJsonDocumentOptions);
@@ -479,6 +548,13 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
             return eventPayloadJson;
         }
     }
+
+    private static string CreateBufferedTagsJson(IReadOnlyList<string> tags) =>
+        JsonSerializer.Serialize(tags?.ToArray() ?? []);
+
+    private static string CreateBufferedEventMetadataJson(IReadOnlyList<string> tags, string? sortableUniqueId) =>
+        JsonSerializer.Serialize(
+            new BufferedEventMetadata(tags?.ToArray() ?? [], sortableUniqueId));
 
     private static string WriteCompactApplicationSubmittedPayload(JsonElement root, bool isWebApplication)
     {
@@ -1018,14 +1094,61 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
         }
         Trace($"apply_buffered:after_chunks projectorInstance={_instanceId} chunkBytes={payloadBytes.Length}");
 
-        if (ShouldBypassTagsForSpecialCaseEvent(eventType) &&
+        if (tags.Count > 0 &&
+            _beginMetadataBuffer is not null &&
+            _appendMetadataChunk is not null &&
+            _applyBufferedEventWithSortable is not null &&
+            !ShouldBypassTagsForSpecialCaseEvent(eventType))
+        {
+            string metadataJson = CreateBufferedTagsJson(tags);
+            EnsureExport(_beginMetadataBuffer, nameof(_beginMetadataBuffer));
+            EnsureExport(_appendMetadataChunk, nameof(_appendMetadataChunk));
+
+            _beginMetadataBuffer!(_instanceId);
+            byte[] metadataBytes = Encoding.UTF8.GetBytes(metadataJson);
+            int metadataOffset = 0;
+            while (metadataOffset < metadataBytes.Length)
+            {
+                int metadataChunkLength = Math.Min(BufferedPayloadChunkSize, metadataBytes.Length - metadataOffset);
+                var (metadataChunkPtr, metadataWrittenLength) = WriteBytes(metadataBytes.AsSpan(metadataOffset, metadataChunkLength));
+                try
+                {
+                    _appendMetadataChunk!(_instanceId, metadataChunkPtr, metadataWrittenLength);
+                }
+                finally
+                {
+                    Free(metadataChunkPtr, metadataWrittenLength);
+                }
+
+                metadataOffset += metadataChunkLength;
+            }
+
+            var (sortablePtr, sortableLen) = WriteString(sortableUniqueId ?? string.Empty);
+            try
+            {
+                Trace(
+                    $"apply_buffered:before_invoke_with_sortable_buffered_metadata projectorInstance={_instanceId} metadataLength={metadataJson.Length}");
+                _applyBufferedEventWithSortable(
+                    _instanceId,
+                    eventTypePtr,
+                    eventTypeLen,
+                    sortablePtr,
+                    sortableLen);
+                Trace($"apply_buffered:after_invoke_with_sortable_buffered_metadata projectorInstance={_instanceId}");
+            }
+            finally
+            {
+                Free(sortablePtr, sortableLen);
+            }
+        }
+        else if (ShouldBypassTagsForSpecialCaseEvent(eventType) &&
             _applyBufferedEventWithSortable is not null)
         {
             var (sortablePtr, sortableLen) = WriteString(sortableUniqueId ?? string.Empty);
             try
             {
                 Trace($"apply_buffered:before_invoke_with_sortable projectorInstance={_instanceId}");
-                _applyBufferedEventWithSortable.Invoke(
+                _applyBufferedEventWithSortable(
                     _instanceId,
                     eventTypePtr,
                     eventTypeLen,
@@ -1038,6 +1161,27 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
                 Free(sortablePtr, sortableLen);
             }
         }
+        else if (_applyBufferedEventWithMetadata is not null)
+        {
+            string metadataJson = CreateBufferedEventMetadataJson(tags, sortableUniqueId);
+            var (metadataPtr, metadataLen) = WriteString(metadataJson);
+            try
+            {
+                Trace(
+                    $"apply_buffered:before_invoke_with_metadata projectorInstance={_instanceId} metadataLength={metadataJson.Length}");
+                _applyBufferedEventWithMetadata!(
+                    _instanceId,
+                    eventTypePtr,
+                    eventTypeLen,
+                    metadataPtr,
+                    metadataLen);
+                Trace($"apply_buffered:after_invoke_with_metadata projectorInstance={_instanceId}");
+            }
+            finally
+            {
+                Free(metadataPtr, metadataLen);
+            }
+        }
         else if (_applyBufferedEventWithTags is not null)
         {
             var tagsJson = System.Text.Json.JsonSerializer.Serialize(tags ?? []);
@@ -1046,7 +1190,7 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
             try
             {
                 Trace($"apply_buffered:before_invoke_with_tags projectorInstance={_instanceId}");
-                _applyBufferedEventWithTags.Invoke(
+                _applyBufferedEventWithTags!(
                     _instanceId,
                     eventTypePtr,
                     eventTypeLen,

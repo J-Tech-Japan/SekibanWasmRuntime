@@ -3,6 +3,16 @@
     <WasmtimeDotnetPath>$(MSBuildThisFileDirectory)external/wasmtime-dotnet/src</WasmtimeDotnetPath>
   </PropertyGroup>
 
+  <!--
+    The Sekiban submodule manages package versions explicitly in each project.
+    Prevent this repository's central package management settings from flowing
+    into the nested submodule during CI restore/build.
+  -->
+  <PropertyGroup Condition="$([System.String]::Copy('$(MSBuildProjectFullPath)').Contains('/submodules/Sekiban/'))">
+    <ImportDirectoryPackagesProps>false</ImportDirectoryPackagesProps>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
   <!-- Silence warnings originating from submodule code so solution builds stay clean. -->
   <PropertyGroup Condition="$([System.String]::Copy('$(MSBuildProjectFullPath)').Contains('/external/wasmtime-dotnet/'))">
     <NoWarn>$(NoWarn);CS1591</NoWarn>

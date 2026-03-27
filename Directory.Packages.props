@@ -1,6 +1,7 @@
 <Project>
   <PropertyGroup>
-    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <ManagePackageVersionsCentrally Condition="$([System.String]::Copy('$(MSBuildProjectFullPath)').Contains('/submodules/Sekiban/'))">false</ManagePackageVersionsCentrally>
+    <ManagePackageVersionsCentrally Condition="'$(ManagePackageVersionsCentrally)' == ''">true</ManagePackageVersionsCentrally>
     <CentralPackageFloatingVersionsEnabled>true</CentralPackageFloatingVersionsEnabled>
   </PropertyGroup>
 
@@ -17,6 +18,7 @@
 
     <!-- Microsoft ASP.NET / EF Core -->
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.5" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.5" />
 
     <!-- Microsoft Extensions -->
@@ -47,10 +49,12 @@
     <PackageVersion Include="Sekiban.Dcb.Orleans.Core" Version="10.1.9" />
     <PackageVersion Include="Sekiban.Dcb.Orleans.WithoutResult" Version="10.1.9" />
     <PackageVersion Include="Sekiban.Dcb.Postgres" Version="10.1.9" />
+    <PackageVersion Include="Sekiban.Dcb.Sqlite" Version="10.1.9" />
     <PackageVersion Include="Sekiban.Dcb.WithoutResult" Version="10.1.9" />
 
     <!-- Testing -->
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageVersion Include="ResultBoxes" Version="0.4.0" />
     <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
 

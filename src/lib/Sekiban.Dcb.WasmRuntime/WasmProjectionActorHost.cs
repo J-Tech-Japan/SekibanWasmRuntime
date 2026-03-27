@@ -47,6 +47,16 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
     private static readonly HashSet<string> SkippedEventTypes = LoadSkippedEventTypes();
     private static readonly Dictionary<string, HashSet<string>> AllowedEventTypesByProjector =
         LoadAllowedEventTypesByProjector();
+    private static readonly bool EnableLegacyEventFiltering =
+        string.Equals(
+            Environment.GetEnvironmentVariable("WASM_RUNTIME_ENABLE_LEGACY_EVENT_FILTERING"),
+            "1",
+            StringComparison.Ordinal);
+    private static readonly bool EnableLegacyOrphanSkipping =
+        string.Equals(
+            Environment.GetEnvironmentVariable("WASM_RUNTIME_ENABLE_LEGACY_ORPHAN_SKIPPING"),
+            "1",
+            StringComparison.Ordinal);
     private static readonly bool TraceLifecycle =
         string.Equals(
             Environment.GetEnvironmentVariable("WASM_RUNTIME_TRACE_LIFECYCLE"),
@@ -444,6 +454,11 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
 
     private bool ShouldSkipEvent(string eventPayloadName, IReadOnlyList<string>? tags)
     {
+        if (!EnableLegacyEventFiltering)
+        {
+            return false;
+        }
+
         if (string.IsNullOrWhiteSpace(eventPayloadName))
         {
             return false;
@@ -646,6 +661,11 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
 
     private bool ShouldSkipOrphanKanyushaListEvent(string eventType, string payloadJson)
     {
+        if (!EnableLegacyOrphanSkipping)
+        {
+            return false;
+        }
+
         if (!string.Equals(_projectorName, "KanyushaListProjection", StringComparison.Ordinal) ||
             !KanyushaListOrphanSkippableEventTypes.Contains(eventType) ||
             !TryReadNendoScopedReference(payloadJson, out string? nendoKanyuId, out int? kanyushaNo))
