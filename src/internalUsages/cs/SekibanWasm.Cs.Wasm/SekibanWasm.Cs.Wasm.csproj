@@ -36,6 +36,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.DotNet.ILCompiler.LLVM" />
+    <PackageReference Include="ResultBoxes" />
     <PackageReference Include="runtime.linux-x64.microsoft.dotnet.ilcompiler.llvm" />
     <PackageReference Include="runtime.osx-arm64.microsoft.dotnet.ilcompiler.llvm"
                       Condition="'$(EnableMacIlCompilerRuntime)' == 'true'" />
