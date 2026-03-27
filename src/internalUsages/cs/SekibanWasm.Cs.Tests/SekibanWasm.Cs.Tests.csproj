@@ -6,6 +6,9 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <KenbaiEventSourceProjectPath>..\..\..\..\..\Kenbai\src\Aic.Kenbai.EventSource\Aic.Kenbai.EventSource.csproj</KenbaiEventSourceProjectPath>
+    <HasKenbaiSources Condition="Exists('$(KenbaiEventSourceProjectPath)')">true</HasKenbaiSources>
+    <HasKenbaiSources Condition="'$(HasKenbaiSources)' == ''">false</HasKenbaiSources>
   </PropertyGroup>
 
   <ItemGroup>
@@ -30,10 +33,10 @@
     <ProjectReference Include="..\SekibanWasm.Cs.Domain\SekibanWasm.Cs.Domain.csproj" />
     <ProjectReference Include="..\SekibanWasm.Cs.ClientApi\SekibanWasm.Cs.ClientApi.csproj" />
     <ProjectReference Include="..\..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.WithoutResult\Sekiban.Dcb.WithoutResult.csproj" />
-    <ProjectReference Include="..\..\..\..\..\Kenbai\src\Aic.Kenbai.EventSource\Aic.Kenbai.EventSource.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
+  <ItemGroup Condition="'$(HasKenbaiSources)' == 'true'">
+    <ProjectReference Include="$(KenbaiEventSourceProjectPath)" />
     <Compile Include="..\SekibanWasm.Cs.WasmServer\SerializedCommandEndpoints.cs" Link="SerializedCommandEndpoints.cs" />
     <Compile Include="..\..\..\..\..\Kenbai\src\Aic.Kenbai.EventSource.Wasm\AicDomainJsonContext.cs" Link="Kenbai\AicDomainJsonContext.cs" />
     <Compile Include="..\..\..\..\..\Kenbai\src\Aic.Kenbai.EventSource.Wasm\AicWasmDomainType.cs" Link="Kenbai\AicWasmDomainType.cs" />
@@ -41,6 +44,10 @@
     <Compile Include="..\..\..\..\..\Kenbai\src\Aic.Kenbai.EventSource.Wasm\WasmListQueryResponse.cs" Link="Kenbai\WasmListQueryResponse.cs" />
     <Compile Include="..\..\..\..\..\Kenbai\src\Aic.Kenbai.EventSource.Wasm\WasmHokenNendoListQueryResponse.cs" Link="Kenbai\WasmHokenNendoListQueryResponse.cs" />
     <Compile Include="..\..\..\..\..\Kenbai\src\Aic.Kenbai.EventSource.Wasm\WasmBufferedEventMetadata.cs" Link="Kenbai\WasmBufferedEventMetadata.cs" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(HasKenbaiSources)' != 'true'">
+    <Compile Remove="Kenbai*.cs" />
   </ItemGroup>
 
 </Project>
