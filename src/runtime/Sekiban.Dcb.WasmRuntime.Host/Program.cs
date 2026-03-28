@@ -44,6 +44,8 @@ var sqliteDatabasePath = string.Equals(databaseType, "sqlite", StringComparison.
     : null;
 var waitForSortableUniqueIdTimeout = ResolveWaitForSortableUniqueIdTimeout(builder.Configuration);
 var queryResponseTimeout = ResolveQueryResponseTimeout(builder.Configuration);
+var enableProjectionStatusEndpoint = builder.Environment.IsDevelopment()
+    || builder.Configuration.GetValue<bool>("KENBAI_WASM_ENABLE_PROJECTION_STATUS_ENDPOINT");
 
 builder.UseOrleans(silo =>
 {
@@ -154,28 +156,31 @@ app.MapGet("/health", () => Results.Ok(new
     manifest.DefaultModulePath
 }));
 
-app.MapGet("/api/sekiban/projections/{projectorName}/status", async (
-    HttpContext http,
-    string projectorName) =>
+if (enableProjectionStatusEndpoint)
 {
-    var clusterClient = http.RequestServices.GetRequiredService<IClusterClient>();
-    var serviceIdProvider = http.RequestServices.GetRequiredService<IServiceIdProvider>();
-    var grainKey = ServiceIdGrainKey.Build(serviceIdProvider.GetCurrentServiceId(), projectorName);
-    var grain = clusterClient.GetGrain<IMultiProjectionGrain>(grainKey);
-
-    var status = await grain.GetStatusAsync();
-    var catchUpStatus = await grain.GetCatchUpStatusAsync();
-    var health = await grain.GetHealthStatusAsync();
-
-    return Results.Ok(new
+    app.MapGet("/api/sekiban/projections/{projectorName}/status", async (
+        HttpContext http,
+        string projectorName) =>
     {
-        projectorName,
-        grainKey,
-        status,
-        catchUpStatus,
-        health
+        var clusterClient = http.RequestServices.GetRequiredService<IClusterClient>();
+        var serviceIdProvider = http.RequestServices.GetRequiredService<IServiceIdProvider>();
+        var grainKey = ServiceIdGrainKey.Build(serviceIdProvider.GetCurrentServiceId(), projectorName);
+        var grain = clusterClient.GetGrain<IMultiProjectionGrain>(grainKey);
+
+        var status = await grain.GetStatusAsync();
+        var catchUpStatus = await grain.GetCatchUpStatusAsync();
+        var health = await grain.GetHealthStatusAsync();
+
+        return Results.Ok(new
+        {
+            projectorName,
+            grainKey,
+            status,
+            catchUpStatus,
+            health
+        });
     });
-});
+}
 
 InstanceEndpoints.Map(app);
 
@@ -328,7 +333,6 @@ static async Task<IResult> ExecuteSerializedQueryAsync(
             http.RequestServices.GetService<IMultiProjectionStateStore>(),
             projectorName,
             projector.ProjectorVersion,
-            ResolveDatabaseType(configuration),
             request.WaitForSortableUniqueId!,
             waitTimeout,
             logger,
@@ -537,7 +541,6 @@ static async Task WaitForSortableUniqueIdAsync(
     IMultiProjectionStateStore? stateStore,
     string projectorName,
     string projectorVersion,
-    string databaseType,
     string sortableUniqueId,
     TimeSpan timeout,
     ILogger logger,
@@ -855,40 +858,5 @@ sealed class DirectSnapshotQueryCacheEntry : IDisposable
         ProjectorVersion = null;
         LastSortableUniqueId = null;
         EventsProcessed = 0;
-    }
-}
-
-
-sealed class NativeKanyushaListSnapshotCache : IDisposable
-{
-    public NativeKanyushaListSnapshotCacheEntry Entry { get; } = new();
-
-    public void Dispose() => Entry.Dispose();
-}
-
-sealed class NativeKanyushaListSnapshotCacheEntry : IDisposable
-{
-    public SemaphoreSlim Gate { get; } = new(1, 1);
-    public JsonDocument? StateDocument { get; private set; }
-    private string? LastSortableUniqueId { get; set; }
-    private long EventsProcessed { get; set; }
-
-    public bool Matches(string? lastSortableUniqueId, long eventsProcessed) =>
-        StateDocument is not null
-        && string.Equals(LastSortableUniqueId, lastSortableUniqueId, StringComparison.Ordinal)
-        && EventsProcessed == eventsProcessed;
-
-    public void Replace(JsonDocument stateDocument, string? lastSortableUniqueId, long eventsProcessed)
-    {
-        StateDocument?.Dispose();
-        StateDocument = stateDocument;
-        LastSortableUniqueId = lastSortableUniqueId;
-        EventsProcessed = eventsProcessed;
-    }
-
-    public void Dispose()
-    {
-        StateDocument?.Dispose();
-        Gate.Dispose();
     }
 }

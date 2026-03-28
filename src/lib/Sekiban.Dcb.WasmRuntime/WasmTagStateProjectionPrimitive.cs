@@ -263,26 +263,19 @@ public class WasmTagStateProjectionPrimitive : ITagStateProjectionAccumulator, I
     private (string PayloadJson, string? PayloadName, string? ProjectorVersion, string? TagGroup, string? TagContent, string? TagProjector)
         ExtractSerializedStateMetadata(string serializedState)
     {
-        try
-        {
-            var snapshot = WasmRuntimeJsonContext.DeserializeSnapshot(serializedState);
-            if (snapshot is null || snapshot.StateJson is null)
-            {
-                return (serializedState, null, null, null, null, null);
-            }
-
-            return (
-                snapshot.StateJson,
-                snapshot.TagPayloadName,
-                snapshot.ProjectorVersion,
-                snapshot.TagGroup,
-                snapshot.TagContent,
-                snapshot.TagProjector);
-        }
-        catch (JsonException)
+        var snapshot = WasmRuntimeJsonContext.DeserializeSnapshot(serializedState);
+        if (snapshot is null || snapshot.StateJson is null)
         {
             return (serializedState, null, null, null, null, null);
         }
+
+        return (
+            snapshot.StateJson,
+            snapshot.TagPayloadName,
+            snapshot.ProjectorVersion,
+            snapshot.TagGroup,
+            snapshot.TagContent,
+            snapshot.TagProjector);
     }
 
     public void Dispose() => _instance.Dispose();

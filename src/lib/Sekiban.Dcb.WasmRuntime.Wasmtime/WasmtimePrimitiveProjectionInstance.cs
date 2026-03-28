@@ -1612,8 +1612,21 @@ public class WasmtimePrimitiveProjectionInstance :
 
     private string ReadPackedString(long packed)
     {
-        byte[] bytes = ReadPackedBytes(packed);
-        return bytes.Length == 0 ? string.Empty : Encoding.UTF8.GetString(bytes);
+        if (packed == 0)
+        {
+            return string.Empty;
+        }
+
+        var ptr = unchecked((int)(packed >> 32));
+        var len = unchecked((int)(packed & 0xFFFFFFFF));
+        if (ptr == 0 || len == 0)
+        {
+            return string.Empty;
+        }
+
+        string result = Encoding.UTF8.GetString(_memory.GetSpan(ptr, len));
+        Free(ptr, len);
+        return result;
     }
 
     private byte[] ReadPackedBytes(long packed)
