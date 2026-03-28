@@ -110,6 +110,8 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
     private bool _isCatchedUp = true;
     private string? _cachedSerializedState;
     private int _cachedSerializedStateVersion = -1;
+    private byte[]? _pendingCompactionStateUtf8;
+    private int _pendingCompactionStateVersion = -1;
     private HashSet<int> _kanyushaListKnownKanyushaNos = [];
     private Dictionary<string, int> _kanyushaListKnownNendoIndex = new(StringComparer.Ordinal);
 
@@ -298,14 +300,19 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
     {
         try
         {
-            var inlineState = await CreateCompressedInlineSnapshotStateAsync();
-            var envelope = new SerializableMultiProjectionStateEnvelope(false, inlineState, null);
-
-            await JsonSerializer.SerializeAsync(target, envelope, _jsonOptions, cancellationToken);
+            byte[] stateJsonUtf8 = EnsureInstance().SerializeStateUtf8();
+            CapturePendingCompactionState(stateJsonUtf8);
+            byte[] compressedStateJson = await CompressUtf8Async(stateJsonUtf8);
+            await WriteCompressedSnapshotEnvelopeAsync(
+                target,
+                compressedStateJson,
+                stateJsonUtf8.LongLength,
+                cancellationToken);
             return ResultBox.FromValue(true);
         }
         catch (Exception ex)
         {
+            ClearPendingCompactionState();
             return ResultBox.Error<bool>(ex);
         }
     }
@@ -408,7 +415,7 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
             return;
         }
 
-        byte[] stateJsonUtf8 = _instance.SerializeStateUtf8();
+        byte[] stateJsonUtf8 = TakePendingCompactionState() ?? _instance.SerializeStateUtf8();
         IPrimitiveProjectionInstance previous = _instance;
         IPrimitiveProjectionInstance? replacement = null;
 
@@ -1004,6 +1011,7 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
     {
         _cachedSerializedState = null;
         _cachedSerializedStateVersion = -1;
+        ClearPendingCompactionState();
     }
 
     private void SetSerializedStateCache(string stateJson)
@@ -1011,6 +1019,77 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
         _cachedSerializedState = stateJson;
         _cachedSerializedStateVersion = _version;
     }
+
+    private void CapturePendingCompactionState(byte[] stateJsonUtf8)
+    {
+        _pendingCompactionStateUtf8 = stateJsonUtf8;
+        _pendingCompactionStateVersion = _version;
+    }
+
+    private byte[]? TakePendingCompactionState()
+    {
+        if (_pendingCompactionStateUtf8 is null || _pendingCompactionStateVersion != _version)
+        {
+            ClearPendingCompactionState();
+            return null;
+        }
+
+        byte[] stateJsonUtf8 = _pendingCompactionStateUtf8;
+        ClearPendingCompactionState();
+        return stateJsonUtf8;
+    }
+
+    private void ClearPendingCompactionState()
+    {
+        _pendingCompactionStateUtf8 = null;
+        _pendingCompactionStateVersion = -1;
+    }
+
+    private async Task WriteCompressedSnapshotEnvelopeAsync(
+        Stream target,
+        byte[] compressedStateJson,
+        long originalSizeBytes,
+        CancellationToken cancellationToken)
+    {
+        await using var writer = new Utf8JsonWriter(target);
+        writer.WriteStartObject();
+        writer.WriteBoolean(GetJsonPropertyName(nameof(SerializableMultiProjectionStateEnvelope.IsOffloaded)), false);
+        writer.WritePropertyName(GetJsonPropertyName(nameof(SerializableMultiProjectionStateEnvelope.InlineState)));
+        writer.WriteStartObject();
+        writer.WriteNull(GetJsonPropertyName(nameof(SerializableMultiProjectionState.PayloadJson)));
+        writer.WriteBase64String(
+            GetJsonPropertyName(nameof(SerializableMultiProjectionState.PayloadBase64)),
+            compressedStateJson);
+        writer.WriteString(
+            GetJsonPropertyName(nameof(SerializableMultiProjectionState.MultiProjectionPayloadType)),
+            CompressedSnapshotPayloadType);
+        writer.WriteString(GetJsonPropertyName(nameof(SerializableMultiProjectionState.ProjectorName)), _projectorName);
+        writer.WriteString(
+            GetJsonPropertyName(nameof(SerializableMultiProjectionState.ProjectorVersion)),
+            _projectorVersion);
+        writer.WriteString(
+            GetJsonPropertyName(nameof(SerializableMultiProjectionState.LastSortableUniqueId)),
+            _lastSortableUniqueId ?? string.Empty);
+        writer.WriteString(
+            GetJsonPropertyName(nameof(SerializableMultiProjectionState.LastEventId)),
+            _lastEventId ?? Guid.Empty);
+        writer.WriteNumber(GetJsonPropertyName(nameof(SerializableMultiProjectionState.Version)), _version);
+        writer.WriteBoolean(GetJsonPropertyName(nameof(SerializableMultiProjectionState.IsCatchedUp)), _isCatchedUp);
+        writer.WriteBoolean(GetJsonPropertyName(nameof(SerializableMultiProjectionState.IsSafeState)), true);
+        writer.WriteNumber(
+            GetJsonPropertyName(nameof(SerializableMultiProjectionState.OriginalSizeBytes)),
+            originalSizeBytes);
+        writer.WriteNumber(
+            GetJsonPropertyName(nameof(SerializableMultiProjectionState.CompressedSizeBytes)),
+            compressedStateJson.LongLength);
+        writer.WriteEndObject();
+        writer.WriteNull(GetJsonPropertyName(nameof(SerializableMultiProjectionStateEnvelope.OffloadedState)));
+        writer.WriteEndObject();
+        await writer.FlushAsync(cancellationToken);
+    }
+
+    private string GetJsonPropertyName(string clrPropertyName) =>
+        _jsonOptions.PropertyNamingPolicy?.ConvertName(clrPropertyName) ?? clrPropertyName;
 
     private async Task<SerializableMultiProjectionStateEnvelope?> DeserializeEnvelopeAsync(
         Stream source,
