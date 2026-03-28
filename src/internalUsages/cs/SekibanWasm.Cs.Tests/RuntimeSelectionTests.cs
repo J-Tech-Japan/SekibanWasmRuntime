@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Sekiban.Dcb.Events;
 using SekibanWasm.Cs.Domain;
 using SekibanWasm.Cs.Domain.Weather;
 using Sekiban.Dcb.Primitives;
@@ -386,7 +387,7 @@ public class RuntimeSelectionTests
     {
         var registry = new WasmProjectorRegistry();
         var factory = new WasmTagStateProjectionPrimitiveFactory(
-            new StubPrimitiveProjectionHost(),
+            new FailingPrimitiveProjectionHost(),
             registry,
             DomainType.GetDomainTypes().EventTypes,
             new JsonSerializerOptions(),
@@ -409,6 +410,34 @@ public class RuntimeSelectionTests
         var result = accumulator.GetSerializedState();
 
         Assert.Same(cachedState, result);
+    }
+
+    [Fact]
+    public void MissingAccumulator_ShouldFail_WhenPendingEventsExist()
+    {
+        var registry = new WasmProjectorRegistry();
+        var factory = new WasmTagStateProjectionPrimitiveFactory(
+            new FailingPrimitiveProjectionHost(),
+            registry,
+            DomainType.GetDomainTypes().EventTypes,
+            new JsonSerializerOptions(),
+            NullLogger<WasmTagStateProjectionPrimitiveFactory>.Instance);
+
+        var accumulator = factory.CreateAccumulator(TagStateId.Parse("weather:f-1:WeatherForecastProjector"));
+        var pendingEvents = new[]
+        {
+            new SerializableEvent(
+                Payload: JsonSerializer.SerializeToUtf8Bytes(
+                    new WeatherForecastCreated("f-1", "Tokyo", 25, "Warm", DateTimeOffset.UtcNow)),
+                SortableUniqueIdValue: "sorted-1",
+                Id: Guid.NewGuid(),
+                EventMetadata: new EventMetadata("cause", "correlation", "user"),
+                Tags: ["weather:f-1"],
+                EventPayloadName: nameof(WeatherForecastCreated))
+        };
+
+        Assert.True(accumulator.ApplyState(null));
+        Assert.False(accumulator.ApplyEvents(pendingEvents, null));
     }
 
     /// <summary>
@@ -478,6 +507,12 @@ public class RuntimeSelectionTests
         {
             return new StubPrimitiveProjectionInstance();
         }
+    }
+
+    private sealed class FailingPrimitiveProjectionHost : IPrimitiveProjectionHost
+    {
+        public IPrimitiveProjectionInstance CreateInstance(string projectorName) =>
+            throw new InvalidOperationException($"Failed to create '{projectorName}'.");
     }
 
     private sealed class StubPrimitiveProjectionInstance : IPrimitiveProjectionInstance

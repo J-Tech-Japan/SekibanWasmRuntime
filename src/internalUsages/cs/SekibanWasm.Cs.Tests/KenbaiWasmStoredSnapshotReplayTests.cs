@@ -117,6 +117,7 @@ public class KenbaiWasmStoredSnapshotReplayTests
         var host = new WasmProjectionActorHost(
             primitiveHost,
             registry,
+            KenbaiDcbDomainType.GetDomainTypes(),
             KenbaiDcbDomainType.GetDomainTypes().JsonSerializerOptions,
             ProjectorName,
             NullLogger.Instance);

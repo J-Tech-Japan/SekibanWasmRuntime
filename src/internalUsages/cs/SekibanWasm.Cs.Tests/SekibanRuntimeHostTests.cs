@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Sekiban.Dcb.WasmRuntime.Host;
+using Sekiban.Dcb.WasmRuntime.Wasmtime;
 using Xunit;
 
 namespace SekibanWasm.Cs.Tests;
@@ -210,6 +211,38 @@ public class SekibanRuntimeHostTests
         Assert.Contains("MissingProjector", body);
     }
 
+    [Fact]
+    public void WasmtimePrimitiveProjectionHost_ShouldReuseCoreInstanceAfterDispose()
+    {
+        var options = new WasmtimeHostOptions
+        {
+            DefaultModulePath = GetWeatherModulePath(),
+            EnableInstancePooling = true,
+            MaxPooledInstancesPerProjector = 1
+        };
+
+        using var runtime = new WasmtimeRuntime();
+        var moduleCache = new WasmtimeModuleCache(runtime);
+        using var host = new WasmtimePrimitiveProjectionHost(runtime, moduleCache, options);
+
+        var first = host.CreateInstance("WeatherForecastProjector");
+        WasmtimePrimitiveProjectionInstance firstCore = GetLeaseCore(first);
+        string initialState = first.SerializeState();
+        first.ApplyEvent(
+            "WeatherForecastCreated",
+            """{"forecastId":"f-1","location":"Tokyo","temperatureC":20,"summary":"Warm","createdAt":"2026-03-27T00:00:00Z"}""",
+            [],
+            null);
+        Assert.NotEqual(initialState, first.SerializeState());
+        first.Dispose();
+
+        var second = host.CreateInstance("WeatherForecastProjector");
+        WasmtimePrimitiveProjectionInstance secondCore = GetLeaseCore(second);
+        Assert.Same(firstCore, secondCore);
+        Assert.Equal(initialState, second.SerializeState());
+        second.Dispose();
+    }
+
     private static async Task<(int StatusCode, string Body)> ExecuteResultAsync(IResult result)
     {
         using var app = WebApplication.CreateBuilder().Build();
@@ -222,6 +255,28 @@ public class SekibanRuntimeHostTests
         httpContext.Response.Body.Position = 0;
         using var reader = new StreamReader(httpContext.Response.Body);
         return (httpContext.Response.StatusCode, await reader.ReadToEndAsync());
+    }
+
+    private static string GetWeatherModulePath()
+    {
+        string path = Path.GetFullPath(
+            Path.Combine(
+                AppContext.BaseDirectory,
+                "..",
+                "..",
+                "..",
+                "..",
+                "modules",
+                "csharp-weather.wasm"));
+        Assert.True(File.Exists(path), $"Test WASM module not found: {path}");
+        return path;
+    }
+
+    private static WasmtimePrimitiveProjectionInstance GetLeaseCore(Sekiban.Dcb.Primitives.IPrimitiveProjectionInstance instance)
+    {
+        var field = instance.GetType().GetField("_inner", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        Assert.NotNull(field);
+        return Assert.IsType<WasmtimePrimitiveProjectionInstance>(field!.GetValue(instance));
     }
 
     private sealed class StubProjectionInstance : Sekiban.Dcb.Primitives.IPrimitiveProjectionInstance

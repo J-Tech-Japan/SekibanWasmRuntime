@@ -22,6 +22,10 @@ public class WasmtimeHostOptions
 
     public IReadOnlyList<string> HostEnvironmentPrefixes { get; set; } = DefaultGuestEnvironmentPrefixes;
 
+    public bool EnableInstancePooling { get; set; } = true;
+
+    public int MaxPooledInstancesPerProjector { get; set; } = 4;
+
     public string? ResolveModulePath(string projectorName)
     {
         if (ProjectorModulePaths.TryGetValue(projectorName, out var path))

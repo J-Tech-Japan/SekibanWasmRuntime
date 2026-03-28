@@ -15,6 +15,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.ColdStorage\Sekiban.Dcb.ColdStorage.csproj" />
     <ProjectReference Include="..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.Orleans.WithoutResult\Sekiban.Dcb.Orleans.WithoutResult.csproj" />
     <ProjectReference Include="..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.Postgres\Sekiban.Dcb.Postgres.csproj" />
     <ProjectReference Include="..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.Sqlite\Sekiban.Dcb.Sqlite.csproj" />

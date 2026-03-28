@@ -40,6 +40,24 @@ public class RemotePrimitiveProjectionInstance : IPrimitiveProjectionInstance
         response.EnsureSuccessStatusCode();
     }
 
+    public void ApplyEvents(IReadOnlyList<PrimitiveProjectionEventEnvelope> events)
+    {
+        var request = new
+        {
+            events = events.Select(ev => new
+            {
+                eventType = ev.EventType,
+                payloadJson = ev.EventPayloadJson,
+                tags = ev.Tags,
+                sortableUniqueId = ev.SortableUniqueId
+            })
+        };
+        var response = _httpClient
+            .PostAsJsonAsync($"{_endpoint}/v1/instances/{_instanceId}/events", request)
+            .GetAwaiter().GetResult();
+        response.EnsureSuccessStatusCode();
+    }
+
     public string ExecuteQuery(string queryType, string queryParamsJson)
     {
         var request = new { queryType, queryParamsJson };

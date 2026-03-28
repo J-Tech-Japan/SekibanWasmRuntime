@@ -8,6 +8,7 @@ using Orleans.Configuration;
 using Orleans.Hosting;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.ColdEvents;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Orleans;
@@ -68,7 +69,6 @@ builder.Services.AddSingleton<JsonSerializerOptions>(jsonOptions);
 builder.Services.AddSingleton(registry);
 builder.Services.AddSingleton<ProjectionInstanceStore>();
 builder.Services.AddSingleton<DirectSnapshotQueryCache>();
-builder.Services.AddSingleton<NativeKanyushaListSnapshotCache>();
 builder.Services.AddSingleton(new WaitForSortableUniqueIdTimeoutOptions
 {
     Timeout = waitForSortableUniqueIdTimeout
@@ -79,6 +79,7 @@ builder.Services.Configure<MessagingOptions>(options =>
 });
 
 builder.Services.AddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
+builder.Services.AddSekibanDcbColdEventDefaults();
 if (string.Equals(databaseType, "sqlite", StringComparison.OrdinalIgnoreCase))
 {
     builder.Services.AddSekibanDcbSqlite(sqliteDatabasePath!);
@@ -86,6 +87,11 @@ if (string.Equals(databaseType, "sqlite", StringComparison.OrdinalIgnoreCase))
 else
 {
     builder.Services.AddSekibanDcbPostgres(connectionString!);
+}
+if (builder.Configuration.GetValue<bool>("Sekiban:ColdEvent:Enabled"))
+{
+    builder.Services.AddSekibanDcbColdExport(builder.Configuration, builder.Environment.ContentRootPath);
+    builder.Services.AddSekibanDcbColdEventHybridRead();
 }
 builder.Services.AddSekibanDcbNativeRuntime();
 builder.Services.AddSingleton<IEventSubscriptionResolver>(_ =>
@@ -148,6 +154,29 @@ app.MapGet("/health", () => Results.Ok(new
     manifest.DefaultModulePath
 }));
 
+app.MapGet("/api/sekiban/projections/{projectorName}/status", async (
+    HttpContext http,
+    string projectorName) =>
+{
+    var clusterClient = http.RequestServices.GetRequiredService<IClusterClient>();
+    var serviceIdProvider = http.RequestServices.GetRequiredService<IServiceIdProvider>();
+    var grainKey = ServiceIdGrainKey.Build(serviceIdProvider.GetCurrentServiceId(), projectorName);
+    var grain = clusterClient.GetGrain<IMultiProjectionGrain>(grainKey);
+
+    var status = await grain.GetStatusAsync();
+    var catchUpStatus = await grain.GetCatchUpStatusAsync();
+    var health = await grain.GetHealthStatusAsync();
+
+    return Results.Ok(new
+    {
+        projectorName,
+        grainKey,
+        status,
+        catchUpStatus,
+        health
+    });
+});
+
 InstanceEndpoints.Map(app);
 
 app.MapPost("/api/sekiban/serialized/tag-state", async (HttpContext http, TagStateRequest request) =>
@@ -170,6 +199,29 @@ app.MapPost("/api/sekiban/serialized/tag-state", async (HttpContext http, TagSta
     }
 
     return Results.Ok(result.GetValue());
+});
+
+app.MapPost("/api/sekiban/serialized/tag-latest-sortable", async (
+    HttpContext http,
+    TagLatestSortableRequest request) =>
+{
+    var actorAccessor = http.RequestServices.GetRequiredService<IActorObjectAccessor>();
+    var actorResult = await actorAccessor.GetActorAsync<ITagConsistentActorCommon>(request.Tag);
+    if (!actorResult.IsSuccess)
+    {
+        return Results.Ok(new TagLatestSortableResponse(false, string.Empty));
+    }
+
+    var latestSortableResult = await actorResult.GetValue().GetLatestSortableUniqueIdAsync();
+    if (!latestSortableResult.IsSuccess)
+    {
+        return Results.BadRequest(new { error = latestSortableResult.GetException().Message });
+    }
+
+    string lastSortableUniqueId = latestSortableResult.GetValue();
+    return Results.Ok(new TagLatestSortableResponse(
+        !string.IsNullOrWhiteSpace(lastSortableUniqueId),
+        lastSortableUniqueId));
 });
 
 app.MapPost("/api/sekiban/serialized/commit", async (
@@ -353,18 +405,6 @@ static async Task<IResult?> TryExecuteDirectSnapshotQueryAsync(
     }
 
     var record = recordOptional.Value;
-    var nativeKanyushaResult = await TryExecuteNativeKanyushaListSnapshotQueryAsync(
-        http,
-        projectorName,
-        request,
-        isListQuery,
-        record,
-        logger,
-        ct);
-    if (nativeKanyushaResult is not null)
-    {
-        return nativeKanyushaResult;
-    }
 
     var cache = http.RequestServices.GetRequiredService<DirectSnapshotQueryCache>();
     var cacheEntry = cache.GetOrAdd(projectorName);
@@ -492,354 +532,6 @@ static async Task<IResult?> TryExecuteDirectSnapshotQueryAsync(
     }
 }
 
-static async Task<IResult?> TryExecuteNativeKanyushaListSnapshotQueryAsync(
-    HttpContext http,
-    string projectorName,
-    SerializedQueryRequest request,
-    bool isListQuery,
-    MultiProjectionStateRecord record,
-    ILogger logger,
-    CancellationToken ct)
-{
-    if (!isListQuery
-        || !string.Equals(projectorName, "KanyushaListProjection", StringComparison.Ordinal)
-        || !string.Equals(request.QueryType, "GetKanyushaListQuery", StringComparison.Ordinal))
-    {
-        return null;
-    }
-
-    if (!TryParseNativeKanyushaListQuery(request.QueryParamsJson, out NativeKanyushaListQueryParameters parameters))
-    {
-        return null;
-    }
-
-    var cache = http.RequestServices.GetRequiredService<NativeKanyushaListSnapshotCache>();
-    var store = http.RequestServices.GetRequiredService<IMultiProjectionStateStore>();
-    var entry = cache.Entry;
-    await entry.Gate.WaitAsync(ct);
-    try
-    {
-        var stopwatch = Stopwatch.StartNew();
-        if (!entry.Matches(record.LastSortableUniqueId, record.EventsProcessed))
-        {
-            var streamResult = await store.OpenStateDataReadStreamAsync(record, ct);
-            if (!streamResult.IsSuccess)
-            {
-                return Results.BadRequest(new { error = streamResult.GetException().Message });
-            }
-
-            await using var snapshotStream = streamResult.GetValue();
-            JsonDocument document = await LoadNativeKanyushaListStateAsync(snapshotStream, ct);
-            entry.Replace(document, record.LastSortableUniqueId, record.EventsProcessed);
-            logger.LogInformation(
-                "Native Kanyusha snapshot loaded: LastSortableUniqueId={LastSortableUniqueId}, EventsProcessed={EventsProcessed}, ElapsedMs={ElapsedMs}",
-                record.LastSortableUniqueId,
-                record.EventsProcessed,
-                stopwatch.ElapsedMilliseconds);
-        }
-        else
-        {
-            logger.LogInformation(
-                "Native Kanyusha snapshot cache hit: LastSortableUniqueId={LastSortableUniqueId}, EventsProcessed={EventsProcessed}, ElapsedMs={ElapsedMs}",
-                record.LastSortableUniqueId,
-                record.EventsProcessed,
-                stopwatch.ElapsedMilliseconds);
-        }
-
-        SerializedListQueryResponse response = ExecuteNativeKanyushaListQuery(entry.StateDocument!, parameters);
-        logger.LogInformation(
-            "Native Kanyusha list query completed: TotalCount={TotalCount}, CurrentPage={CurrentPage}, PageSize={PageSize}, ElapsedMs={ElapsedMs}",
-            response.TotalCount,
-            response.CurrentPage,
-            response.PageSize,
-            stopwatch.ElapsedMilliseconds);
-        return Results.Ok(response);
-    }
-    finally
-    {
-        entry.Gate.Release();
-    }
-}
-
-static async Task<JsonDocument> LoadNativeKanyushaListStateAsync(Stream snapshotStream, CancellationToken ct)
-{
-    using JsonDocument envelope = await JsonDocument.ParseAsync(snapshotStream, cancellationToken: ct);
-    JsonElement inlineState = envelope.RootElement.GetProperty("inlineState");
-    string? payloadJson = inlineState.TryGetProperty("payloadJson", out JsonElement payloadJsonElement)
-        ? payloadJsonElement.GetString()
-        : null;
-
-    JsonDocument payloadDocument;
-    if (!string.IsNullOrWhiteSpace(payloadJson))
-    {
-        payloadDocument = JsonDocument.Parse(payloadJson);
-    }
-    else
-    {
-        string payloadBase64 = inlineState.GetProperty("payloadBase64").GetString()
-            ?? throw new InvalidOperationException("payloadBase64 was null.");
-        payloadDocument = JsonDocument.Parse(Convert.FromBase64String(payloadBase64));
-    }
-
-    using (payloadDocument)
-    {
-        JsonElement payloadRoot = payloadDocument.RootElement;
-        string? stateJson = payloadRoot.TryGetProperty("stateJson", out JsonElement stateJsonElement)
-            ? stateJsonElement.GetString()
-            : null;
-        if (!string.IsNullOrWhiteSpace(stateJson))
-        {
-            return JsonDocument.Parse(stateJson);
-        }
-
-        string compressedStateBase64 = payloadRoot.GetProperty("compressedStateJson").GetString()
-            ?? throw new InvalidOperationException("compressedStateJson was null.");
-        byte[] compressedStateBytes = Convert.FromBase64String(compressedStateBase64);
-        await using var compressedStream = new MemoryStream(compressedStateBytes);
-        await using var gzip = new GZipStream(compressedStream, CompressionMode.Decompress);
-        using var reader = new StreamReader(gzip, Encoding.UTF8);
-        string decompressedStateJson = await reader.ReadToEndAsync(ct);
-        return JsonDocument.Parse(decompressedStateJson);
-    }
-}
-
-static SerializedListQueryResponse ExecuteNativeKanyushaListQuery(
-    JsonDocument stateDocument,
-    NativeKanyushaListQueryParameters parameters)
-{
-    JsonElement kanyushaItems = stateDocument.RootElement.GetProperty("kanyushaItems");
-    var orderedKanyushaNos = new List<int>();
-    foreach (JsonProperty property in kanyushaItems.EnumerateObject())
-    {
-        if (int.TryParse(property.Name, out int kanyushaNo))
-        {
-            orderedKanyushaNos.Add(kanyushaNo);
-        }
-    }
-
-    orderedKanyushaNos.Sort();
-    if (parameters.SortDescending)
-    {
-        orderedKanyushaNos.Reverse();
-    }
-
-    int skip = (parameters.PageNumber - 1) * parameters.PageSize;
-    int totalCount = 0;
-    using var stream = new MemoryStream();
-    using (var writer = new Utf8JsonWriter(stream))
-    {
-        writer.WriteStartArray();
-        foreach (int kanyushaNo in orderedKanyushaNos)
-        {
-            if (parameters.KanyushaNoFilter is not null
-                && !MatchesNativeKanyushaNoFilter(kanyushaNo, parameters.KanyushaNoFilter))
-            {
-                continue;
-            }
-
-            JsonElement kanyusha = kanyushaItems.GetProperty(kanyushaNo.ToString());
-            JsonElement nendoByNendo = kanyusha.GetProperty("nendoKanyusByNendo");
-            var orderedNendoIds = new List<int>();
-            foreach (JsonProperty nendoProperty in nendoByNendo.EnumerateObject())
-            {
-                if (int.TryParse(nendoProperty.Name, out int nendoId))
-                {
-                    orderedNendoIds.Add(nendoId);
-                }
-            }
-
-            orderedNendoIds.Sort();
-            orderedNendoIds.Reverse();
-
-            foreach (int nendoId in orderedNendoIds)
-            {
-                if (totalCount >= skip && totalCount < skip + parameters.PageSize)
-                {
-                    JsonElement nendo = nendoByNendo.GetProperty(nendoId.ToString());
-                    writer.WriteStartObject();
-                    if (nendoByNendo.TryGetProperty((nendoId - 1).ToString(), out JsonElement previousNendo)
-                        && previousNendo.TryGetProperty("reminderMemo", out JsonElement previousReminderMemo))
-                    {
-                        writer.WritePropertyName("zenNenReminderNote");
-                        previousReminderMemo.WriteTo(writer);
-                    }
-
-                    if (nendo.TryGetProperty("reminderMemo", out JsonElement currentReminderMemo))
-                    {
-                        writer.WritePropertyName("honNenReminderNote");
-                        currentReminderMemo.WriteTo(writer);
-                    }
-
-                    foreach (JsonProperty property in kanyusha.EnumerateObject())
-                    {
-                        if (property.NameEquals("nendoKanyusByNendo") || property.NameEquals("lastUpdated"))
-                        {
-                            continue;
-                        }
-
-                        property.WriteTo(writer);
-                    }
-
-                    foreach (JsonProperty property in nendo.EnumerateObject())
-                    {
-                        property.WriteTo(writer);
-                    }
-
-                    writer.WriteEndObject();
-                }
-
-                totalCount++;
-            }
-        }
-
-        writer.WriteEndArray();
-    }
-
-    int totalPages = (totalCount + parameters.PageSize - 1) / parameters.PageSize;
-    if (parameters.PageNumber > totalPages && totalPages != 0)
-    {
-        stream.SetLength(0);
-        using var emptyWriter = new Utf8JsonWriter(stream);
-        emptyWriter.WriteStartArray();
-        emptyWriter.WriteEndArray();
-        emptyWriter.Flush();
-    }
-
-    return new SerializedListQueryResponse(
-        Encoding.UTF8.GetString(stream.ToArray()),
-        totalCount,
-        totalPages,
-        parameters.PageNumber,
-        parameters.PageSize);
-}
-
-static bool TryParseNativeKanyushaListQuery(
-    string queryParamsJson,
-    out NativeKanyushaListQueryParameters parameters)
-{
-    parameters = default;
-    using JsonDocument document = JsonDocument.Parse(string.IsNullOrWhiteSpace(queryParamsJson) ? "{}" : queryParamsJson);
-    JsonElement root = document.RootElement;
-
-    int? pageNumber = TryGetInt32(root, "pageNumber");
-    int? pageSize = TryGetInt32(root, "pageSize");
-    if (pageNumber is not > 0 || pageSize is not > 0)
-    {
-        return false;
-    }
-
-    string? sortField = TryGetString(root, "sortField");
-    string? sortOrder = TryGetString(root, "sortOrder");
-    bool sortDescending;
-    if (string.IsNullOrWhiteSpace(sortField))
-    {
-        sortDescending = true;
-    }
-    else if (string.Equals(sortField, "kanyushano", StringComparison.OrdinalIgnoreCase))
-    {
-        sortDescending = string.Equals(sortOrder, "desc", StringComparison.OrdinalIgnoreCase);
-    }
-    else
-    {
-        return false;
-    }
-
-    foreach (JsonProperty property in root.EnumerateObject())
-    {
-        if (property.NameEquals("pageNumber")
-            || property.NameEquals("pageSize")
-            || property.NameEquals("kanyushaNos")
-            || property.NameEquals("sortField")
-            || property.NameEquals("sortOrder"))
-        {
-            continue;
-        }
-
-        if (property.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
-        {
-            continue;
-        }
-
-        return false;
-    }
-
-    parameters = new NativeKanyushaListQueryParameters(
-        pageNumber.Value,
-        pageSize.Value,
-        sortDescending,
-        ParseNativeKanyushaNoFilter(TryGetString(root, "kanyushaNos")));
-    return true;
-}
-
-static int? TryGetInt32(JsonElement root, string propertyName)
-{
-    if (!root.TryGetProperty(propertyName, out JsonElement property))
-    {
-        return null;
-    }
-
-    return property.ValueKind switch
-    {
-        JsonValueKind.Number when property.TryGetInt32(out int value) => value,
-        JsonValueKind.String when int.TryParse(property.GetString(), out int value) => value,
-        _ => null
-    };
-}
-
-static string? TryGetString(JsonElement root, string propertyName) =>
-    root.TryGetProperty(propertyName, out JsonElement property) ? property.GetString() : null;
-
-static NativeKanyushaNoFilterSpec? ParseNativeKanyushaNoFilter(string? rawKanyushaNos)
-{
-    if (string.IsNullOrWhiteSpace(rawKanyushaNos))
-    {
-        return null;
-    }
-
-    var individualNos = new HashSet<int>();
-    var ranges = new List<(int From, int To)>();
-    foreach (string token in rawKanyushaNos.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-    {
-        int dashIndex = token.IndexOf('-');
-        if (dashIndex > 0
-            && dashIndex < token.Length - 1
-            && int.TryParse(token[..dashIndex], out int from)
-            && int.TryParse(token[(dashIndex + 1)..], out int to)
-            && from <= to)
-        {
-            ranges.Add((from, to));
-            continue;
-        }
-
-        if (int.TryParse(token, out int no))
-        {
-            individualNos.Add(no);
-        }
-    }
-
-    return individualNos.Count == 0 && ranges.Count == 0
-        ? null
-        : new NativeKanyushaNoFilterSpec(individualNos, ranges);
-}
-
-static bool MatchesNativeKanyushaNoFilter(int kanyushaNo, NativeKanyushaNoFilterSpec filter)
-{
-    if (filter.IndividualNos.Contains(kanyushaNo))
-    {
-        return true;
-    }
-
-    foreach ((int from, int to) in filter.Ranges)
-    {
-        if (kanyushaNo >= from && kanyushaNo <= to)
-        {
-            return true;
-        }
-    }
-
-    return false;
-}
-
 static async Task WaitForSortableUniqueIdAsync(
     IMultiProjectionGrain grain,
     IMultiProjectionStateStore? stateStore,
@@ -853,12 +545,18 @@ static async Task WaitForSortableUniqueIdAsync(
 {
     var started = Stopwatch.StartNew();
 
-    if (string.Equals(databaseType, "sqlite", StringComparison.OrdinalIgnoreCase) && stateStore is not null)
+    // Match the proven Orleans/internal host behavior: the wait path must trigger
+    // subscription/catch-up work first, otherwise polling can wait indefinitely on
+    // a stale persisted snapshot without anything advancing the projector.
+    await grain.StartSubscriptionAsync();
+    await grain.RefreshAsync();
+
+    if (stateStore is not null)
     {
         try
         {
-            // Trigger grain activation once. After that, poll persisted state directly so the
-            // wait loop does not compete with catch-up work on the same Orleans activation.
+            // After catch-up is kicked off, prefer polling persisted state so the wait loop
+            // does not compete with query execution on the same Orleans activation.
             await grain.GetStatusAsync();
         }
         catch (TimeoutException)
@@ -871,6 +569,18 @@ static async Task WaitForSortableUniqueIdAsync(
 
         while (started.Elapsed < timeout && !ct.IsCancellationRequested)
         {
+            try
+            {
+                if (await grain.IsSortableUniqueIdReceived(sortableUniqueId))
+                {
+                    return;
+                }
+            }
+            catch (TimeoutException)
+            {
+                // Fall through to persisted-state polling below.
+            }
+
             var recordResult = await stateStore.GetLatestForVersionAsync(projectorName, projectorVersion, ct);
             if (recordResult.IsSuccess)
             {
@@ -1148,15 +858,6 @@ sealed class DirectSnapshotQueryCacheEntry : IDisposable
     }
 }
 
-sealed record NativeKanyushaListQueryParameters(
-    int PageNumber,
-    int PageSize,
-    bool SortDescending,
-    NativeKanyushaNoFilterSpec? KanyushaNoFilter);
-
-sealed record NativeKanyushaNoFilterSpec(
-    HashSet<int> IndividualNos,
-    List<(int From, int To)> Ranges);
 
 sealed class NativeKanyushaListSnapshotCache : IDisposable
 {

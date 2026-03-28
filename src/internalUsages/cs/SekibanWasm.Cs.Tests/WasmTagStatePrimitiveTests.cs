@@ -117,7 +117,13 @@ public class WasmTagStatePrimitiveTests
         Assert.Equal("WeatherForecastState", primitive.TagPayloadName);
         Assert.Equal("weather", primitive.TagGroup);
         Assert.Equal("f-1", primitive.TagContent);
-        Assert.Equal("{\"forecastId\":\"f-1\"}", instance.LastRestoredState);
+        var restoredSnapshot = JsonSerializer.Deserialize<WasmStateSnapshot>(instance.LastRestoredState!, JsonOptions);
+        Assert.NotNull(restoredSnapshot);
+        Assert.Equal("{\"forecastId\":\"f-1\"}", restoredSnapshot!.StateJson);
+        Assert.Equal("WeatherForecastState", restoredSnapshot.TagPayloadName);
+        Assert.Equal("weather", restoredSnapshot.TagGroup);
+        Assert.Equal("f-1", restoredSnapshot.TagContent);
+        Assert.Equal("WeatherForecastProjector", restoredSnapshot.TagProjector);
     }
 
     [Fact]
@@ -190,6 +196,46 @@ public class WasmTagStatePrimitiveTests
         Assert.Equal("WeatherForecastProjector", result.TagProjector);
         var payloadJson = Encoding.UTF8.GetString(result.Payload);
         Assert.Equal("{\"forecastId\":\"f-1\",\"location\":\"Tokyo\"}", payloadJson);
+    }
+
+    [Fact]
+    public void GetSerializedState_ShouldUseSnapshotMetadata_WhenGuestReturnsWasmStateSnapshot()
+    {
+        using var instance = new StubProjectionInstance();
+        instance.StateToReturn = JsonSerializer.Serialize(
+            new WasmStateSnapshot(
+                StateJson: "{\"forecastId\":\"f-1\",\"location\":\"Tokyo\"}",
+                SafeVersion: 0,
+                UnsafeVersion: 0,
+                SafeLastSortableUniqueId: string.Empty,
+                LastSortableUniqueId: string.Empty,
+                LastEventId: null,
+                TagPayloadName: "WeatherForecastState",
+                ProjectorVersion: "v1",
+                TagGroup: "weather",
+                TagContent: "f-1",
+                TagProjector: "WeatherForecastProjector"),
+            JsonOptions);
+
+        var primitive = new WasmTagStateProjectionPrimitive(
+            instance, "WeatherForecastProjector", "v1", EventTypes, JsonOptions);
+
+        primitive.ApplyEvents(
+            [
+                CreateEvent(
+                    new WeatherForecastCreated("f-1", "Tokyo", 25, "Warm", DateTimeOffset.UtcNow),
+                    nameof(WeatherForecastCreated),
+                    ["weather:f-1"])
+            ],
+            null);
+
+        var result = primitive.GetSerializedState();
+
+        Assert.Equal("WeatherForecastState", result.TagPayloadName);
+        Assert.Equal("weather", result.TagGroup);
+        Assert.Equal("f-1", result.TagContent);
+        Assert.Equal("WeatherForecastProjector", result.TagProjector);
+        Assert.Equal("{\"forecastId\":\"f-1\",\"location\":\"Tokyo\"}", Encoding.UTF8.GetString(result.Payload));
     }
 
     [Fact]

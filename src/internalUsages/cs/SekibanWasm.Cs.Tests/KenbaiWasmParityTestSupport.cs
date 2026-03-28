@@ -19,6 +19,7 @@ using Sekiban.Dcb.Orleans.Serialization;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.WasmRuntime;
 using Sekiban.Dcb.WasmRuntime.Wasmtime;
+using Sekiban.Dcb.Primitives;
 using Wasmtime;
 
 namespace SekibanWasm.Cs.Tests;
@@ -211,6 +212,54 @@ internal static class KenbaiWasmParityTestSupport
             ORDER BY SortableUniqueId
             LIMIT $takeCount
             """;
+        command.Parameters.AddWithValue("$takeCount", takeCount);
+
+        using SqliteDataReader reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            rows.Add(new EventRow(
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.IsDBNull(2) ? "[]" : reader.GetString(2),
+                reader.GetString(3)));
+        }
+
+        return rows;
+    }
+
+    public static IReadOnlyList<EventRow> LoadOrderedEventsByTag(int takeCount, string tag)
+    {
+        if (string.IsNullOrWhiteSpace(tag))
+        {
+            throw new ArgumentException("A tag must be provided.", nameof(tag));
+        }
+
+        if (!File.Exists(ReadOnlyEventsDbPath))
+        {
+            throw new FileNotFoundException("Read-only events.db was not found.", ReadOnlyEventsDbPath);
+        }
+
+        var rows = new List<EventRow>(takeCount);
+        var connectionString = new SqliteConnectionStringBuilder
+        {
+            DataSource = ReadOnlyEventsDbPath,
+            Mode = SqliteOpenMode.ReadOnly
+        }.ConnectionString;
+
+        using var connection = new SqliteConnection(connectionString);
+        connection.Open();
+
+        using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT e.EventType, e.PayloadJson, e.TagsJson, e.SortableUniqueId
+            FROM dcb_events e
+            INNER JOIN dcb_tags t ON t.SortableUniqueId = e.SortableUniqueId
+            WHERE t.Tag = $tag
+            ORDER BY e.SortableUniqueId
+            LIMIT $takeCount
+            """;
+        command.Parameters.AddWithValue("$tag", tag);
         command.Parameters.AddWithValue("$takeCount", takeCount);
 
         using SqliteDataReader reader = command.ExecuteReader();
@@ -440,6 +489,57 @@ internal static class KenbaiWasmParityTestSupport
     public static ITagStatePayload ReplayKanyushaNumberKanriTagStateNative(IEnumerable<EventRow> rows)
         => ReplayTagProjectionNative(nameof(KanyushaNumberKanriTagProjector), rows);
 
+    public static ITagStatePayload ReplayTagStateNative(string projectorName, IEnumerable<EventRow> rows)
+        => ReplayTagProjectionNative(projectorName, rows);
+
+    public static SerializableTagState ReplayTagStateWasmPrimitive(
+        string projectorName,
+        IEnumerable<EventRow> rows,
+        SerializableTagState? cachedState = null,
+        string? latestSortableUniqueId = null)
+    {
+        EnsureKenbaiWasmBuilt();
+
+        var runtime = new WasmtimeRuntime();
+        var moduleCache = new WasmtimeModuleCache(runtime);
+        var primitiveHost = new WasmtimePrimitiveProjectionHost(
+            runtime,
+            moduleCache,
+            new WasmtimeHostOptions
+            {
+                DefaultModulePath = WasmModulePath
+            });
+
+        using IPrimitiveProjectionInstance instance = primitiveHost.CreateInstance(projectorName);
+        string projectorVersion = WasmDomainTypes.TagProjectorTypes.GetProjectorVersion(projectorName).GetValue();
+        var primitive = new WasmTagStateProjectionPrimitive(
+            instance,
+            projectorName,
+            projectorVersion,
+            WasmDomainTypes.EventTypes,
+            AicDomainJsonContext.Default.Options);
+
+        if (!primitive.ApplyState(cachedState))
+        {
+            throw new InvalidOperationException($"Failed to apply cached tag state for '{projectorName}'.");
+        }
+
+        List<SerializableEvent> serializableEvents = rows
+            .Select(ToSerializableEvent)
+            .OrderBy(static row => row.SortableUniqueIdValue, StringComparer.Ordinal)
+            .ToList();
+
+        string? effectiveLatestSortableUniqueId = latestSortableUniqueId
+            ?? serializableEvents.LastOrDefault()?.SortableUniqueIdValue;
+
+        if (!primitive.ApplyEvents(serializableEvents, effectiveLatestSortableUniqueId))
+        {
+            throw new InvalidOperationException($"Failed to replay WASM tag state for '{projectorName}'.");
+        }
+
+        return primitive.GetSerializedState();
+    }
+
     public static string ReplayProjectionWasm(string projectorName, IEnumerable<EventRow> rows)
         => ReplayProjectionWasmInternal(projectorName, rows, restoreAfterCount: null);
 
@@ -448,6 +548,9 @@ internal static class KenbaiWasmParityTestSupport
         IEnumerable<EventRow> rows,
         int restoreAfterCount)
         => ReplayProjectionWasmInternal(projectorName, rows, restoreAfterCount);
+
+    public static string ExtractCanonicalStateJsonFromRawSnapshot(string rawSnapshotJson)
+        => CanonicalizeJson(ExtractStateJsonFromSnapshotPayload(Encoding.UTF8.GetBytes(rawSnapshotJson)));
 
     public static void EnsureKenbaiCliBuilt()
     {
@@ -606,6 +709,19 @@ internal static class KenbaiWasmParityTestSupport
         return state;
     }
 
+    private static SerializableEvent ToSerializableEvent(EventRow row)
+    {
+        List<string> tagStrings = JsonSerializer.Deserialize<List<string>>(row.TagsJson) ?? [];
+
+        return new SerializableEvent(
+            Encoding.UTF8.GetBytes(row.PayloadJson),
+            row.SortableUniqueId,
+            Guid.NewGuid(),
+            new EventMetadata("test", row.EventType, "kenbai-parity-test"),
+            tagStrings,
+            row.EventType);
+    }
+
     public sealed record EventRow(
         string EventType,
         string PayloadJson,
@@ -644,6 +760,7 @@ internal static class KenbaiWasmParityTestSupport
         return new WasmProjectionActorHost(
             primitiveHost,
             registry,
+            KenbaiDcbDomainType.GetDomainTypes(),
             KenbaiDcbDomainType.GetDomainTypes().JsonSerializerOptions,
             projectorName,
             NullLogger.Instance);
@@ -660,8 +777,11 @@ internal static class KenbaiWasmParityTestSupport
         private readonly Func<int, int> _alloc;
         private readonly Action<int, int> _free;
         private readonly Func<int, int, int, int, long>? _roundTripEventPayload;
+        private readonly Func<int, int, int, int, long>? _roundTripTagStatePayload;
         private readonly Func<int, int, long>? _roundTripTags;
+        private readonly Func<int, int, int, int, int, int, int, int, int, int, long>? _debugProjectOnce;
         private readonly Func<int>? _diagnoseDomainTypes;
+        private readonly Func<long>? _debugListMultiProjectorNames;
         private readonly Func<int>? _debugEnvironmentFlags;
         private readonly Func<int, int>? _debugSetMultiProjectBypass;
         private readonly Func<int>? _debugGetMultiProjectBypass;
@@ -674,6 +794,9 @@ internal static class KenbaiWasmParityTestSupport
         private readonly Action<int, int, int>? _appendPayloadChunk;
         private readonly Action<int>? _beginMetadataBuffer;
         private readonly Action<int, int, int>? _appendMetadataChunk;
+        private readonly Action<int, int, int, int, int>? _applyBufferedEventWithSortable;
+        private readonly Func<int, long>? _serializeState;
+        private readonly Action<int, int, int>? _restoreState;
         private readonly Func<int, int>? _debugMetadataBufferLength;
         private readonly Func<int, int, int, int, int, int>? _debugBufferedSortableNoop;
         private readonly Func<int, int, int, int, int, int>? _debugBufferedSortableConsumeMetadata;
@@ -682,6 +805,8 @@ internal static class KenbaiWasmParityTestSupport
         private readonly Func<int, int, int, int, int, int>? _debugBufferedSortableDeserializePayload;
         private readonly Func<int, int, int, int, int, int>? _debugBufferedSortableParseTags;
         private readonly Func<int, int, int, int, int, int>? _debugBufferedSortableCreateEvent;
+        private readonly Func<int, int, int, int, int, int>? _debugBufferedSortableGetTagProjector;
+        private readonly Func<int, int, int, int, int, int>? _debugBufferedSortableApplyTagEvent;
         private readonly Func<int, int, int, int, int, int>? _debugBufferedSortableResolveTagObjects;
         private readonly Func<int, int, int, int, int, int>? _debugBufferedSortableResolveSafeWindow;
         private readonly Func<int, int, int, int, int, int>? _debugBufferedSortableApplyMultiEvent;
@@ -713,8 +838,11 @@ internal static class KenbaiWasmParityTestSupport
             _free = _instance.GetAction<int, int>("dealloc") ?? _instance.GetAction<int, int>("free")
                 ?? throw new InvalidOperationException("WASM module does not export dealloc/free.");
             _roundTripEventPayload = _instance.GetFunction<int, int, int, int, long>("debug_roundtrip_event_payload");
+            _roundTripTagStatePayload = _instance.GetFunction<int, int, int, int, long>("debug_roundtrip_tag_state_payload");
             _roundTripTags = _instance.GetFunction<int, int, long>("debug_roundtrip_tags");
+            _debugProjectOnce = _instance.GetFunction<int, int, int, int, int, int, int, int, int, int, long>("debug_project_once");
             _diagnoseDomainTypes = _instance.GetFunction<int>("diagnose_domain_types");
+            _debugListMultiProjectorNames = _instance.GetFunction<long>("debug_list_multi_projector_names");
             _debugEnvironmentFlags = _instance.GetFunction<int>("debug_environment_flags");
             _debugSetMultiProjectBypass = _instance.GetFunction<int, int>("debug_set_multi_project_bypass");
             _debugGetMultiProjectBypass = _instance.GetFunction<int>("debug_get_multi_project_bypass");
@@ -735,6 +863,9 @@ internal static class KenbaiWasmParityTestSupport
             _appendPayloadChunk = _instance.GetAction<int, int, int>("append_payload_chunk");
             _beginMetadataBuffer = _instance.GetAction<int>("begin_metadata_buffer");
             _appendMetadataChunk = _instance.GetAction<int, int, int>("append_metadata_chunk");
+            _applyBufferedEventWithSortable = _instance.GetAction<int, int, int, int, int>("apply_buffered_event_with_sortable");
+            _serializeState = _instance.GetFunction<int, long>("serialize_state");
+            _restoreState = _instance.GetAction<int, int, int>("restore_state");
             _debugMetadataBufferLength = _instance.GetFunction<int, int>("debug_metadata_buffer_length");
             _debugBufferedSortableNoop = _instance.GetFunction<int, int, int, int, int, int>("debug_buffered_sortable_noop");
             _debugBufferedSortableConsumeMetadata = _instance.GetFunction<int, int, int, int, int, int>("debug_buffered_sortable_consume_metadata");
@@ -743,6 +874,8 @@ internal static class KenbaiWasmParityTestSupport
             _debugBufferedSortableDeserializePayload = _instance.GetFunction<int, int, int, int, int, int>("debug_buffered_sortable_deserialize_payload");
             _debugBufferedSortableParseTags = _instance.GetFunction<int, int, int, int, int, int>("debug_buffered_sortable_parse_tags");
             _debugBufferedSortableCreateEvent = _instance.GetFunction<int, int, int, int, int, int>("debug_buffered_sortable_create_event");
+            _debugBufferedSortableGetTagProjector = _instance.GetFunction<int, int, int, int, int, int>("debug_buffered_sortable_get_tag_projector");
+            _debugBufferedSortableApplyTagEvent = _instance.GetFunction<int, int, int, int, int, int>("debug_buffered_sortable_apply_tag_event");
             _debugBufferedSortableResolveTagObjects = _instance.GetFunction<int, int, int, int, int, int>("debug_buffered_sortable_resolve_tag_objects");
             _debugBufferedSortableResolveSafeWindow = _instance.GetFunction<int, int, int, int, int, int>("debug_buffered_sortable_resolve_safe_window");
             _debugBufferedSortableApplyMultiEvent = _instance.GetFunction<int, int, int, int, int, int>("debug_buffered_sortable_apply_multi_event");
@@ -750,6 +883,7 @@ internal static class KenbaiWasmParityTestSupport
 
         public bool SupportsDebugRoundTrip =>
             _roundTripEventPayload is not null &&
+            _roundTripTagStatePayload is not null &&
             _roundTripTags is not null;
 
         public int DebugEnvironmentFlags()
@@ -845,6 +979,27 @@ internal static class KenbaiWasmParityTestSupport
             }
         }
 
+        public string RoundTripTagStatePayload(string payloadName, string payloadJson)
+        {
+            if (_roundTripTagStatePayload is null)
+            {
+                throw new NotSupportedException("The configured WASM artifact does not export debug_roundtrip_tag_state_payload.");
+            }
+
+            var (payloadNamePtr, payloadNameLen) = WriteString(payloadName);
+            var (payloadPtr, payloadLen) = WriteString(payloadJson);
+            try
+            {
+                long packed = _roundTripTagStatePayload(payloadNamePtr, payloadNameLen, payloadPtr, payloadLen);
+                return ReadPackedString(packed);
+            }
+            finally
+            {
+                Free(payloadNamePtr, payloadNameLen);
+                Free(payloadPtr, payloadLen);
+            }
+        }
+
         public string RoundTripTags(string tagsJson)
         {
             if (_roundTripTags is null)
@@ -864,6 +1019,48 @@ internal static class KenbaiWasmParityTestSupport
             }
         }
 
+        public string DebugProjectOnce(
+            string projectorName,
+            string eventType,
+            string payloadJson,
+            string tagsJson,
+            string sortableUniqueId)
+        {
+            if (_debugProjectOnce is null)
+            {
+                throw new NotSupportedException("The configured WASM artifact does not export debug_project_once.");
+            }
+
+            var (projectorPtr, projectorLen) = WriteString(projectorName);
+            var (eventTypePtr, eventTypeLen) = WriteString(eventType);
+            var (payloadPtr, payloadLen) = WriteString(payloadJson);
+            var (tagsPtr, tagsLen) = WriteString(tagsJson);
+            var (sortablePtr, sortableLen) = WriteString(sortableUniqueId);
+            try
+            {
+                long packed = _debugProjectOnce(
+                    projectorPtr,
+                    projectorLen,
+                    eventTypePtr,
+                    eventTypeLen,
+                    payloadPtr,
+                    payloadLen,
+                    tagsPtr,
+                    tagsLen,
+                    sortablePtr,
+                    sortableLen);
+                return ReadPackedString(packed);
+            }
+            finally
+            {
+                Free(projectorPtr, projectorLen);
+                Free(eventTypePtr, eventTypeLen);
+                Free(payloadPtr, payloadLen);
+                Free(tagsPtr, tagsLen);
+                Free(sortablePtr, sortableLen);
+            }
+        }
+
         public string ReplayKanyushaListProjection(IEnumerable<EventRow> rows)
             => ReplayProjectionWasm(KanyushaListProjection.MultiProjectorName, rows);
 
@@ -875,6 +1072,18 @@ internal static class KenbaiWasmParityTestSupport
             }
 
             return _diagnoseDomainTypes();
+        }
+
+        public IReadOnlyList<string> DebugListMultiProjectorNames()
+        {
+            if (_debugListMultiProjectorNames is null)
+            {
+                throw new NotSupportedException("The configured WASM artifact does not export debug_list_multi_projector_names.");
+            }
+
+            string json = ReadPackedString(_debugListMultiProjectorNames());
+            return JsonSerializer.Deserialize<string[]>(json)
+                ?? throw new InvalidOperationException("Failed to deserialize debug_list_multi_projector_names response.");
         }
 
         public int TryCreateInstance(string projectorName)
@@ -961,6 +1170,54 @@ internal static class KenbaiWasmParityTestSupport
             return _debugMetadataBufferLength(instanceId);
         }
 
+        public void ApplyBufferedEventWithSortable(int instanceId, string eventType, string sortableUniqueId)
+        {
+            if (_applyBufferedEventWithSortable is null)
+            {
+                throw new NotSupportedException("The configured WASM artifact does not export apply_buffered_event_with_sortable.");
+            }
+
+            var (eventTypePtr, eventTypeLen) = WriteString(eventType);
+            var (sortablePtr, sortableLen) = WriteString(sortableUniqueId);
+            try
+            {
+                _applyBufferedEventWithSortable(instanceId, eventTypePtr, eventTypeLen, sortablePtr, sortableLen);
+            }
+            finally
+            {
+                Free(eventTypePtr, eventTypeLen);
+                Free(sortablePtr, sortableLen);
+            }
+        }
+
+        public string SerializeState(int instanceId)
+        {
+            if (_serializeState is null)
+            {
+                throw new NotSupportedException("The configured WASM artifact does not export serialize_state.");
+            }
+
+            return ReadPackedString(_serializeState(instanceId));
+        }
+
+        public void RestoreState(int instanceId, string stateJson)
+        {
+            if (_restoreState is null)
+            {
+                throw new NotSupportedException("The configured WASM artifact does not export restore_state.");
+            }
+
+            var (statePtr, stateLen) = WriteString(stateJson);
+            try
+            {
+                _restoreState(instanceId, statePtr, stateLen);
+            }
+            finally
+            {
+                Free(statePtr, stateLen);
+            }
+        }
+
         public int DebugBufferedSortableNoop(int instanceId, string eventType, string sortableUniqueId) =>
             InvokeBufferedSortableDiagnostic(
                 _debugBufferedSortableNoop,
@@ -1013,6 +1270,22 @@ internal static class KenbaiWasmParityTestSupport
             InvokeBufferedSortableDiagnostic(
                 _debugBufferedSortableCreateEvent,
                 "debug_buffered_sortable_create_event",
+                instanceId,
+                eventType,
+                sortableUniqueId);
+
+        public int DebugBufferedSortableGetTagProjector(int instanceId, string eventType, string sortableUniqueId) =>
+            InvokeBufferedSortableDiagnostic(
+                _debugBufferedSortableGetTagProjector,
+                "debug_buffered_sortable_get_tag_projector",
+                instanceId,
+                eventType,
+                sortableUniqueId);
+
+        public int DebugBufferedSortableApplyTagEvent(int instanceId, string eventType, string sortableUniqueId) =>
+            InvokeBufferedSortableDiagnostic(
+                _debugBufferedSortableApplyTagEvent,
+                "debug_buffered_sortable_apply_tag_event",
                 instanceId,
                 eventType,
                 sortableUniqueId);
@@ -1150,9 +1423,12 @@ internal static class KenbaiWasmParityTestSupport
 
         string[] candidates =
         [
-            Path.Combine(RepoRoot, "Kenbai", "artifacts", "aic-wasm", "aic.wasm"),
-            Path.Combine(RepoRoot, "Kenbai", "src", "Aic.Kenbai.EventSource.Wasm", "bin", "Debug", "net10.0", "wasi-wasm", "publish", "aic.wasm"),
+            Path.Combine(RepoRoot, "Kenbai", "artifacts", "aic-wasm-http-no-persist-fresh", "aic.wasm"),
             Path.Combine(RepoRoot, "Kenbai", "src", "Aic.Kenbai.EventSource.Wasm", "bin", "Release", "net10.0", "wasi-wasm", "native", "aic.wasm"),
+            Path.Combine(RepoRoot, "Kenbai", "artifacts", "aic-wasm-http-no-persist", "aic.wasm"),
+            Path.Combine(RepoRoot, "Kenbai", "artifacts", "aic-wasm", "aic.wasm"),
+            Path.Combine(RepoRoot, "Kenbai", "artifacts", "aic-wasm-docker-fresh", "aic.wasm"),
+            Path.Combine(RepoRoot, "Kenbai", "src", "Aic.Kenbai.EventSource.Wasm", "bin", "Debug", "net10.0", "wasi-wasm", "publish", "aic.wasm"),
             Path.Combine(RepoRoot, "Kenbai", "src", "Aic.Kenbai.EventSource.Wasm", "bin", "Debug", "net10.0", "wasi-wasm", "native", "aic.wasm"),
             Path.Combine(RepoRoot, "Kenbai", "artifacts", "aic-wasm-docker", "aic.wasm"),
             Path.Combine(RepoRoot, "Kenbai", "src", "Aic.Kenbai.EventSource.Wasm", "bin", "Debug", "net10.0", "wasi-wasm", "native.rebuild.1774312415", "aic.wasm"),
@@ -1160,7 +1436,10 @@ internal static class KenbaiWasmParityTestSupport
             Path.Combine(RepoRoot, "Kenbai", "src", "Aic.Kenbai.EventSource.Wasm", "bin", "Debug", "net10.0", "wasi-wasm", "native.bak.1659", "aic.wasm"),
         ];
 
-        string? existing = candidates.FirstOrDefault(File.Exists);
+        string? existing = candidates
+            .Where(File.Exists)
+            .OrderByDescending(static path => File.GetLastWriteTimeUtc(path))
+            .FirstOrDefault();
         if (existing is not null)
         {
             return existing;
