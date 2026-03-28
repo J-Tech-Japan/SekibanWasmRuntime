@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Threading;
+using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Primitives;
 using global::Wasmtime;
 
@@ -240,6 +241,7 @@ public sealed class WasmtimePrimitiveProjectionHost :
 
     private sealed class PooledPrimitiveProjectionLease :
         IPrimitiveProjectionInstance,
+        ISerializableEventBatchProjectionInstance,
         IPooledPrimitiveProjectionLeaseControl
     {
         private readonly string _projectorName;
@@ -272,6 +274,12 @@ public sealed class WasmtimePrimitiveProjectionHost :
         {
             ThrowIfDisposed();
             _inner.ApplyEvents(events);
+        }
+
+        public void ApplySerializableEvents(IReadOnlyList<SerializableEvent> events)
+        {
+            ThrowIfDisposed();
+            _inner.ApplySerializableEvents(events);
         }
 
         public string ExecuteQuery(string queryType, string queryParamsJson)

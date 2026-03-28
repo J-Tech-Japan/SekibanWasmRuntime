@@ -1,11 +1,15 @@
+using System.Buffers;
 using System.Text;
 using System.Text.Json;
+using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Primitives;
 using global::Wasmtime;
 
 namespace Sekiban.Dcb.WasmRuntime.Wasmtime;
 
-public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
+public class WasmtimePrimitiveProjectionInstance :
+    IPrimitiveProjectionInstance,
+    ISerializableEventBatchProjectionInstance
 {
     private const int DefaultApplyEventsBatchSize = 64;
     private const int MinimumRecursiveBatchSize = 8;
@@ -333,6 +337,32 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
         }
     }
 
+    public void ApplySerializableEvents(IReadOnlyList<SerializableEvent> events)
+    {
+        if (events.Count == 0)
+        {
+            return;
+        }
+
+        if (_applyEventsBatch is null || events.Count == 1)
+        {
+            foreach (var ev in events)
+            {
+                ApplySerializableEvent(ev);
+            }
+
+            return;
+        }
+
+        int offset = 0;
+        while (offset < events.Count)
+        {
+            int chunkCount = Math.Min(_applyEventsBatchSize, events.Count - offset);
+            ApplySerializableEventsBatchChunk(events, offset, chunkCount);
+            offset += chunkCount;
+        }
+    }
+
     private void ApplyEventsBatchChunk(
         IReadOnlyList<PrimitiveProjectionEventEnvelope> events,
         int offset,
@@ -390,6 +420,62 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
         ApplyEventsBatchChunk(chunk, leftCount, rightCount);
     }
 
+    private void ApplySerializableEventsBatchChunk(
+        IReadOnlyList<SerializableEvent> events,
+        int offset,
+        int count)
+    {
+        if (count <= 0)
+        {
+            return;
+        }
+
+        if (_applyEventsBatch is null || count == 1)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                ApplySerializableEvent(events[offset + i]);
+            }
+
+            return;
+        }
+
+        var chunk = new SerializableEvent[count];
+        for (int i = 0; i < count; i++)
+        {
+            chunk[i] = events[offset + i];
+        }
+
+        try
+        {
+            ApplySerializableBatchChunkCore(chunk, offset);
+            return;
+        }
+        catch (Exception ex) when (count > 1)
+        {
+            Trace(
+                $"apply_serializable_events_batch:fallback projectorInstance={_instanceId} offset={offset} eventCount={count} error={ex.GetType().Name}:{ex.Message}");
+        }
+
+        if (count <= MinimumRecursiveBatchSize)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                SerializableEvent ev = chunk[i];
+                Trace(
+                    $"apply_serializable_events_batch:fallback_single projectorInstance={_instanceId} offset={offset + i} eventType={ev.EventPayloadName}");
+                ApplySerializableEvent(ev);
+            }
+
+            return;
+        }
+
+        int leftCount = count / 2;
+        int rightCount = count - leftCount;
+        ApplySerializableEventsBatchChunk(chunk, 0, leftCount);
+        ApplySerializableEventsBatchChunk(chunk, leftCount, rightCount);
+    }
+
     private void ApplyBatchChunkCore(
         IReadOnlyList<PrimitiveProjectionEventEnvelope> events,
         int offset)
@@ -419,6 +505,75 @@ public class WasmtimePrimitiveProjectionInstance : IPrimitiveProjectionInstance
                 Free(jsonPtr, jsonLen);
             }
         }
+    }
+
+    private void ApplySerializableBatchChunkCore(
+        IReadOnlyList<SerializableEvent> events,
+        int offset)
+    {
+        lock (_syncRoot)
+        {
+            ThrowIfDisposed();
+
+            var batchJsonUtf8 = SerializeSerializableBatchEvents(events);
+            var (jsonPtr, jsonLen) = WriteBytes(batchJsonUtf8);
+            try
+            {
+                Trace(
+                    $"apply_serializable_events_batch:start projectorInstance={_instanceId} offset={offset} eventCount={events.Count} jsonLength={batchJsonUtf8.Length}");
+                int applied = _applyEventsBatch!(_instanceId, jsonPtr, jsonLen);
+                Trace(
+                    $"apply_serializable_events_batch:completed projectorInstance={_instanceId} offset={offset} eventCount={events.Count} applied={applied}");
+
+                if (applied != events.Count)
+                {
+                    throw new InvalidOperationException(
+                        $"WASM serializable batch apply returned {applied} for {events.Count} events at offset {offset}.");
+                }
+            }
+            finally
+            {
+                Free(jsonPtr, jsonLen);
+            }
+        }
+    }
+
+    private void ApplySerializableEvent(SerializableEvent serializedEvent)
+    {
+        ApplyEvent(
+            serializedEvent.EventPayloadName,
+            Encoding.UTF8.GetString(serializedEvent.Payload),
+            serializedEvent.Tags,
+            serializedEvent.SortableUniqueIdValue);
+    }
+
+    private static byte[] SerializeSerializableBatchEvents(IReadOnlyList<SerializableEvent> events)
+    {
+        var buffer = new ArrayBufferWriter<byte>();
+        using var writer = new Utf8JsonWriter(buffer);
+
+        writer.WriteStartArray();
+        foreach (SerializableEvent ev in events)
+        {
+            writer.WriteStartObject();
+            writer.WriteString("eventType", ev.EventPayloadName);
+            writer.WritePropertyName("eventPayloadJson");
+            writer.WriteStringValue(ev.Payload);
+            writer.WritePropertyName("tags");
+            writer.WriteStartArray();
+            foreach (string tag in ev.Tags)
+            {
+                writer.WriteStringValue(tag);
+            }
+
+            writer.WriteEndArray();
+            writer.WriteString("sortableUniqueId", ev.SortableUniqueIdValue);
+            writer.WriteEndObject();
+        }
+
+        writer.WriteEndArray();
+        writer.Flush();
+        return buffer.WrittenSpan.ToArray();
     }
 
     private static int ResolveApplyEventsBatchSize()

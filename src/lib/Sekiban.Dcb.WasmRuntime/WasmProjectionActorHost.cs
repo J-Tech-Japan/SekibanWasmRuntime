@@ -138,10 +138,7 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
     {
         var instance = EnsureInstance();
         bool useBatchApply = !finishedCatchUp && events.Count > 1;
-        List<PrimitiveProjectionEventEnvelope>? batchEvents = useBatchApply
-            ? new List<PrimitiveProjectionEventEnvelope>(events.Count)
-            : null;
-        List<SerializableEvent>? batchAppliedSourceEvents = useBatchApply
+        List<SerializableEvent>? batchEvents = useBatchApply
             ? new List<SerializableEvent>(events.Count)
             : null;
         foreach (var serializedEvent in events)
@@ -182,12 +179,7 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
 
                     if (useBatchApply)
                     {
-                        batchEvents!.Add(new PrimitiveProjectionEventEnvelope(
-                            serializedEvent.EventPayloadName,
-                            payloadJson,
-                            serializedEvent.Tags,
-                            serializedEvent.SortableUniqueIdValue));
-                        batchAppliedSourceEvents!.Add(serializedEvent);
+                        batchEvents!.Add(serializedEvent);
                     }
                     else
                     {
@@ -220,10 +212,27 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
         if (batchEvents is { Count: > 0 })
         {
             Trace($"host_add_events:batch_start projector={_projectorName} eventCount={batchEvents.Count}");
-            instance.ApplyEvents(batchEvents);
+            if (instance is ISerializableEventBatchProjectionInstance serializableBatchInstance)
+            {
+                serializableBatchInstance.ApplySerializableEvents(batchEvents);
+            }
+            else
+            {
+                var envelopes = new List<PrimitiveProjectionEventEnvelope>(batchEvents.Count);
+                foreach (SerializableEvent serializedEvent in batchEvents)
+                {
+                    envelopes.Add(new PrimitiveProjectionEventEnvelope(
+                        serializedEvent.EventPayloadName,
+                        Encoding.UTF8.GetString(serializedEvent.Payload),
+                        serializedEvent.Tags,
+                        serializedEvent.SortableUniqueIdValue));
+                }
+
+                instance.ApplyEvents(envelopes);
+            }
             Trace($"host_add_events:batch_completed projector={_projectorName} eventCount={batchEvents.Count}");
 
-            foreach (var serializedEvent in batchAppliedSourceEvents!)
+            foreach (var serializedEvent in batchEvents)
             {
                 AdvanceEventVersion(serializedEvent);
                 Trace(

@@ -463,7 +463,9 @@ public class WasmProjectionActorHostTests
         }
     }
 
-    private sealed class StubPrimitiveProjectionInstance : IPrimitiveProjectionInstance
+    private sealed class StubPrimitiveProjectionInstance :
+        IPrimitiveProjectionInstance,
+        ISerializableEventBatchProjectionInstance
     {
         public string StateJson { get; private set; } = "{}";
         public string QueryResponseJson { get; set; } = string.Empty;
@@ -496,6 +498,16 @@ public class WasmProjectionActorHostTests
             foreach (var ev in events)
             {
                 ApplyEventCore(ev.EventType, ev.EventPayloadJson);
+            }
+        }
+
+        public void ApplySerializableEvents(IReadOnlyList<SerializableEvent> events)
+        {
+            ApplyEventsBatchCallCount++;
+            BatchAppliedEventCount += events.Count;
+            foreach (var ev in events)
+            {
+                ApplyEventCore(ev.EventPayloadName, Encoding.UTF8.GetString(ev.Payload));
             }
         }
 
