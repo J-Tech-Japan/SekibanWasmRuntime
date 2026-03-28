@@ -259,7 +259,28 @@ public class SekibanRuntimeHostTests
 
     private static string GetWeatherModulePath()
     {
-        string path = Path.GetFullPath(
+        // Prefer the core Rust module so this pooling test stays independent of the preview2 shim.
+        foreach (var moduleName in new[] { "rust-weather.wasm", "csharp-weather.wasm" })
+        {
+            string path = Path.GetFullPath(
+                Path.Combine(
+                    AppContext.BaseDirectory,
+                    "..",
+                    "..",
+                    "..",
+                    "..",
+                    "..",
+                    "internalUsages",
+                    moduleName.StartsWith("rust", StringComparison.Ordinal) ? "rust" : "cs",
+                    "modules",
+                    moduleName));
+            if (File.Exists(path))
+            {
+                return path;
+            }
+        }
+
+        string fallbackPath = Path.GetFullPath(
             Path.Combine(
                 AppContext.BaseDirectory,
                 "..",
@@ -268,8 +289,8 @@ public class SekibanRuntimeHostTests
                 "..",
                 "modules",
                 "csharp-weather.wasm"));
-        Assert.True(File.Exists(path), $"Test WASM module not found: {path}");
-        return path;
+        Assert.True(File.Exists(fallbackPath), $"Test WASM module not found: {fallbackPath}");
+        return fallbackPath;
     }
 
     private static WasmtimePrimitiveProjectionInstance GetLeaseCore(Sekiban.Dcb.Primitives.IPrimitiveProjectionInstance instance)
