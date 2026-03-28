@@ -74,10 +74,7 @@ public class WasmTagStateProjectionPrimitive : ITagStateProjectionAccumulator, I
 
         try
         {
-            var payloadJson = state.Payload.Length == 0
-                ? "{}"
-                : Encoding.UTF8.GetString(state.Payload);
-            _instance.RestoreState(payloadJson);
+            _instance.RestoreState(BuildRestoreSnapshotJson(state));
             _version = state.Version;
             _lastSortedUniqueId = state.LastSortedUniqueId;
             _tagPayloadName = state.TagPayloadName;
@@ -96,29 +93,50 @@ public class WasmTagStateProjectionPrimitive : ITagStateProjectionAccumulator, I
         string? latestSortableUniqueId,
         CancellationToken cancellationToken = default)
     {
-        foreach (var serializableEvent in events.OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal))
+        List<SerializableEvent> orderedEvents = events
+            .OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal)
+            .ToList();
+
+        if (_instance is ISerializableEventBatchProjectionInstance batchInstance)
+        {
+            List<SerializableEvent>? filteredEvents = null;
+            foreach (var serializableEvent in orderedEvents)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (!ShouldApplySerializableEvent(serializableEvent, latestSortableUniqueId))
+                {
+                    continue;
+                }
+
+                filteredEvents ??= new List<SerializableEvent>(orderedEvents.Count);
+                filteredEvents.Add(serializableEvent);
+            }
+
+            if (filteredEvents is null || filteredEvents.Count == 0)
+            {
+                return true;
+            }
+
+            batchInstance.ApplySerializableEvents(filteredEvents);
+            foreach (var serializableEvent in filteredEvents)
+            {
+                TrackSerializableEvent(serializableEvent);
+            }
+
+            return true;
+        }
+
+        foreach (var serializableEvent in orderedEvents)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (!string.IsNullOrEmpty(_lastSortedUniqueId) &&
-                string.Compare(serializableEvent.SortableUniqueIdValue, _lastSortedUniqueId, StringComparison.Ordinal) <= 0)
+            if (!ShouldApplySerializableEvent(serializableEvent, latestSortableUniqueId))
             {
                 continue;
             }
 
-            if (!string.IsNullOrWhiteSpace(latestSortableUniqueId) &&
-                string.Compare(serializableEvent.SortableUniqueIdValue, latestSortableUniqueId, StringComparison.Ordinal) > 0)
-            {
-                continue;
-            }
-
-            var eventResult = serializableEvent.ToEvent(_eventTypes);
-            if (!eventResult.IsSuccess)
-            {
-                return false;
-            }
-
-            ApplyEvent(eventResult.GetValue());
+            ApplySerializableEvent(serializableEvent);
         }
 
         return true;
@@ -139,22 +157,24 @@ public class WasmTagStateProjectionPrimitive : ITagStateProjectionAccumulator, I
             return _cachedState;
         }
 
-        var payloadJson = _instance.SerializeState();
+        var serializedState = _instance.SerializeState();
+        var (payloadJson, payloadName, projectorVersion, tagGroup, tagContent, tagProjector) =
+            ExtractSerializedStateMetadata(serializedState);
         var isEmptyPayload = string.IsNullOrWhiteSpace(payloadJson) || payloadJson == "{}";
         var payloadBytes = isEmptyPayload ? Array.Empty<byte>() : Encoding.UTF8.GetBytes(payloadJson);
-        var payloadName = isEmptyPayload
+        var effectivePayloadName = isEmptyPayload
             ? nameof(EmptyTagStatePayload)
-            : _tagPayloadName ?? _defaultTagPayloadName ?? string.Empty;
+            : payloadName ?? _tagPayloadName ?? _defaultTagPayloadName ?? string.Empty;
 
         return new SerializableTagState(
             Payload: payloadBytes,
             Version: _version,
             LastSortedUniqueId: _lastSortedUniqueId ?? string.Empty,
-            ProjectorVersion: _projectorVersion,
-            TagPayloadName: payloadName,
-            TagGroup: _tagGroup ?? string.Empty,
-            TagContent: _tagContent ?? string.Empty,
-            TagProjector: _projectorName);
+            ProjectorVersion: projectorVersion ?? _projectorVersion,
+            TagPayloadName: effectivePayloadName,
+            TagGroup: tagGroup ?? _tagGroup ?? string.Empty,
+            TagContent: tagContent ?? _tagContent ?? string.Empty,
+            TagProjector: tagProjector ?? _projectorName);
     }
 
     private void ApplyEvent(Event ev)
@@ -170,6 +190,46 @@ public class WasmTagStateProjectionPrimitive : ITagStateProjectionAccumulator, I
         _hasChanges = true;
 
         UpdateTagMetadataFromEvent(ev);
+    }
+
+    private void ApplySerializableEvent(SerializableEvent ev)
+    {
+        string payloadJson = Encoding.UTF8.GetString(ev.Payload);
+        _instance.ApplyEvent(
+            ev.EventPayloadName,
+            payloadJson,
+            ev.Tags,
+            ev.SortableUniqueIdValue);
+
+        _version++;
+        _lastSortedUniqueId = ev.SortableUniqueIdValue;
+        _hasChanges = true;
+        UpdateTagMetadataFromSerializableEvent(ev);
+    }
+
+    private bool ShouldApplySerializableEvent(SerializableEvent ev, string? latestSortableUniqueId)
+    {
+        if (!string.IsNullOrEmpty(_lastSortedUniqueId) &&
+            string.Compare(ev.SortableUniqueIdValue, _lastSortedUniqueId, StringComparison.Ordinal) <= 0)
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(latestSortableUniqueId) &&
+            string.Compare(ev.SortableUniqueIdValue, latestSortableUniqueId, StringComparison.Ordinal) > 0)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private void TrackSerializableEvent(SerializableEvent ev)
+    {
+        _version++;
+        _lastSortedUniqueId = ev.SortableUniqueIdValue;
+        _hasChanges = true;
+        UpdateTagMetadataFromSerializableEvent(ev);
     }
 
     private void ResetToInitial()
@@ -203,6 +263,71 @@ public class WasmTagStateProjectionPrimitive : ITagStateProjectionAccumulator, I
         }
 
         _tagPayloadName = _defaultTagPayloadName ?? ev.Payload.GetType().Name;
+    }
+
+    private void UpdateTagMetadataFromSerializableEvent(SerializableEvent ev)
+    {
+        if (ev.Tags.Count == 0)
+        {
+            return;
+        }
+
+        string firstTag = ev.Tags[0];
+        int separatorIndex = firstTag.IndexOf(':');
+        if (separatorIndex >= 0)
+        {
+            _tagGroup = firstTag[..separatorIndex];
+            _tagContent = firstTag[(separatorIndex + 1)..];
+        }
+        else
+        {
+            _tagGroup = firstTag;
+            _tagContent = string.Empty;
+        }
+
+        if (string.IsNullOrWhiteSpace(_tagPayloadName))
+        {
+            _tagPayloadName = _defaultTagPayloadName;
+        }
+    }
+
+    private string BuildRestoreSnapshotJson(SerializableTagState state)
+    {
+        string payloadJson = state.Payload.Length == 0
+            ? "{}"
+            : Encoding.UTF8.GetString(state.Payload);
+
+        return WasmRuntimeJsonContext.SerializeSnapshot(
+            new WasmStateSnapshot(
+                StateJson: payloadJson,
+                SafeVersion: state.Version,
+                UnsafeVersion: state.Version,
+                SafeLastSortableUniqueId: state.LastSortedUniqueId,
+                LastSortableUniqueId: state.LastSortedUniqueId,
+                LastEventId: null,
+                TagPayloadName: state.TagPayloadName,
+                ProjectorVersion: state.ProjectorVersion,
+                TagGroup: state.TagGroup,
+                TagContent: state.TagContent,
+                TagProjector: state.TagProjector));
+    }
+
+    private (string PayloadJson, string? PayloadName, string? ProjectorVersion, string? TagGroup, string? TagContent, string? TagProjector)
+        ExtractSerializedStateMetadata(string serializedState)
+    {
+        var snapshot = WasmRuntimeJsonContext.DeserializeSnapshot(serializedState);
+        if (snapshot is null || snapshot.StateJson is null)
+        {
+            return (serializedState, null, null, null, null, null);
+        }
+
+        return (
+            snapshot.StateJson,
+            snapshot.TagPayloadName,
+            snapshot.ProjectorVersion,
+            snapshot.TagGroup,
+            snapshot.TagContent,
+            snapshot.TagProjector);
     }
 
     public void Dispose() => _instance.Dispose();

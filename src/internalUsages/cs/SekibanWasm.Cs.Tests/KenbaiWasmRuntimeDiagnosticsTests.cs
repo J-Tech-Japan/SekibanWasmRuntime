@@ -1,8 +1,16 @@
+using System.Text;
 using System.Text.Json;
+using Aic.Kenbai.EventSource.KanyushaNos;
+using Aic.Kenbai.EventSource.NendoKeiyakuMitsumoris;
+using Aic.Kenbai.EventSource;
 using Aic.Kenbai.EventSource.Wasm;
 using Aic.Kenbai.EventSource.Projections.HokenNendoShosais;
 using Aic.Kenbai.EventSource.Projections.Kanyushyas;
+using Aic.Kenbai.EventSource.Kanyushas;
+using Aic.Kenbai.ImmutableModels.Events.KanyushaNos;
+using Sekiban.Dcb;
 using Sekiban.Dcb.Domains;
+using Sekiban.Dcb.Tags;
 using Xunit;
 
 namespace SekibanWasm.Cs.Tests;
@@ -149,6 +157,7 @@ public class KenbaiWasmRuntimeDiagnosticsTests
         IReadOnlyList<string> exportNames = wasm.ExportNames;
         int kanyushaListInstanceId = wasm.TryCreateInstance(KanyushaListProjection.MultiProjectorName);
         int hokenInstanceId = wasm.TryCreateInstance(HokenNendoShosaiListProjection.MultiProjectorName);
+        int nendoKeiyakuInstanceId = wasm.TryCreateInstance(NendoKeiyakuMitsumoriProjection.MultiProjectorName);
         int tagInstanceId = wasm.TryCreateInstance("KanyushaNumberKanriTagProjector");
 
         Assert.Contains("create_instance", exportNames);
@@ -163,8 +172,59 @@ public class KenbaiWasmRuntimeDiagnosticsTests
             hokenInstanceId > 0,
             $"Expected {HokenNendoShosaiListProjection.MultiProjectorName} to be creatable, but create_instance returned {hokenInstanceId}. Exports=[{string.Join(", ", exportNames)}]");
         Assert.True(
+            nendoKeiyakuInstanceId > 0,
+            $"Expected {NendoKeiyakuMitsumoriProjection.MultiProjectorName} to be creatable, but create_instance returned {nendoKeiyakuInstanceId}. Exports=[{string.Join(", ", exportNames)}]");
+        Assert.True(
             tagInstanceId > 0,
             $"Expected KanyushaNumberKanriTagProjector to be creatable, but create_instance returned {tagInstanceId}. Exports=[{string.Join(", ", exportNames)}]");
+    }
+
+    [Fact]
+    public void WasmModule_ShouldExposeAllRegisteredKenbaiMultiProjectors()
+    {
+        IReadOnlyList<string> expected = KenbaiWasmParityTestSupport.WasmDomainTypes.MultiProjectorTypes
+            .GetAllProjectorNames()
+            .OrderBy(static name => name, StringComparer.Ordinal)
+            .ToArray();
+
+        using var wasm = new KenbaiWasmParityTestSupport.WasmDiagnosticsClient();
+        IReadOnlyList<string> actual = wasm.DebugListMultiProjectorNames()
+            .OrderBy(static name => name, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(expected, actual);
+        Assert.Contains(NendoKeiyakuMitsumoriProjection.MultiProjectorName, actual);
+    }
+
+    [Fact]
+    public void WasmModule_ShouldCreateAllRegisteredKenbaiTagProjectors()
+    {
+        using var wasm = new KenbaiWasmParityTestSupport.WasmDiagnosticsClient();
+
+        string[] projectorNames = typeof(KenbaiDcbDomainType).Assembly
+            .GetTypes()
+            .Where(static type =>
+                type is { IsAbstract: false, IsInterface: false }
+                && type.GetInterfaces().Any(static iface =>
+                    iface.IsGenericType
+                    && iface.GetGenericTypeDefinition() == typeof(ITagProjector<>)))
+            .Select(static type => type.Name)
+            .OrderBy(static name => name, StringComparer.Ordinal)
+            .ToArray();
+
+        List<string> failures = [];
+        foreach (string projectorName in projectorNames)
+        {
+            int instanceId = wasm.TryCreateInstance(projectorName);
+            if (instanceId <= 0)
+            {
+                failures.Add($"{projectorName}:{instanceId}");
+            }
+        }
+
+        Assert.True(
+            failures.Count == 0,
+            $"Fresh aic.wasm cannot create some Kenbai tag projectors: {string.Join(", ", failures)}");
     }
 
     [Fact]
@@ -175,6 +235,7 @@ public class KenbaiWasmRuntimeDiagnosticsTests
 
         Assert.Contains("diagnose_domain_types", exportNames);
         Assert.Contains("debug_roundtrip_event_payload", exportNames);
+        Assert.Contains("debug_roundtrip_tag_state_payload", exportNames);
         Assert.Contains("debug_roundtrip_tags", exportNames);
     }
 
@@ -196,6 +257,29 @@ public class KenbaiWasmRuntimeDiagnosticsTests
             string actual = KenbaiWasmParityTestSupport.CanonicalizeJson(wasm.RoundTripTags(row.TagsJson));
             Assert.Equal(expected, actual);
         }
+    }
+
+    [Fact]
+    public void WasmTagStateRoundTrip_ShouldRestoreKanyusha12001ApplicationShape()
+    {
+        IReadOnlyList<KenbaiWasmParityTestSupport.EventRow> rows =
+            KenbaiWasmParityTestSupport.LoadOrderedEventsByTag(
+                1,
+                "Kanyusha:12001");
+
+        SerializableTagState wasmState = KenbaiWasmParityTestSupport.ReplayTagStateWasmPrimitive(
+            nameof(KanyushaProjector),
+            rows);
+
+        using var wasm = new KenbaiWasmParityTestSupport.WasmDiagnosticsClient();
+        string roundTripped = wasm.RoundTripTagStatePayload(
+            wasmState.TagPayloadName,
+            Encoding.UTF8.GetString(wasmState.Payload));
+
+        Assert.DoesNotContain("\"error\"", roundTripped, StringComparison.Ordinal);
+        Assert.Equal(
+            KenbaiWasmParityTestSupport.CanonicalizeJson(Encoding.UTF8.GetString(wasmState.Payload)),
+            KenbaiWasmParityTestSupport.CanonicalizeJson(roundTripped));
     }
 
     [Fact]
@@ -496,11 +580,93 @@ public class KenbaiWasmRuntimeDiagnosticsTests
         Assert.Equal(4, applyMultiResult);
     }
 
+    [Fact]
+    public async Task WasmBufferedSortableDiagnostics_ShouldRestoreAndReplayKanyushaNumberKanriTagProjector()
+    {
+        IReadOnlyList<KenbaiWasmParityTestSupport.EventRow> rows =
+            KenbaiWasmParityTestSupport.LoadOrderedEventsByTypes(
+                2,
+                nameof(KanyushaNumberHaraidashiInitialized),
+                nameof(KanyushaNumberHaraidashiSucceeded));
+
+        Assert.Equal(2, rows.Count);
+        KenbaiWasmParityTestSupport.EventRow initRow = rows[0];
+        KenbaiWasmParityTestSupport.EventRow succeededRow = rows[1];
+        Assert.Equal(nameof(KanyushaNumberHaraidashiInitialized), initRow.EventType);
+        Assert.Equal(nameof(KanyushaNumberHaraidashiSucceeded), succeededRow.EventType);
+
+        using var wasm = new KenbaiWasmParityTestSupport.WasmDiagnosticsClient();
+        Assert.True(wasm.HasRawExport("debug_buffered_sortable_get_tag_projector"));
+        Assert.True(wasm.HasRawExport("debug_buffered_sortable_apply_tag_event"));
+        Assert.True(wasm.CanWrapFiveIntParamsReturningInt("debug_buffered_sortable_get_tag_projector"));
+        Assert.True(wasm.CanWrapFiveIntParamsReturningInt("debug_buffered_sortable_apply_tag_event"));
+
+        int initInstanceId = wasm.TryCreateInstance(nameof(KanyushaNumberKanriTagProjector));
+        Assert.True(initInstanceId > 0, $"Failed to create {nameof(KanyushaNumberKanriTagProjector)}: {initInstanceId}");
+
+        string initTagsJson = KenbaiWasmParityTestSupport.CanonicalizeJson(initRow.TagsJson);
+        wasm.BeginPayloadBuffer(initInstanceId);
+        wasm.AppendPayloadChunk(initInstanceId, initRow.PayloadJson);
+        wasm.BeginMetadataBuffer(initInstanceId);
+        wasm.AppendMetadataChunk(initInstanceId, initTagsJson);
+        int initApplyResult = await InvokeWithTimeout(
+            () =>
+            {
+                wasm.ApplyBufferedEventWithSortable(initInstanceId, initRow.EventType, initRow.SortableUniqueId);
+                return 1;
+            },
+            "apply_buffered_event_with_sortable:init");
+        Assert.Equal(1, initApplyResult);
+
+        string restoredSnapshot = wasm.SerializeState(initInstanceId);
+        string nativeInitJson = SerializeCanonicalTagState(
+            KenbaiWasmParityTestSupport.NativeDomainTypes,
+            KenbaiWasmParityTestSupport.ReplayKanyushaNumberKanriTagStateNative(rows.Take(1)));
+        Assert.Equal(nativeInitJson, KenbaiWasmParityTestSupport.ExtractCanonicalStateJsonFromRawSnapshot(restoredSnapshot));
+
+        int replayInstanceId = wasm.TryCreateInstance(nameof(KanyushaNumberKanriTagProjector));
+        Assert.True(replayInstanceId > 0, $"Failed to create restored {nameof(KanyushaNumberKanriTagProjector)}: {replayInstanceId}");
+        wasm.RestoreState(replayInstanceId, restoredSnapshot);
+
+        string succeededTagsJson = KenbaiWasmParityTestSupport.CanonicalizeJson(succeededRow.TagsJson);
+
+        wasm.BeginPayloadBuffer(replayInstanceId);
+        wasm.AppendPayloadChunk(replayInstanceId, succeededRow.PayloadJson);
+        wasm.BeginMetadataBuffer(replayInstanceId);
+        wasm.AppendMetadataChunk(replayInstanceId, succeededTagsJson);
+        int projectorLookupResult = await InvokeWithTimeout(
+            () => wasm.DebugBufferedSortableGetTagProjector(replayInstanceId, succeededRow.EventType, succeededRow.SortableUniqueId),
+            "debug_buffered_sortable_get_tag_projector");
+        Assert.Equal(1, projectorLookupResult);
+
+        wasm.BeginPayloadBuffer(replayInstanceId);
+        wasm.AppendPayloadChunk(replayInstanceId, succeededRow.PayloadJson);
+        wasm.BeginMetadataBuffer(replayInstanceId);
+        wasm.AppendMetadataChunk(replayInstanceId, succeededTagsJson);
+        int applyTagResult = await InvokeWithTimeout(
+            () => wasm.DebugBufferedSortableApplyTagEvent(replayInstanceId, succeededRow.EventType, succeededRow.SortableUniqueId),
+            "debug_buffered_sortable_apply_tag_event");
+        Assert.Equal(1, applyTagResult);
+
+        string finalSnapshot = wasm.SerializeState(replayInstanceId);
+        string nativeFinalJson = SerializeCanonicalTagState(
+            KenbaiWasmParityTestSupport.NativeDomainTypes,
+            KenbaiWasmParityTestSupport.ReplayKanyushaNumberKanriTagStateNative(rows));
+        Assert.Equal(nativeFinalJson, KenbaiWasmParityTestSupport.ExtractCanonicalStateJsonFromRawSnapshot(finalSnapshot));
+    }
+
     private static async Task<T> InvokeWithTimeout<T>(Func<T> operation, string operationName)
     {
         Task<T> task = Task.Run(operation);
         Task completed = await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(10)));
         Assert.True(ReferenceEquals(completed, task), $"Timed out while invoking {operationName}.");
         return await task;
+    }
+
+    private static string SerializeCanonicalTagState(DcbDomainTypes domainTypes, ITagStatePayload state)
+    {
+        byte[] bytes = domainTypes.TagStatePayloadTypes.SerializePayload(state).GetValue();
+        string json = Encoding.UTF8.GetString(bytes);
+        return KenbaiWasmParityTestSupport.CanonicalizeJson(json);
     }
 }

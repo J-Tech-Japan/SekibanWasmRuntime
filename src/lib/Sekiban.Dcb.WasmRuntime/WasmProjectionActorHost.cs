@@ -5,6 +5,8 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using ResultBoxes;
 using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.Common;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Orleans.Serialization;
@@ -17,6 +19,7 @@ namespace Sekiban.Dcb.WasmRuntime;
 public sealed class WasmProjectionActorHostFactory(
     IPrimitiveProjectionHost primitiveProjectionHost,
     WasmProjectorRegistry registry,
+    DcbDomainTypes domainTypes,
     JsonSerializerOptions jsonOptions,
     ILoggerFactory loggerFactory) : IProjectionActorHostFactory
 {
@@ -27,6 +30,7 @@ public sealed class WasmProjectionActorHostFactory(
         new WasmProjectionActorHost(
             primitiveProjectionHost,
             registry,
+            domainTypes,
             jsonOptions,
             projectorName,
             logger ?? loggerFactory.CreateLogger<WasmProjectionActorHost>());
@@ -34,6 +38,9 @@ public sealed class WasmProjectionActorHostFactory(
 
 public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
 {
+    private const string CompressedSnapshotPayloadType =
+        "Sekiban.Dcb.WasmRuntime.WasmCompressedProjectionState";
+
     public sealed record WasmCheckpointState(
         string StateJson,
         int Version,
@@ -90,6 +97,7 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
 
     private readonly IPrimitiveProjectionHost _host;
     private readonly WasmProjectorRegistry _registry;
+    private readonly DcbDomainTypes _domainTypes;
     private readonly JsonSerializerOptions _jsonOptions;
     private readonly ILogger _logger;
     private readonly string _projectorName;
@@ -102,18 +110,22 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
     private bool _isCatchedUp = true;
     private string? _cachedSerializedState;
     private int _cachedSerializedStateVersion = -1;
+    private byte[]? _pendingCompactionStateUtf8;
+    private int _pendingCompactionStateVersion = -1;
     private HashSet<int> _kanyushaListKnownKanyushaNos = [];
     private Dictionary<string, int> _kanyushaListKnownNendoIndex = new(StringComparer.Ordinal);
 
     public WasmProjectionActorHost(
         IPrimitiveProjectionHost host,
         WasmProjectorRegistry registry,
+        DcbDomainTypes domainTypes,
         JsonSerializerOptions jsonOptions,
         string projectorName,
         ILogger logger)
     {
         _host = host;
         _registry = registry;
+        _domainTypes = domainTypes;
         _jsonOptions = jsonOptions;
         _projectorName = projectorName;
         _logger = logger;
@@ -127,12 +139,17 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
         bool finishedCatchUp = true)
     {
         var instance = EnsureInstance();
+        bool useBatchApply = !finishedCatchUp && events.Count > 1;
+        List<SerializableEvent>? batchEvents = useBatchApply
+            ? new List<SerializableEvent>(events.Count)
+            : null;
         foreach (var serializedEvent in events)
         {
             bool traceHokenProjection = string.Equals(
                 _projectorName,
                 "HokenNendoShosaiListProjection",
                 StringComparison.Ordinal);
+            bool needsPayloadJsonInspection = ShouldInspectPayloadJson(serializedEvent.EventPayloadName);
             Trace(
                 $"host_add_events:start projector={_projectorName} eventId={serializedEvent.Id} eventType={serializedEvent.EventPayloadName} sortableUniqueId={serializedEvent.SortableUniqueIdValue} tagCount={serializedEvent.Tags.Count}");
             if (ShouldSkipEvent(serializedEvent.EventPayloadName, serializedEvent.Tags))
@@ -142,8 +159,11 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
             }
             else
             {
-                var payloadJson = Encoding.UTF8.GetString(serializedEvent.Payload);
-                if (ShouldSkipOrphanKanyushaListEvent(serializedEvent.EventPayloadName, payloadJson))
+                string? payloadJson = needsPayloadJsonInspection || !useBatchApply
+                    ? Encoding.UTF8.GetString(serializedEvent.Payload)
+                    : null;
+                if (payloadJson is not null &&
+                    ShouldSkipOrphanKanyushaListEvent(serializedEvent.EventPayloadName, payloadJson))
                 {
                     Trace(
                         $"host_add_events:skipped_orphan projector={_projectorName} eventId={serializedEvent.Id} eventType={serializedEvent.EventPayloadName} sortableUniqueId={serializedEvent.SortableUniqueIdValue}");
@@ -154,7 +174,7 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
                     {
                         WriteHokenTraceLine(
                             $"start projector={_projectorName} eventType={serializedEvent.EventPayloadName} eventId={serializedEvent.Id} sortableUniqueId={serializedEvent.SortableUniqueIdValue} tagCount={serializedEvent.Tags.Count}");
-                        _logger.LogWarning(
+                        _logger.LogInformation(
                             "WASM HokenNendo event apply start: Projector={ProjectorName}, EventType={EventType}, EventId={EventId}, SortableUniqueId={SortableUniqueId}, TagCount={TagCount}",
                             _projectorName,
                             serializedEvent.EventPayloadName,
@@ -163,37 +183,83 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
                             serializedEvent.Tags.Count);
                     }
 
-                    instance.ApplyEvent(
-                        serializedEvent.EventPayloadName,
-                        payloadJson,
-                        serializedEvent.Tags,
-                        serializedEvent.SortableUniqueIdValue);
-
-                    if (traceHokenProjection)
+                    if (useBatchApply)
                     {
-                        WriteHokenTraceLine(
-                            $"completed projector={_projectorName} eventType={serializedEvent.EventPayloadName} eventId={serializedEvent.Id} sortableUniqueId={serializedEvent.SortableUniqueIdValue}");
-                        _logger.LogWarning(
-                            "WASM HokenNendo event apply completed: Projector={ProjectorName}, EventType={EventType}, EventId={EventId}, SortableUniqueId={SortableUniqueId}",
-                            _projectorName,
-                            serializedEvent.EventPayloadName,
-                            serializedEvent.Id,
-                            serializedEvent.SortableUniqueIdValue);
+                        batchEvents!.Add(serializedEvent);
                     }
+                    else
+                    {
+                        instance.ApplyEvent(
+                            serializedEvent.EventPayloadName,
+                            payloadJson ?? Encoding.UTF8.GetString(serializedEvent.Payload),
+                            serializedEvent.Tags,
+                            serializedEvent.SortableUniqueIdValue);
 
-                    Trace(
-                        $"host_add_events:completed projector={_projectorName} eventId={serializedEvent.Id} eventType={serializedEvent.EventPayloadName} sortableUniqueId={serializedEvent.SortableUniqueIdValue}");
+                        if (traceHokenProjection)
+                        {
+                            WriteHokenTraceLine(
+                                $"completed projector={_projectorName} eventType={serializedEvent.EventPayloadName} eventId={serializedEvent.Id} sortableUniqueId={serializedEvent.SortableUniqueIdValue}");
+                            _logger.LogInformation(
+                                "WASM HokenNendo event apply completed: Projector={ProjectorName}, EventType={EventType}, EventId={EventId}, SortableUniqueId={SortableUniqueId}",
+                                _projectorName,
+                                serializedEvent.EventPayloadName,
+                                serializedEvent.Id,
+                                serializedEvent.SortableUniqueIdValue);
+                        }
+
+                        Trace(
+                            $"host_add_events:completed projector={_projectorName} eventId={serializedEvent.Id} eventType={serializedEvent.EventPayloadName} sortableUniqueId={serializedEvent.SortableUniqueIdValue}");
+                        AdvanceEventVersion(serializedEvent);
+                    }
                 }
             }
+        }
 
-            _version++;
-            InvalidateSerializedStateCache();
-            _lastSortableUniqueId = serializedEvent.SortableUniqueIdValue;
-            _lastEventId = serializedEvent.Id;
+        if (batchEvents is { Count: > 0 })
+        {
+            Trace($"host_add_events:batch_start projector={_projectorName} eventCount={batchEvents.Count}");
+            if (instance is ISerializableEventBatchProjectionInstance serializableBatchInstance)
+            {
+                serializableBatchInstance.ApplySerializableEvents(batchEvents);
+            }
+            else
+            {
+                var envelopes = new List<PrimitiveProjectionEventEnvelope>(batchEvents.Count);
+                foreach (SerializableEvent serializedEvent in batchEvents)
+                {
+                    envelopes.Add(new PrimitiveProjectionEventEnvelope(
+                        serializedEvent.EventPayloadName,
+                        Encoding.UTF8.GetString(serializedEvent.Payload),
+                        serializedEvent.Tags,
+                        serializedEvent.SortableUniqueIdValue));
+                }
+
+                instance.ApplyEvents(envelopes);
+            }
+            Trace($"host_add_events:batch_completed projector={_projectorName} eventCount={batchEvents.Count}");
+
+            foreach (var serializedEvent in batchEvents)
+            {
+                AdvanceEventVersion(serializedEvent);
+                Trace(
+                    $"host_add_events:completed projector={_projectorName} eventId={serializedEvent.Id} eventType={serializedEvent.EventPayloadName} sortableUniqueId={serializedEvent.SortableUniqueIdValue}");
+            }
         }
 
         _isCatchedUp = finishedCatchUp;
         return Task.CompletedTask;
+    }
+
+    private bool ShouldInspectPayloadJson(string eventType) =>
+        string.Equals(_projectorName, "KanyushaListProjection", StringComparison.Ordinal) &&
+        KanyushaListOrphanSkippableEventTypes.Contains(eventType);
+
+    private void AdvanceEventVersion(SerializableEvent serializedEvent)
+    {
+        _version++;
+        InvalidateSerializedStateCache();
+        _lastSortableUniqueId = serializedEvent.SortableUniqueIdValue;
+        _lastEventId = serializedEvent.Id;
     }
 
     public Task<ResultBox<ProjectionStateMetadata>> GetStateMetadataAsync(bool includeUnsafe = true) =>
@@ -209,9 +275,15 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
 
     public Task<ResultBox<MultiProjectionState>> GetStateAsync(bool canGetUnsafeState = true)
     {
-        var payload = new WasmProjectionPayload(_projectorName, PeekSerializedState());
+        byte[] stateJsonUtf8 = EnsureInstance().SerializeStateUtf8();
+        var payload = DeserializeGuestStateToPayload(stateJsonUtf8);
+        if (!payload.IsSuccess)
+        {
+            return Task.FromResult(ResultBox.Error<MultiProjectionState>(payload.GetException()));
+        }
+
         return Task.FromResult(ResultBox.FromValue(new MultiProjectionState(
-            Payload: payload,
+            Payload: payload.GetValue(),
             ProjectorName: _projectorName,
             ProjectorVersion: _projectorVersion,
             LastSortableUniqueId: _lastSortableUniqueId ?? string.Empty,
@@ -228,27 +300,19 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
     {
         try
         {
-            var snapshot = await CreateSnapshotAsync();
-            var snapshotBytes = JsonSerializer.SerializeToUtf8Bytes(snapshot, _jsonOptions);
-            var inlineState = SerializableMultiProjectionState.FromBytes(
-                payload: snapshotBytes,
-                multiProjectionPayloadType: typeof(WasmStateSnapshot).FullName ?? nameof(WasmStateSnapshot),
-                projectorName: _projectorName,
-                projectorVersion: _projectorVersion,
-                lastSortableUniqueId: _lastSortableUniqueId ?? string.Empty,
-                lastEventId: _lastEventId ?? Guid.Empty,
-                version: _version,
-                isCatchedUp: _isCatchedUp,
-                isSafeState: true,
-                originalSizeBytes: snapshotBytes.LongLength,
-                compressedSizeBytes: snapshotBytes.LongLength);
-            var envelope = new SerializableMultiProjectionStateEnvelope(false, inlineState, null);
-
-            await JsonSerializer.SerializeAsync(target, envelope, _jsonOptions, cancellationToken);
+            byte[] stateJsonUtf8 = EnsureInstance().SerializeStateUtf8();
+            CapturePendingCompactionState(stateJsonUtf8);
+            byte[] compressedStateJson = await CompressUtf8Async(stateJsonUtf8);
+            await WriteCompressedSnapshotEnvelopeAsync(
+                target,
+                compressedStateJson,
+                stateJsonUtf8.LongLength,
+                cancellationToken);
             return ResultBox.FromValue(true);
         }
         catch (Exception ex)
         {
+            ClearPendingCompactionState();
             return ResultBox.Error<bool>(ex);
         }
     }
@@ -260,15 +324,16 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
             var envelope = await DeserializeEnvelopeAsync(source, cancellationToken);
             var inlineState = envelope?.InlineState
                 ?? throw new InvalidOperationException("Snapshot stream does not contain an inline state.");
-            var snapshot = JsonSerializer.Deserialize<WasmStateSnapshot>(inlineState.GetPayloadBytes(), _jsonOptions)
-                ?? throw new InvalidOperationException("Snapshot stream did not contain a valid WASM state snapshot.");
-
-            string stateJson = await ReadSnapshotStateJsonAsync(snapshot);
-            EnsureInstance().RestoreState(stateJson);
-            _version = snapshot.UnsafeVersion;
-            _lastSortableUniqueId = snapshot.LastSortableUniqueId;
-            _lastEventId = snapshot.LastEventId;
-            _isCatchedUp = true;
+            byte[] payloadBytes = inlineState.GetPayloadBytes();
+            byte[] stateJsonUtf8 = await ReadStateJsonUtf8FromSnapshotPayloadAsync(
+                inlineState,
+                payloadBytes);
+            EnsureInstance().RestoreStateUtf8(stateJsonUtf8);
+            _version = inlineState.Version;
+            _lastSortableUniqueId = inlineState.LastSortableUniqueId;
+            _lastEventId = inlineState.LastEventId;
+            _isCatchedUp = inlineState.IsCatchedUp;
+            string stateJson = Encoding.UTF8.GetString(stateJsonUtf8);
             SetSerializedStateCache(stateJson);
             RefreshKanyushaListShadowState(stateJson);
 
@@ -345,8 +410,49 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
 
     public void CompactSafeHistory()
     {
-        // WASM runtime keeps only the current safe state in memory, so there is no
-        // independent safe-history buffer to compact here.
+        if (_instance is null)
+        {
+            return;
+        }
+
+        byte[] stateJsonUtf8 = TakePendingCompactionState() ?? _instance.SerializeStateUtf8();
+        IPrimitiveProjectionInstance previous = _instance;
+        IPrimitiveProjectionInstance? replacement = null;
+
+        try
+        {
+            replacement = _host is IFreshPrimitiveProjectionHost freshHost
+                ? freshHost.CreateFreshInstance(_projectorName)
+                : _host.CreateInstance(_projectorName);
+            replacement.RestoreStateUtf8(stateJsonUtf8);
+
+            _instance = replacement;
+            InvalidateSerializedStateCache();
+            RefreshKanyushaListShadowState(stateJsonUtf8);
+
+            if (previous is IPooledPrimitiveProjectionLeaseControl pooledLeaseControl)
+            {
+                pooledLeaseControl.MarkDoNotPool();
+            }
+
+            previous.Dispose();
+            _logger.LogDebug("Compacted WASM projection instance for {ProjectorName}", _projectorName);
+        }
+        catch (Exception ex)
+        {
+            if (!ReferenceEquals(previous, _instance))
+            {
+                _instance?.Dispose();
+                _instance = previous;
+            }
+
+            if (replacement is not null && ReferenceEquals(replacement, _instance) is false)
+            {
+                replacement.Dispose();
+            }
+
+            _logger.LogWarning(ex, "Failed to compact WASM projection instance for {ProjectorName}", _projectorName);
+        }
     }
 
     public void ForcePromoteAllBufferedEvents()
@@ -367,7 +473,7 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
     }
 
     public long EstimateStateSizeBytes(bool includeUnsafeDetails) =>
-        Encoding.UTF8.GetByteCount(PeekSerializedState());
+        EnsureInstance().SerializeStateUtf8().LongLength;
 
     public string PeekCurrentSafeWindowThreshold() => _lastSortableUniqueId ?? string.Empty;
 
@@ -384,22 +490,45 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
             var envelope = await DeserializeEnvelopeAsync(source, cancellationToken);
             var inlineState = envelope?.InlineState
                 ?? throw new InvalidOperationException("Snapshot stream does not contain an inline state.");
-            var snapshot = JsonSerializer.Deserialize<WasmStateSnapshot>(inlineState.GetPayloadBytes(), _jsonOptions)
-                ?? throw new InvalidOperationException("Snapshot stream did not contain a valid WASM state snapshot.");
-            var rewritten = snapshot with { ProjectorVersion = newVersion };
-            var rewrittenBytes = JsonSerializer.SerializeToUtf8Bytes(rewritten, _jsonOptions);
-            var rewrittenInlineState = SerializableMultiProjectionState.FromBytes(
-                payload: rewrittenBytes,
-                multiProjectionPayloadType: inlineState.MultiProjectionPayloadType,
-                projectorName: inlineState.ProjectorName,
-                projectorVersion: newVersion,
-                lastSortableUniqueId: inlineState.LastSortableUniqueId,
-                lastEventId: inlineState.LastEventId,
-                version: inlineState.Version,
-                isCatchedUp: inlineState.IsCatchedUp,
-                isSafeState: inlineState.IsSafeState,
-                originalSizeBytes: rewrittenBytes.LongLength,
-                compressedSizeBytes: rewrittenBytes.LongLength);
+            var payloadBytes = inlineState.GetPayloadBytes();
+            SerializableMultiProjectionState rewrittenInlineState;
+            if (string.Equals(
+                    inlineState.MultiProjectionPayloadType,
+                    CompressedSnapshotPayloadType,
+                    StringComparison.Ordinal))
+            {
+                rewrittenInlineState = SerializableMultiProjectionState.FromBytes(
+                    payload: payloadBytes,
+                    multiProjectionPayloadType: inlineState.MultiProjectionPayloadType,
+                    projectorName: inlineState.ProjectorName,
+                    projectorVersion: newVersion,
+                    lastSortableUniqueId: inlineState.LastSortableUniqueId,
+                    lastEventId: inlineState.LastEventId,
+                    version: inlineState.Version,
+                    isCatchedUp: inlineState.IsCatchedUp,
+                    isSafeState: inlineState.IsSafeState,
+                    originalSizeBytes: inlineState.OriginalSizeBytes,
+                    compressedSizeBytes: inlineState.CompressedSizeBytes);
+            }
+            else
+            {
+                var snapshot = WasmRuntimeJsonContext.DeserializeSnapshot(payloadBytes)
+                    ?? throw new InvalidOperationException("Snapshot stream did not contain a valid WASM state snapshot.");
+                var rewritten = snapshot with { ProjectorVersion = newVersion };
+                var rewrittenBytes = WasmRuntimeJsonContext.SerializeSnapshotToUtf8Bytes(rewritten);
+                rewrittenInlineState = SerializableMultiProjectionState.FromBytes(
+                    payload: rewrittenBytes,
+                    multiProjectionPayloadType: inlineState.MultiProjectionPayloadType,
+                    projectorName: inlineState.ProjectorName,
+                    projectorVersion: newVersion,
+                    lastSortableUniqueId: inlineState.LastSortableUniqueId,
+                    lastEventId: inlineState.LastEventId,
+                    version: inlineState.Version,
+                    isCatchedUp: inlineState.IsCatchedUp,
+                    isSafeState: inlineState.IsSafeState,
+                    originalSizeBytes: rewrittenBytes.LongLength,
+                    compressedSizeBytes: rewrittenBytes.LongLength);
+            }
 
             await JsonSerializer.SerializeAsync(
                 target,
@@ -529,12 +658,14 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
             "KanyushaJotaiFromHikeizokuUketsukeCanceled" => true,
             "HaigyogoTokuyakuJohoUpdated" => true,
             "KanyuMoushikomiTorikeshied" => true,
+            "NendoKanyuMoushikomiSaikaied" => true,
             "KeiyakuKaiyakuChutoed" => true,
             "TadantaiKeizokuJohoKoshin" => true,
             "TaDantaiKeizokuSeted" => true,
             "KanyushaLoginRecorded" => true,
             "KanyushaSakujoed" => true,
             "NendoKanyuImported" => true,
+            "NendoKanyuReplaced" => true,
             "NendoKoshinKaishi" => true,
             "KanyushaJohoSeted" => true,
             "KanyushaJohoByKanriSiteUpdated" => true,
@@ -567,6 +698,7 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
             "NendoKeiyakuMitsumoriMitsumoriTekiyo" => true,
             "NendoKanyuSakujoed" => true,
             "KeiyakuImported" => true,
+            "KeiyakuReplaced" => true,
             "KeiyakuKakekinShisanCompleted" => true,
             "KeiyakuKakuninZumiNiIko" => true,
             "KeiyakuKaiyakuManryoed" => true,
@@ -627,37 +759,98 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
         return stateJson;
     }
 
-    private async Task<WasmStateSnapshot> CreateSnapshotAsync()
+    private async Task<SerializableMultiProjectionState> CreateCompressedInlineSnapshotStateAsync()
     {
-        string stateJson = PeekSerializedState();
-        byte[] compressedStateJson = await CompressStringAsync(stateJson);
-
-        return new WasmStateSnapshot(
-            StateJson: null,
-            SafeVersion: _version,
-            UnsafeVersion: _version,
-            SafeLastSortableUniqueId: _lastSortableUniqueId,
-            LastSortableUniqueId: _lastSortableUniqueId,
-            LastEventId: _lastEventId,
-            ProjectorVersion: _projectorVersion,
-            TagProjector: _projectorName,
-            CompressedStateJson: compressedStateJson);
+        byte[] stateJsonUtf8 = EnsureInstance().SerializeStateUtf8();
+        byte[] compressedStateJson = await CompressUtf8Async(stateJsonUtf8);
+        return SerializableMultiProjectionState.FromBytes(
+            payload: compressedStateJson,
+            multiProjectionPayloadType: CompressedSnapshotPayloadType,
+            projectorName: _projectorName,
+            projectorVersion: _projectorVersion,
+            lastSortableUniqueId: _lastSortableUniqueId ?? string.Empty,
+            lastEventId: _lastEventId ?? Guid.Empty,
+            version: _version,
+            isCatchedUp: _isCatchedUp,
+            isSafeState: true,
+            originalSizeBytes: stateJsonUtf8.LongLength,
+            compressedSizeBytes: compressedStateJson.LongLength);
     }
 
-    private static async Task<string> ReadSnapshotStateJsonAsync(WasmStateSnapshot snapshot)
+    private static async Task<byte[]> ReadSnapshotStateJsonUtf8Async(WasmStateSnapshot snapshot)
     {
         if (snapshot.CompressedStateJson is { Length: > 0 } compressedStateJson)
         {
-            return await DecompressToStringAsync(compressedStateJson);
+            return await DecompressToUtf8Async(compressedStateJson);
         }
 
         if (!string.IsNullOrWhiteSpace(snapshot.StateJson))
         {
-            return snapshot.StateJson;
+            return Encoding.UTF8.GetBytes(snapshot.StateJson);
         }
 
         throw new InvalidOperationException("WASM snapshot does not contain any serialized state payload.");
     }
+
+    private ResultBox<IMultiProjectionPayload> DeserializeGuestStateToPayload(byte[] stateJsonUtf8)
+    {
+        try
+        {
+            string safeWindowThreshold = !string.IsNullOrWhiteSpace(_lastSortableUniqueId)
+                ? _lastSortableUniqueId
+                : SortableUniqueId.MinValue.Value;
+            return _domainTypes.MultiProjectorTypes.Deserialize(
+                _projectorName,
+                _domainTypes,
+                safeWindowThreshold,
+                stateJsonUtf8);
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<IMultiProjectionPayload>(ex);
+        }
+    }
+
+    private async Task<byte[]> ReadStateJsonUtf8FromSnapshotPayloadAsync(
+        SerializableMultiProjectionState inlineState,
+        byte[] payloadBytes)
+    {
+        if (string.Equals(
+                inlineState.MultiProjectionPayloadType,
+                CompressedSnapshotPayloadType,
+                StringComparison.Ordinal))
+        {
+            return await DecompressToUtf8Async(payloadBytes);
+        }
+
+        WasmStateSnapshot? legacySnapshot = WasmRuntimeJsonContext.DeserializeSnapshot(payloadBytes);
+        if (legacySnapshot is not null)
+        {
+            return await ReadSnapshotStateJsonUtf8Async(legacySnapshot);
+        }
+
+        string safeWindowThreshold = !string.IsNullOrWhiteSpace(inlineState.LastSortableUniqueId)
+            ? inlineState.LastSortableUniqueId
+            : SortableUniqueId.MinValue.Value;
+        ResultBox<IMultiProjectionPayload> payloadResult =
+            _domainTypes.MultiProjectorTypes.Deserialize(
+                _projectorName,
+                _domainTypes,
+                safeWindowThreshold,
+                payloadBytes);
+        if (!payloadResult.IsSuccess)
+        {
+            throw payloadResult.GetException();
+        }
+
+        IMultiProjectionPayload payload = payloadResult.GetValue();
+        return JsonSerializer.SerializeToUtf8Bytes(payload, payload.GetType(), _jsonOptions);
+    }
+
+    private string GetSnapshotSafeWindowThreshold() =>
+        !string.IsNullOrWhiteSpace(_lastSortableUniqueId)
+            ? _lastSortableUniqueId
+            : SortableUniqueId.MinValue.Value;
 
     private bool ShouldSkipOrphanKanyushaListEvent(string eventType, string payloadJson)
     {
@@ -680,21 +873,25 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
         return !knownByNendo && !knownByKanyusha;
     }
 
-    private void RefreshKanyushaListShadowState(string stateJson)
+    private void RefreshKanyushaListShadowState(string stateJson) =>
+        RefreshKanyushaListShadowState(Encoding.UTF8.GetBytes(stateJson));
+
+    private void RefreshKanyushaListShadowState(byte[] stateJsonUtf8)
     {
         _kanyushaListKnownKanyushaNos.Clear();
         _kanyushaListKnownNendoIndex.Clear();
 
         if (!string.Equals(_projectorName, "KanyushaListProjection", StringComparison.Ordinal) ||
-            string.IsNullOrWhiteSpace(stateJson) ||
-            stateJson == "{}")
+            !EnableLegacyOrphanSkipping ||
+            stateJsonUtf8.Length == 0 ||
+            (stateJsonUtf8.Length == 2 && stateJsonUtf8[0] == (byte)'{' && stateJsonUtf8[1] == (byte)'}'))
         {
             return;
         }
 
         try
         {
-            using JsonDocument document = JsonDocument.Parse(stateJson);
+            using JsonDocument document = JsonDocument.Parse(stateJsonUtf8);
             JsonElement root = document.RootElement;
             JsonElement projectionRoot = root.TryGetProperty("Projection", out JsonElement projection)
                 ? projection
@@ -769,10 +966,15 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
     private static async Task<byte[]> CompressStringAsync(string value)
     {
         var bytes = Encoding.UTF8.GetBytes(value);
+        return await CompressUtf8Async(bytes);
+    }
+
+    private static async Task<byte[]> CompressUtf8Async(byte[] utf8Bytes)
+    {
         await using var output = new MemoryStream();
         await using (var gzip = new GZipStream(output, CompressionLevel.SmallestSize, leaveOpen: true))
         {
-            await gzip.WriteAsync(bytes);
+            await gzip.WriteAsync(utf8Bytes);
         }
 
         return output.ToArray();
@@ -791,10 +993,25 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
         return await reader.ReadToEndAsync();
     }
 
+    private static async Task<byte[]> DecompressToUtf8Async(byte[] compressedData)
+    {
+        if (compressedData.Length == 0)
+        {
+            return "{}"u8.ToArray();
+        }
+
+        await using var input = new MemoryStream(compressedData);
+        await using var gzip = new GZipStream(input, CompressionMode.Decompress);
+        await using var output = new MemoryStream();
+        await gzip.CopyToAsync(output);
+        return output.ToArray();
+    }
+
     private void InvalidateSerializedStateCache()
     {
         _cachedSerializedState = null;
         _cachedSerializedStateVersion = -1;
+        ClearPendingCompactionState();
     }
 
     private void SetSerializedStateCache(string stateJson)
@@ -802,6 +1019,77 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
         _cachedSerializedState = stateJson;
         _cachedSerializedStateVersion = _version;
     }
+
+    private void CapturePendingCompactionState(byte[] stateJsonUtf8)
+    {
+        _pendingCompactionStateUtf8 = stateJsonUtf8;
+        _pendingCompactionStateVersion = _version;
+    }
+
+    private byte[]? TakePendingCompactionState()
+    {
+        if (_pendingCompactionStateUtf8 is null || _pendingCompactionStateVersion != _version)
+        {
+            ClearPendingCompactionState();
+            return null;
+        }
+
+        byte[] stateJsonUtf8 = _pendingCompactionStateUtf8;
+        ClearPendingCompactionState();
+        return stateJsonUtf8;
+    }
+
+    private void ClearPendingCompactionState()
+    {
+        _pendingCompactionStateUtf8 = null;
+        _pendingCompactionStateVersion = -1;
+    }
+
+    private async Task WriteCompressedSnapshotEnvelopeAsync(
+        Stream target,
+        byte[] compressedStateJson,
+        long originalSizeBytes,
+        CancellationToken cancellationToken)
+    {
+        await using var writer = new Utf8JsonWriter(target);
+        writer.WriteStartObject();
+        writer.WriteBoolean(GetJsonPropertyName(nameof(SerializableMultiProjectionStateEnvelope.IsOffloaded)), false);
+        writer.WritePropertyName(GetJsonPropertyName(nameof(SerializableMultiProjectionStateEnvelope.InlineState)));
+        writer.WriteStartObject();
+        writer.WriteNull(GetJsonPropertyName(nameof(SerializableMultiProjectionState.PayloadJson)));
+        writer.WriteBase64String(
+            GetJsonPropertyName(nameof(SerializableMultiProjectionState.PayloadBase64)),
+            compressedStateJson);
+        writer.WriteString(
+            GetJsonPropertyName(nameof(SerializableMultiProjectionState.MultiProjectionPayloadType)),
+            CompressedSnapshotPayloadType);
+        writer.WriteString(GetJsonPropertyName(nameof(SerializableMultiProjectionState.ProjectorName)), _projectorName);
+        writer.WriteString(
+            GetJsonPropertyName(nameof(SerializableMultiProjectionState.ProjectorVersion)),
+            _projectorVersion);
+        writer.WriteString(
+            GetJsonPropertyName(nameof(SerializableMultiProjectionState.LastSortableUniqueId)),
+            _lastSortableUniqueId ?? string.Empty);
+        writer.WriteString(
+            GetJsonPropertyName(nameof(SerializableMultiProjectionState.LastEventId)),
+            _lastEventId ?? Guid.Empty);
+        writer.WriteNumber(GetJsonPropertyName(nameof(SerializableMultiProjectionState.Version)), _version);
+        writer.WriteBoolean(GetJsonPropertyName(nameof(SerializableMultiProjectionState.IsCatchedUp)), _isCatchedUp);
+        writer.WriteBoolean(GetJsonPropertyName(nameof(SerializableMultiProjectionState.IsSafeState)), true);
+        writer.WriteNumber(
+            GetJsonPropertyName(nameof(SerializableMultiProjectionState.OriginalSizeBytes)),
+            originalSizeBytes);
+        writer.WriteNumber(
+            GetJsonPropertyName(nameof(SerializableMultiProjectionState.CompressedSizeBytes)),
+            compressedStateJson.LongLength);
+        writer.WriteEndObject();
+        writer.WriteNull(GetJsonPropertyName(nameof(SerializableMultiProjectionStateEnvelope.OffloadedState)));
+        writer.WriteEndObject();
+        await writer.FlushAsync(cancellationToken);
+    }
+
+    private string GetJsonPropertyName(string clrPropertyName) =>
+        _jsonOptions.PropertyNamingPolicy?.ConvertName(clrPropertyName) ?? clrPropertyName;
 
     private async Task<SerializableMultiProjectionStateEnvelope?> DeserializeEnvelopeAsync(
         Stream source,
