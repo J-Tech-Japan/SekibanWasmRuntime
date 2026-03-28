@@ -516,11 +516,11 @@ public class WasmtimePrimitiveProjectionInstance :
             ThrowIfDisposed();
 
             var batchJsonUtf8 = SerializeSerializableBatchEvents(events);
-            var (jsonPtr, jsonLen) = WriteBytes(batchJsonUtf8);
+            var (jsonPtr, jsonLen) = WriteBytes(batchJsonUtf8.WrittenSpan);
             try
             {
                 Trace(
-                    $"apply_serializable_events_batch:start projectorInstance={_instanceId} offset={offset} eventCount={events.Count} jsonLength={batchJsonUtf8.Length}");
+                    $"apply_serializable_events_batch:start projectorInstance={_instanceId} offset={offset} eventCount={events.Count} jsonLength={batchJsonUtf8.WrittenCount}");
                 int applied = _applyEventsBatch!(_instanceId, jsonPtr, jsonLen);
                 Trace(
                     $"apply_serializable_events_batch:completed projectorInstance={_instanceId} offset={offset} eventCount={events.Count} applied={applied}");
@@ -547,7 +547,7 @@ public class WasmtimePrimitiveProjectionInstance :
             serializedEvent.SortableUniqueIdValue);
     }
 
-    private static byte[] SerializeSerializableBatchEvents(IReadOnlyList<SerializableEvent> events)
+    private static ArrayBufferWriter<byte> SerializeSerializableBatchEvents(IReadOnlyList<SerializableEvent> events)
     {
         var buffer = new ArrayBufferWriter<byte>();
         using var writer = new Utf8JsonWriter(buffer);
@@ -573,7 +573,7 @@ public class WasmtimePrimitiveProjectionInstance :
 
         writer.WriteEndArray();
         writer.Flush();
-        return buffer.WrittenSpan.ToArray();
+        return buffer;
     }
 
     private static int ResolveApplyEventsBatchSize()

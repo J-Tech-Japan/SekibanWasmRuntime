@@ -147,6 +147,7 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
                 _projectorName,
                 "HokenNendoShosaiListProjection",
                 StringComparison.Ordinal);
+            bool needsPayloadJsonInspection = ShouldInspectPayloadJson(serializedEvent.EventPayloadName);
             Trace(
                 $"host_add_events:start projector={_projectorName} eventId={serializedEvent.Id} eventType={serializedEvent.EventPayloadName} sortableUniqueId={serializedEvent.SortableUniqueIdValue} tagCount={serializedEvent.Tags.Count}");
             if (ShouldSkipEvent(serializedEvent.EventPayloadName, serializedEvent.Tags))
@@ -156,8 +157,11 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
             }
             else
             {
-                var payloadJson = Encoding.UTF8.GetString(serializedEvent.Payload);
-                if (ShouldSkipOrphanKanyushaListEvent(serializedEvent.EventPayloadName, payloadJson))
+                string? payloadJson = needsPayloadJsonInspection || !useBatchApply
+                    ? Encoding.UTF8.GetString(serializedEvent.Payload)
+                    : null;
+                if (payloadJson is not null &&
+                    ShouldSkipOrphanKanyushaListEvent(serializedEvent.EventPayloadName, payloadJson))
                 {
                     Trace(
                         $"host_add_events:skipped_orphan projector={_projectorName} eventId={serializedEvent.Id} eventType={serializedEvent.EventPayloadName} sortableUniqueId={serializedEvent.SortableUniqueIdValue}");
@@ -185,7 +189,7 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
                     {
                         instance.ApplyEvent(
                             serializedEvent.EventPayloadName,
-                            payloadJson,
+                            payloadJson ?? Encoding.UTF8.GetString(serializedEvent.Payload),
                             serializedEvent.Tags,
                             serializedEvent.SortableUniqueIdValue);
 
@@ -243,6 +247,10 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
         _isCatchedUp = finishedCatchUp;
         return Task.CompletedTask;
     }
+
+    private bool ShouldInspectPayloadJson(string eventType) =>
+        string.Equals(_projectorName, "KanyushaListProjection", StringComparison.Ordinal) &&
+        KanyushaListOrphanSkippableEventTypes.Contains(eventType);
 
     private void AdvanceEventVersion(SerializableEvent serializedEvent)
     {
