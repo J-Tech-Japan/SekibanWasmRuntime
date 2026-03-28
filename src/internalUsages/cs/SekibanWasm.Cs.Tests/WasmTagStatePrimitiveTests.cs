@@ -273,6 +273,34 @@ public class WasmTagStatePrimitiveTests
         Assert.Equal(4, primitive.Version);
     }
 
+    [Fact]
+    public void ApplySerializableEvents_ShouldUseBatchPath_WhenInstanceSupportsBatchApply()
+    {
+        using var instance = new StubBatchProjectionInstance();
+        var primitive = new WasmTagStateProjectionPrimitive(
+            instance, "WeatherForecastProjector", "v1", EventTypes, JsonOptions);
+
+        var eventA = CreateSerializableEvent(
+            nameof(WeatherForecastCreated),
+            "{\"forecastId\":\"f-1\"}",
+            "weather:f-1",
+            "063910000000000000000000000001");
+        var eventB = CreateSerializableEvent(
+            nameof(WeatherForecastLocationUpdated),
+            "{\"forecastId\":\"f-1\",\"location\":\"Osaka\"}",
+            "weather:f-1",
+            "063910000000000000000000000002");
+
+        primitive.ApplyEvents([eventB, eventA], null);
+
+        Assert.Equal(2, instance.BatchedEvents.Count);
+        Assert.Empty(instance.AppliedEvents);
+        Assert.Equal("063910000000000000000000000002", primitive.LastSortedUniqueId);
+        Assert.Equal(2, primitive.Version);
+        Assert.Equal("weather", primitive.TagGroup);
+        Assert.Equal("f-1", primitive.TagContent);
+    }
+
     private static Event CreateEvent(
         IEventPayload payload,
         string eventType,
@@ -282,6 +310,23 @@ public class WasmTagStatePrimitiveTests
         var sortableId = SortableUniqueId.Generate(DateTime.UtcNow, id);
         var metadata = new EventMetadata(id.ToString(), eventType, "test");
         return new Event(payload, sortableId, eventType, id, metadata, tags);
+    }
+
+    private static SerializableEvent CreateSerializableEvent(
+        string eventType,
+        string payloadJson,
+        string tag,
+        string sortableUniqueId)
+    {
+        var id = Guid.NewGuid();
+        var metadata = new EventMetadata(id.ToString(), eventType, "test");
+        return new SerializableEvent(
+            Encoding.UTF8.GetBytes(payloadJson),
+            sortableUniqueId,
+            id,
+            metadata,
+            [tag],
+            eventType);
     }
 
     /// <summary>
@@ -315,5 +360,42 @@ public class WasmTagStatePrimitiveTests
         }
 
         public void Dispose() { }
+    }
+
+    private sealed class StubBatchProjectionInstance :
+        IPrimitiveProjectionInstance,
+        ISerializableEventBatchProjectionInstance
+    {
+        public string StateToReturn { get; set; } = "{}";
+        public List<(string EventType, string PayloadJson)> AppliedEvents { get; } = [];
+        public List<SerializableEvent> BatchedEvents { get; } = [];
+
+        public void ApplyEvent(
+            string eventType,
+            string eventPayloadJson,
+            IReadOnlyList<string> tags,
+            string? sortableUniqueId)
+        {
+            AppliedEvents.Add((eventType, eventPayloadJson));
+        }
+
+        public void ApplySerializableEvents(IReadOnlyList<SerializableEvent> events)
+        {
+            BatchedEvents.AddRange(events);
+        }
+
+        public string ExecuteQuery(string queryType, string queryParamsJson) => "null";
+
+        public string ExecuteListQuery(string queryType, string queryParamsJson) => "[]";
+
+        public string SerializeState() => StateToReturn;
+
+        public void RestoreState(string stateJson)
+        {
+        }
+
+        public void Dispose()
+        {
+        }
     }
 }

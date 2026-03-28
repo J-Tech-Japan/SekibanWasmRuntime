@@ -93,18 +93,45 @@ public class WasmTagStateProjectionPrimitive : ITagStateProjectionAccumulator, I
         string? latestSortableUniqueId,
         CancellationToken cancellationToken = default)
     {
-        foreach (var serializableEvent in events.OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal))
+        List<SerializableEvent> orderedEvents = events
+            .OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal)
+            .ToList();
+
+        if (_instance is ISerializableEventBatchProjectionInstance batchInstance)
+        {
+            List<SerializableEvent>? filteredEvents = null;
+            foreach (var serializableEvent in orderedEvents)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (!ShouldApplySerializableEvent(serializableEvent, latestSortableUniqueId))
+                {
+                    continue;
+                }
+
+                filteredEvents ??= new List<SerializableEvent>(orderedEvents.Count);
+                filteredEvents.Add(serializableEvent);
+            }
+
+            if (filteredEvents is null || filteredEvents.Count == 0)
+            {
+                return true;
+            }
+
+            batchInstance.ApplySerializableEvents(filteredEvents);
+            foreach (var serializableEvent in filteredEvents)
+            {
+                TrackSerializableEvent(serializableEvent);
+            }
+
+            return true;
+        }
+
+        foreach (var serializableEvent in orderedEvents)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (!string.IsNullOrEmpty(_lastSortedUniqueId) &&
-                string.Compare(serializableEvent.SortableUniqueIdValue, _lastSortedUniqueId, StringComparison.Ordinal) <= 0)
-            {
-                continue;
-            }
-
-            if (!string.IsNullOrWhiteSpace(latestSortableUniqueId) &&
-                string.Compare(serializableEvent.SortableUniqueIdValue, latestSortableUniqueId, StringComparison.Ordinal) > 0)
+            if (!ShouldApplySerializableEvent(serializableEvent, latestSortableUniqueId))
             {
                 continue;
             }
@@ -174,6 +201,31 @@ public class WasmTagStateProjectionPrimitive : ITagStateProjectionAccumulator, I
             ev.Tags,
             ev.SortableUniqueIdValue);
 
+        _version++;
+        _lastSortedUniqueId = ev.SortableUniqueIdValue;
+        _hasChanges = true;
+        UpdateTagMetadataFromSerializableEvent(ev);
+    }
+
+    private bool ShouldApplySerializableEvent(SerializableEvent ev, string? latestSortableUniqueId)
+    {
+        if (!string.IsNullOrEmpty(_lastSortedUniqueId) &&
+            string.Compare(ev.SortableUniqueIdValue, _lastSortedUniqueId, StringComparison.Ordinal) <= 0)
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(latestSortableUniqueId) &&
+            string.Compare(ev.SortableUniqueIdValue, latestSortableUniqueId, StringComparison.Ordinal) > 0)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private void TrackSerializableEvent(SerializableEvent ev)
+    {
         _version++;
         _lastSortedUniqueId = ev.SortableUniqueIdValue;
         _hasChanges = true;
