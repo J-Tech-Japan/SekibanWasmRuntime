@@ -75,12 +75,15 @@ public class RemoteSekibanExecutorTests
             {
                 ForecastId = "f-1",
                 PageNumber = 1,
-                PageSize = 10
+                PageSize = 10,
+                WaitForSortableUniqueId = "063910000000000000000000000010"
             });
 
         var item = Assert.Single(result.Items);
         Assert.Equal("f-1", item.ForecastId);
         Assert.Equal(1, result.TotalCount);
+        string queryBody = handler.GetSingleRequestBody("/api/sekiban/serialized/list-query");
+        Assert.Contains("063910000000000000000000000010", queryBody);
     }
 
     [Fact]

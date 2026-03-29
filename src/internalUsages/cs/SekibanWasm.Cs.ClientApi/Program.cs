@@ -1,49 +1,32 @@
-using System.Text.Json;
-using System.Net.Http.Json;
-using SekibanWasm.Cs.ClientApi;
+using Sekiban.Dcb;
+using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.Commands;
+using Sekiban.Dcb.Events;
+using Sekiban.Dcb.Tags;
+using Sekiban.Dcb.WasmRuntime.Remote;
 using SekibanWasm.Cs.Domain;
 using SekibanWasm.Cs.Domain.Weather;
-using Sekiban.Dcb.WasmRuntime;
-using Sekiban.Dcb.WasmRuntime.Remote;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 
-var domainSerializerOptions = new DomainSerializerOptions(DomainJsonContext.Default.Options);
-var transportSerializerOptions = new TransportSerializerOptions(
-    new JsonSerializerOptions(JsonSerializerDefaults.Web));
-builder.Services.AddSingleton(domainSerializerOptions);
-builder.Services.AddSingleton(transportSerializerOptions);
+var domainTypes = DomainType.GetDomainTypes();
+builder.Services.AddSingleton(domainTypes);
 
 var wasmServerBaseUrl = ResolveWasmServerBase(builder.Configuration);
 builder.Services.AddHttpClient("wasmserver", client =>
 {
     client.BaseAddress = new Uri(wasmServerBaseUrl);
 });
-builder.Services.AddHttpClient("serialized-dcb");
-builder.Services.AddHttpClient("serialized-query");
-builder.Services.AddScoped<ISerializedDcbClient>(sp =>
-    new HttpSerializedDcbClient(
-        sp.GetRequiredService<IHttpClientFactory>().CreateClient("serialized-dcb"),
-        new SerializedDcbClientOptions { BaseUrl = wasmServerBaseUrl },
-        sp.GetRequiredService<TransportSerializerOptions>().Value));
-builder.Services.AddScoped<ISerializedQueryClient>(sp =>
-    new HttpSerializedQueryClient(
-        sp.GetRequiredService<IHttpClientFactory>().CreateClient("serialized-query"),
-        new SerializedDcbClientOptions { BaseUrl = wasmServerBaseUrl },
-        sp.GetRequiredService<TransportSerializerOptions>().Value,
-        sp.GetRequiredService<DomainSerializerOptions>().Value));
-builder.Services.AddScoped<IWeatherQueryClient, WeatherQueryClient>();
-builder.Services.AddScoped<ClientApiCommandFlow>();
-builder.Services.AddScoped<ISekibanCommandCommitRequestBuilder>(sp =>
-    sp.GetRequiredService<ClientApiCommandFlow>());
-builder.Services.AddScoped<ISekibanWasmExecutor>(sp =>
-    new SekibanWasmExecutor(
-        sp.GetRequiredService<ISerializedDcbClient>(),
-        sp.GetRequiredService<ISerializedQueryClient>(),
-        sp.GetRequiredService<ISekibanCommandCommitRequestBuilder>(),
-        sp.GetRequiredService<DomainSerializerOptions>().Value));
+builder.Services.AddSingleton<IEventPublisher, NoOpEventPublisher>();
+builder.Services.AddScoped<ISekibanExecutor>(sp =>
+    new RemoteSekibanExecutor(
+        sp.GetRequiredService<IHttpClientFactory>().CreateClient("wasmserver"),
+        sp.GetRequiredService<DcbDomainTypes>(),
+        sp.GetRequiredService<IEventPublisher>(),
+        sp.GetRequiredService<ILogger<RemoteSekibanExecutor>>(),
+        sp.GetRequiredService<ILoggerFactory>()));
 
 builder.Services.AddOpenApi();
 
@@ -59,23 +42,16 @@ app.MapGet("/api/weatherforecast", async Task<IResult> (
     int? pageSize,
     CancellationToken ct) =>
 {
-    var executor = http.RequestServices.GetRequiredService<ISekibanWasmExecutor>();
-    var result = await executor.ExecuteListQueryAsync<List<WeatherForecastItem>>(
-        nameof(GetWeatherForecastListQuery),
+    var executor = http.RequestServices.GetRequiredService<ISekibanExecutor>();
+    var result = await executor.QueryAsync(
         new GetWeatherForecastListQuery
         {
             PageNumber = pageNumber,
-            PageSize = pageSize
-        },
-        waitForSortableId,
-        ct);
+            PageSize = pageSize,
+            WaitForSortableUniqueId = waitForSortableId
+        });
 
-    if (!result.IsSuccess)
-    {
-        return Results.BadRequest(new { error = result.GetException().Message });
-    }
-
-    return Results.Ok(result.GetValue());
+    return Results.Ok(result.Items);
 });
 
 app.MapPost("/api/weatherforecast", async (
@@ -83,7 +59,7 @@ app.MapPost("/api/weatherforecast", async (
     CreateWeatherForecast command,
     CancellationToken ct) =>
 {
-    return await ExecuteCommandAsync(http, "CreateWeatherForecast", command, ct);
+    return await ExecuteCommandAsync(http, command, ct);
 });
 
 app.MapPost("/api/weatherforecast/delete", async (
@@ -92,7 +68,7 @@ app.MapPost("/api/weatherforecast/delete", async (
     CancellationToken ct) =>
 {
     var command = new DeleteWeatherForecast(request.ForecastId);
-    return await ExecuteCommandAsync(http, "DeleteWeatherForecast", command, ct);
+    return await ExecuteCommandAsync(http, command, ct);
 });
 
 app.MapPost("/api/weatherforecast/update-location", async (
@@ -101,25 +77,27 @@ app.MapPost("/api/weatherforecast/update-location", async (
     CancellationToken ct) =>
 {
     var command = new UpdateWeatherForecastLocation(request.ForecastId, request.NewLocation);
-    return await ExecuteCommandAsync(http, "UpdateWeatherForecastLocation", command, ct);
+    return await ExecuteCommandAsync(http, command, ct);
 });
 
 app.Run();
 
-static async Task<IResult> ExecuteCommandAsync(
+static async Task<IResult> ExecuteCommandAsync<TCommand>(
     HttpContext http,
-    string commandName,
-    object command,
+    TCommand command,
     CancellationToken ct)
+    where TCommand : ICommandWithHandler<TCommand>
 {
-    var executor = http.RequestServices.GetRequiredService<ISekibanWasmExecutor>();
-    var result = await executor.ExecuteCommandAsync(commandName, command, ct);
-    if (!result.IsSuccess)
+    var executor = http.RequestServices.GetRequiredService<ISekibanExecutor>();
+    try
     {
-        return Results.BadRequest(new { error = result.GetException().Message });
+        var result = await executor.ExecuteAsync(command, ct);
+        return Results.Ok(new CommandResponse(true, null, result.SortableUniqueId));
     }
-
-    return Results.Ok(result.GetValue());
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new CommandResponse(false, ex.Message, null));
+    }
 }
 
 static string ResolveWasmServerBase(IConfiguration configuration)
@@ -146,3 +124,12 @@ static string ResolveWasmServerBase(IConfiguration configuration)
 }
 public record DeleteWeatherForecastRequest(string ForecastId);
 public record UpdateLocationRequest(string ForecastId, string NewLocation);
+public record CommandResponse(bool Success, string? Error, string? SortableUniqueId);
+
+file sealed class NoOpEventPublisher : IEventPublisher
+{
+    public Task PublishAsync(
+        IReadOnlyCollection<(Event Event, IReadOnlyCollection<ITag> Tags)> events,
+        CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
+}

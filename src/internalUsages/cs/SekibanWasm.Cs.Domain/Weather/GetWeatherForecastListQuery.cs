@@ -10,6 +10,7 @@ public record GetWeatherForecastListQuery :
     public bool IncludeDeleted { get; init; }
     public int? PageNumber { get; init; }
     public int? PageSize { get; init; }
+    public string? WaitForSortableUniqueId { get; init; }
 
     public static IEnumerable<WeatherForecastItem> HandleFilter(
         WeatherForecastMultiProjection projector,
