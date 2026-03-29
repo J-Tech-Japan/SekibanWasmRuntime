@@ -83,7 +83,7 @@ app.MapPost("/api/weatherforecast", async (
     CreateWeatherForecast command,
     CancellationToken ct) =>
 {
-    return await ExecuteRemoteCommandAsync(http, command, ct);
+    return await ExecuteSerializedCommandAsync(http, nameof(CreateWeatherForecast), command, ct);
 });
 
 app.MapPost("/api/weatherforecast/delete", async (
@@ -105,24 +105,6 @@ app.MapPost("/api/weatherforecast/update-location", async (
 });
 
 app.Run();
-
-static async Task<IResult> ExecuteRemoteCommandAsync<TCommand>(
-    HttpContext http,
-    TCommand command,
-    CancellationToken ct)
-    where TCommand : ICommandWithHandler<TCommand>
-{
-    var executor = http.RequestServices.GetRequiredService<ISekibanExecutor>();
-    try
-    {
-        var result = await executor.ExecuteAsync(command, ct);
-        return Results.Ok(new CommandResponse(true, null, result.SortableUniqueId));
-    }
-    catch (Exception ex)
-    {
-        return HandleCommandFailure(http, ex);
-    }
-}
 
 static async Task<IResult> ExecuteSerializedCommandAsync(
     HttpContext http,
