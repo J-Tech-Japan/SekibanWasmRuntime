@@ -12,8 +12,11 @@
     <PackageReference Include="Microsoft.Orleans.Persistence.Memory" />
     <PackageReference Include="Microsoft.Orleans.Server" />
     <PackageReference Include="Microsoft.Orleans.Streaming" />
+    <PackageReference Include="Sekiban.Dcb.ColdStorage" />
+    <PackageReference Include="Sekiban.Dcb.CosmosDb" />
     <PackageReference Include="Sekiban.Dcb.Orleans.WithoutResult" />
     <PackageReference Include="Sekiban.Dcb.Postgres" />
+    <PackageReference Include="Sekiban.Dcb.Sqlite" />
     <PackageReference Include="Sekiban.Dcb.WithoutResult" />
   </ItemGroup>
 

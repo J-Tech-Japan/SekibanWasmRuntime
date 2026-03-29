@@ -4,6 +4,13 @@ using System.Data.Common;
 
 namespace SekibanWasm.AppHostShared;
 
+internal enum AppHostStorageProvider
+{
+    Postgres,
+    Sqlite,
+    Cosmos
+}
+
 internal static class AppHostInfrastructure
 {
     public static IResourceBuilder<ContainerResource> AddDbGateForPostgres(
@@ -66,6 +73,37 @@ internal static class AppHostInfrastructure
         }
 
         return defaultPort;
+    }
+
+    public static AppHostStorageProvider ResolveStorageProvider()
+    {
+        var configured = GetFirstConfiguredEnvironmentValue(
+            "SEKIBAN_STORAGE_PROVIDER",
+            "DATABASE_TYPE",
+            "Sekiban__Database");
+
+        return (configured ?? "postgres").Trim().ToLowerInvariant() switch
+        {
+            "postgres" or "postgresql" => AppHostStorageProvider.Postgres,
+            "sqlite" => AppHostStorageProvider.Sqlite,
+            "cosmos" or "cosmosdb" => AppHostStorageProvider.Cosmos,
+            var unknown => throw new InvalidOperationException(
+                $"Unsupported storage provider '{unknown}'. Expected postgres, sqlite, or cosmos.")
+        };
+    }
+
+    public static string? GetFirstConfiguredEnvironmentValue(params string[] envVarNames)
+    {
+        foreach (var envVarName in envVarNames)
+        {
+            var value = Environment.GetEnvironmentVariable(envVarName);
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+        }
+
+        return null;
     }
 
     private static DbGatePostgresSettings ParseDbGatePostgresSettings(

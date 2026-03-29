@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.DependencyInjection;
 using Orleans.Hosting;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Actors;
@@ -30,7 +31,9 @@ manifest.Validate();
 var jsonOptions = ManifestDomainTypes.CreateJsonOptions();
 var domainTypes = ManifestDomainTypes.Create(manifest, jsonOptions);
 var registry = manifest.CreateRegistry();
-var connectionString = ResolveConnectionString(builder.Configuration);
+var storageConfiguration = RuntimeHostStorageConfigurationResolver.Resolve(
+    builder.Configuration,
+    builder.Environment.ContentRootPath);
 
 builder.UseOrleans(silo =>
 {
@@ -48,7 +51,11 @@ builder.Services.AddSingleton(registry);
 builder.Services.AddSingleton<ProjectionInstanceStore>();
 
 builder.Services.AddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
-builder.Services.AddSekibanDcbPostgres(connectionString);
+RuntimeHostStorageConfigurationResolver.ConfigureServices(
+    builder.Services,
+    builder.Configuration,
+    storageConfiguration,
+    builder.Environment.ContentRootPath);
 builder.Services.AddSekibanDcbNativeRuntime();
 builder.Services.AddSingleton<IEventSubscriptionResolver>(_ =>
     new DefaultOrleansEventSubscriptionResolver(
@@ -78,7 +85,10 @@ builder.Services.AddWasmTagStateRuntime(options =>
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
-await app.MigrateSekibanDcbDatabaseAsync();
+if (storageConfiguration.RequiresRelationalMigration)
+{
+    await app.MigrateSekibanDcbDatabaseAsync();
+}
 
 app.MapOpenApi();
 app.MapGet("/", () => Results.Ok(new
@@ -272,17 +282,4 @@ static async Task<string> DecompressToStringAsync(byte[] compressedData)
     await using var gzip = new GZipStream(input, CompressionMode.Decompress);
     using var reader = new StreamReader(gzip, Encoding.UTF8);
     return await reader.ReadToEndAsync();
-}
-
-static string ResolveConnectionString(IConfiguration configuration)
-{
-    var candidates = new[]
-    {
-        configuration.GetConnectionString("SekibanDcb"),
-        Environment.GetEnvironmentVariable("ConnectionStrings__SekibanDcb"),
-        Environment.GetEnvironmentVariable("SEKIBAN_DCB_CONNECTION"),
-        "Host=127.0.0.1;Port=5432;Database=sekiban;Username=postgres;Password=postgres"
-    };
-
-    return candidates.First(static candidate => !string.IsNullOrWhiteSpace(candidate))!;
 }
