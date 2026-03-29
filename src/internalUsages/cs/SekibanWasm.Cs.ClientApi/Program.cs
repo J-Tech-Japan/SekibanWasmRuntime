@@ -1,15 +1,24 @@
+using System.Text.Json;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Tags;
+using Sekiban.Dcb.WasmRuntime;
 using Sekiban.Dcb.WasmRuntime.Remote;
+using SekibanWasm.Cs.ClientApi;
 using SekibanWasm.Cs.Domain;
 using SekibanWasm.Cs.Domain.Weather;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
+
+var domainSerializerOptions = new DomainSerializerOptions(DomainJsonContext.Default.Options);
+var transportSerializerOptions = new TransportSerializerOptions(
+    new JsonSerializerOptions(JsonSerializerDefaults.Web));
+builder.Services.AddSingleton(domainSerializerOptions);
+builder.Services.AddSingleton(transportSerializerOptions);
 
 var domainTypes = DomainType.GetDomainTypes();
 builder.Services.AddSingleton(domainTypes);
@@ -19,6 +28,21 @@ builder.Services.AddHttpClient("wasmserver", client =>
 {
     client.BaseAddress = new Uri(wasmServerBaseUrl);
 });
+builder.Services.AddHttpClient("serialized-dcb");
+builder.Services.AddHttpClient("serialized-query");
+builder.Services.AddScoped<ISerializedDcbClient>(sp =>
+    new HttpSerializedDcbClient(
+        sp.GetRequiredService<IHttpClientFactory>().CreateClient("serialized-dcb"),
+        new SerializedDcbClientOptions { BaseUrl = wasmServerBaseUrl },
+        sp.GetRequiredService<TransportSerializerOptions>().Value));
+builder.Services.AddScoped<ISerializedQueryClient>(sp =>
+    new HttpSerializedQueryClient(
+        sp.GetRequiredService<IHttpClientFactory>().CreateClient("serialized-query"),
+        new SerializedDcbClientOptions { BaseUrl = wasmServerBaseUrl },
+        sp.GetRequiredService<TransportSerializerOptions>().Value,
+        sp.GetRequiredService<DomainSerializerOptions>().Value));
+builder.Services.AddScoped<IWeatherQueryClient, WeatherQueryClient>();
+builder.Services.AddScoped<ClientApiCommandFlow>();
 builder.Services.AddSingleton<IEventPublisher, NoOpEventPublisher>();
 builder.Services.AddScoped<ISekibanExecutor>(sp =>
     new RemoteSekibanExecutor(
@@ -59,7 +83,7 @@ app.MapPost("/api/weatherforecast", async (
     CreateWeatherForecast command,
     CancellationToken ct) =>
 {
-    return await ExecuteCommandAsync(http, command, ct);
+    return await ExecuteRemoteCommandAsync(http, command, ct);
 });
 
 app.MapPost("/api/weatherforecast/delete", async (
@@ -68,7 +92,7 @@ app.MapPost("/api/weatherforecast/delete", async (
     CancellationToken ct) =>
 {
     var command = new DeleteWeatherForecast(request.ForecastId);
-    return await ExecuteCommandAsync(http, command, ct);
+    return await ExecuteSerializedCommandAsync(http, nameof(DeleteWeatherForecast), command, ct);
 });
 
 app.MapPost("/api/weatherforecast/update-location", async (
@@ -77,12 +101,12 @@ app.MapPost("/api/weatherforecast/update-location", async (
     CancellationToken ct) =>
 {
     var command = new UpdateWeatherForecastLocation(request.ForecastId, request.NewLocation);
-    return await ExecuteCommandAsync(http, command, ct);
+    return await ExecuteSerializedCommandAsync(http, nameof(UpdateWeatherForecastLocation), command, ct);
 });
 
 app.Run();
 
-static async Task<IResult> ExecuteCommandAsync<TCommand>(
+static async Task<IResult> ExecuteRemoteCommandAsync<TCommand>(
     HttpContext http,
     TCommand command,
     CancellationToken ct)
@@ -93,6 +117,25 @@ static async Task<IResult> ExecuteCommandAsync<TCommand>(
     {
         var result = await executor.ExecuteAsync(command, ct);
         return Results.Ok(new CommandResponse(true, null, result.SortableUniqueId));
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new CommandResponse(false, ex.Message, null));
+    }
+}
+
+static async Task<IResult> ExecuteSerializedCommandAsync(
+    HttpContext http,
+    string commandName,
+    object command,
+    CancellationToken ct)
+{
+    var flow = http.RequestServices.GetRequiredService<ClientApiCommandFlow>();
+    try
+    {
+        var result = await flow.ExecuteAsync(commandName, command, ct);
+        string? sortableUniqueId = result.WrittenEvents.LastOrDefault()?.SortableUniqueIdValue;
+        return Results.Ok(new CommandResponse(true, null, sortableUniqueId));
     }
     catch (Exception ex)
     {
