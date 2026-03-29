@@ -89,11 +89,12 @@ internal static class RuntimeHostStorageConfigurationResolver
         services.AddSekibanDcbColdEventDefaults();
     }
 
-    private static RuntimeHostStorageProvider ResolveProvider(IConfiguration configuration)
+    internal static RuntimeHostStorageProvider ResolveProvider(IConfiguration configuration)
     {
         var raw = FirstNonEmpty(
             configuration["SEKIBAN_STORAGE_PROVIDER"],
             configuration["Sekiban:Database"],
+            configuration["SEKIBAN_DATABASE"],
             configuration["DATABASE_TYPE"]);
 
         return (raw ?? "postgres").Trim().ToLowerInvariant() switch
@@ -129,15 +130,24 @@ internal static class RuntimeHostStorageConfigurationResolver
             configuration["ConnectionStrings__SekibanDcbSqlite"],
             configuration["ConnectionStrings__Sqlite"],
             configuration["SEKIBAN_SQLITE_PATH"],
-            configuration["Sekiban:Sqlite:Path"]);
+            configuration["Sekiban:Sqlite:Path"],
+            configuration["Sekiban:SqlitePath"]);
 
-        var effectivePath = string.IsNullOrWhiteSpace(configuredPath)
-            ? Path.Combine(contentRootPath, "sekiban-runtime.sqlite")
-            : configuredPath!;
+        if (!string.IsNullOrWhiteSpace(configuredPath))
+        {
+            return NormalizeSqlitePath(configuredPath!, contentRootPath);
+        }
 
-        return Path.IsPathRooted(effectivePath)
-            ? effectivePath
-            : Path.GetFullPath(Path.Combine(contentRootPath, effectivePath));
+        var cachePath = FirstNonEmpty(
+            configuration["Sekiban:SqliteCachePath"],
+            configuration["SEKIBAN_SQLITE_CACHE_PATH"]);
+
+        if (!string.IsNullOrWhiteSpace(cachePath))
+        {
+            return NormalizeSqlitePath(Path.Combine(cachePath!, "events.db"), contentRootPath);
+        }
+
+        return Path.Combine(contentRootPath, "sekiban-runtime.sqlite");
     }
 
     private static string ResolveCosmosConnectionString(IConfiguration configuration)
@@ -180,4 +190,20 @@ internal static class RuntimeHostStorageConfigurationResolver
             Directory.CreateDirectory(directory);
         }
     }
+
+    private static string NormalizeSqlitePath(string path, string contentRootPath)
+    {
+        var effectivePath = Path.IsPathRooted(path)
+            ? path
+            : Path.GetFullPath(Path.Combine(contentRootPath, path));
+
+        return HasDatabaseFileExtension(effectivePath)
+            ? effectivePath
+            : Path.Combine(effectivePath, "events.db");
+    }
+
+    private static bool HasDatabaseFileExtension(string path) =>
+        path.EndsWith(".db", StringComparison.OrdinalIgnoreCase)
+        || path.EndsWith(".sqlite", StringComparison.OrdinalIgnoreCase)
+        || path.EndsWith(".sqlite3", StringComparison.OrdinalIgnoreCase);
 }

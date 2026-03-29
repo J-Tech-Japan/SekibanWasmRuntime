@@ -12,15 +12,15 @@
     <PackageReference Include="Microsoft.Orleans.Persistence.Memory" />
     <PackageReference Include="Microsoft.Orleans.Server" />
     <PackageReference Include="Microsoft.Orleans.Streaming" />
-    <PackageReference Include="Sekiban.Dcb.ColdStorage" />
-    <PackageReference Include="Sekiban.Dcb.CosmosDb" />
-    <PackageReference Include="Sekiban.Dcb.Orleans.WithoutResult" />
-    <PackageReference Include="Sekiban.Dcb.Postgres" />
-    <PackageReference Include="Sekiban.Dcb.Sqlite" />
-    <PackageReference Include="Sekiban.Dcb.WithoutResult" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.ColdStorage\Sekiban.Dcb.ColdStorage.csproj" />
+    <ProjectReference Include="..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.CosmosDb\Sekiban.Dcb.CosmosDb.csproj" />
+    <ProjectReference Include="..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.Orleans.WithoutResult\Sekiban.Dcb.Orleans.WithoutResult.csproj" />
+    <ProjectReference Include="..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.Postgres\Sekiban.Dcb.Postgres.csproj" />
+    <ProjectReference Include="..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.Sqlite\Sekiban.Dcb.Sqlite.csproj" />
+    <ProjectReference Include="..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.WithoutResult\Sekiban.Dcb.WithoutResult.csproj" />
     <ProjectReference Include="..\..\lib\Sekiban.Dcb.WasmRuntime\Sekiban.Dcb.WasmRuntime.csproj" />
     <ProjectReference Include="..\..\lib\Sekiban.Dcb.WasmRuntime.Wasmtime\Sekiban.Dcb.WasmRuntime.Wasmtime.csproj" />
   </ItemGroup>

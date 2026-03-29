@@ -182,7 +182,7 @@ public class WasmProjectionRuntime : IProjectionRuntime
                 ProjectorVersion: moduleRef?.ProjectorVersion,
                 TagProjector: projectorName);
             return ResultBox<byte[]>.FromValue(
-                JsonSerializer.SerializeToUtf8Bytes(snapshot, _jsonOptions));
+                WasmRuntimeJsonContext.SerializeSnapshotToUtf8Bytes(snapshot));
         }
         catch (Exception ex)
         {
@@ -197,7 +197,7 @@ public class WasmProjectionRuntime : IProjectionRuntime
     {
         try
         {
-            var snapshot = JsonSerializer.Deserialize<WasmStateSnapshot>(data, _jsonOptions);
+            var snapshot = WasmRuntimeJsonContext.DeserializeSnapshot(data);
             if (snapshot is null)
             {
                 return ResultBox<IProjectionState>.FromException(

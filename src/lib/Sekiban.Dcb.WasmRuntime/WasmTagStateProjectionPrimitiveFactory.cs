@@ -36,34 +36,37 @@ public sealed class WasmTagStateProjectionPrimitiveFactory : ITagStateProjection
     public ITagStateProjectionAccumulator CreateAccumulator(TagStateId tagStateId)
     {
         var moduleRef = _registry.TryGet(tagStateId.TagProjectorName);
-        if (moduleRef is null)
-        {
-            _logger.LogDebug(
-                "No WASM module registered for tag projector {ProjectorName}; returning empty accumulator.",
-                tagStateId.TagProjectorName);
-            return new MissingTagStateProjectionAccumulator(tagStateId, string.Empty);
-        }
-
         try
         {
             var instance = _host.CreateInstance(tagStateId.TagProjectorName);
             return new WasmTagStateProjectionPrimitive(
                 instance,
                 tagStateId.TagProjectorName,
-                moduleRef.ProjectorVersion,
+                moduleRef?.ProjectorVersion ?? string.Empty,
                 _eventTypes,
                 _jsonOptions,
-                moduleRef.TagPayloadName);
+                moduleRef?.TagPayloadName);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(
-                ex,
-                "Failed to create WASM accumulator for tag projector {ProjectorName}; returning empty accumulator.",
-                tagStateId.TagProjectorName);
+            if (moduleRef is null)
+            {
+                _logger.LogDebug(
+                    ex,
+                    "No manifest entry for tag projector {ProjectorName}, and default module instance creation failed; returning empty accumulator.",
+                    tagStateId.TagProjectorName);
+            }
+            else
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Failed to create WASM accumulator for tag projector {ProjectorName}; returning empty accumulator.",
+                    tagStateId.TagProjectorName);
+            }
+
             return new MissingTagStateProjectionAccumulator(
                 tagStateId,
-                moduleRef.ProjectorVersion);
+                moduleRef?.ProjectorVersion ?? string.Empty);
         }
     }
 
@@ -88,7 +91,7 @@ public sealed class WasmTagStateProjectionPrimitiveFactory : ITagStateProjection
         public bool ApplyEvents(
             IReadOnlyList<SerializableEvent> events,
             string? latestSortableUniqueId,
-            CancellationToken cancellationToken = default) => true;
+            CancellationToken cancellationToken = default) => events.Count == 0;
 
         public SerializableTagState GetSerializedState() =>
             _cachedState ??
@@ -101,5 +104,9 @@ public sealed class WasmTagStateProjectionPrimitiveFactory : ITagStateProjection
                 TagProjector: _tagStateId.TagProjectorName,
                 TagPayloadName: nameof(EmptyTagStatePayload),
                 ProjectorVersion: _projectorVersion);
+
+        public void Dispose()
+        {
+        }
     }
 }

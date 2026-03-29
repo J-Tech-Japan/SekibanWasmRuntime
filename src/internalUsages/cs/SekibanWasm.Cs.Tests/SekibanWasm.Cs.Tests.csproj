@@ -6,10 +6,14 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <KenbaiEventSourceProjectPath>..\..\..\..\..\Kenbai\src\Aic.Kenbai.EventSource\Aic.Kenbai.EventSource.csproj</KenbaiEventSourceProjectPath>
+    <HasKenbaiSources Condition="Exists('$(KenbaiEventSourceProjectPath)')">true</HasKenbaiSources>
+    <HasKenbaiSources Condition="'$(HasKenbaiSources)' == ''">false</HasKenbaiSources>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Microsoft.Data.Sqlite" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -22,19 +26,36 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Sekiban.Dcb.WithoutResult" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\..\..\lib\Sekiban.Dcb.WasmRuntime\Sekiban.Dcb.WasmRuntime.csproj" />
+    <ProjectReference Include="..\..\..\lib\Sekiban.Dcb.WasmRuntime.Wasmtime\Sekiban.Dcb.WasmRuntime.Wasmtime.csproj" />
     <ProjectReference Include="..\..\..\lib\Sekiban.Dcb.WasmRuntime.Remote\Sekiban.Dcb.WasmRuntime.Remote.csproj" />
     <ProjectReference Include="..\..\..\runtime\Sekiban.Dcb.WasmRuntime.Host\Sekiban.Dcb.WasmRuntime.Host.csproj" />
     <ProjectReference Include="..\SekibanWasm.Cs.Domain\SekibanWasm.Cs.Domain.csproj" />
     <ProjectReference Include="..\SekibanWasm.Cs.ClientApi\SekibanWasm.Cs.ClientApi.csproj" />
+    <ProjectReference Include="..\..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.WithoutResult\Sekiban.Dcb.WithoutResult.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <Compile Include="..\SekibanWasm.Cs.WasmServer\SerializedCommandEndpoints.cs" Link="SerializedCommandEndpoints.cs" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(HasKenbaiSources)' == 'true'">
+    <ProjectReference Include="$(KenbaiEventSourceProjectPath)" />
+    <Compile Include="..\..\..\..\..\Kenbai\src\Aic.Kenbai.EventSource.Wasm\AicDomainJsonContext.cs" Link="Kenbai\AicDomainJsonContext.cs" />
+    <Compile Include="..\..\..\..\..\Kenbai\src\Aic.Kenbai.EventSource.Wasm\AicWasmDomainType.cs" Link="Kenbai\AicWasmDomainType.cs" />
+    <Compile Include="..\..\..\..\..\Kenbai\src\Aic.Kenbai.EventSource.Wasm\KenbaiEventTypeRegistrar.cs" Link="Kenbai\KenbaiEventTypeRegistrar.cs" />
+    <Compile Include="..\..\..\..\..\Kenbai\src\Aic.Kenbai.EventSource.Wasm\WasmListQueryResponse.cs" Link="Kenbai\WasmListQueryResponse.cs" />
+    <Compile Include="..\..\..\..\..\Kenbai\src\Aic.Kenbai.EventSource.Wasm\WasmMailTemplateListQueryResponse.cs" Link="Kenbai\WasmMailTemplateListQueryResponse.cs" />
+    <Compile Include="..\..\..\..\..\Kenbai\src\Aic.Kenbai.EventSource.Wasm\WasmAutoMailSendRecipientListQueryResponse.cs" Link="Kenbai\WasmAutoMailSendRecipientListQueryResponse.cs" />
+    <Compile Include="..\..\..\..\..\Kenbai\src\Aic.Kenbai.EventSource.Wasm\WasmAutoMailSendSummaryListQueryResponse.cs" Link="Kenbai\WasmAutoMailSendSummaryListQueryResponse.cs" />
+    <Compile Include="..\..\..\..\..\Kenbai\src\Aic.Kenbai.EventSource.Wasm\WasmHokenNendoListQueryResponse.cs" Link="Kenbai\WasmHokenNendoListQueryResponse.cs" />
+    <Compile Include="..\..\..\..\..\Kenbai\src\Aic.Kenbai.EventSource.Wasm\WasmNendoKeiyakuMitsumoriListQueryResponse.cs" Link="Kenbai\WasmNendoKeiyakuMitsumoriListQueryResponse.cs" />
+    <Compile Include="..\..\..\..\..\Kenbai\src\Aic.Kenbai.EventSource.Wasm\WasmNyukinImportBatchListQueryResponse.cs" Link="Kenbai\WasmNyukinImportBatchListQueryResponse.cs" />
+    <Compile Include="..\..\..\..\..\Kenbai\src\Aic.Kenbai.EventSource.Wasm\WasmBufferedEventMetadata.cs" Link="Kenbai\WasmBufferedEventMetadata.cs" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(HasKenbaiSources)' != 'true'">
+    <Compile Remove="Kenbai*.cs" />
   </ItemGroup>
 
 </Project>

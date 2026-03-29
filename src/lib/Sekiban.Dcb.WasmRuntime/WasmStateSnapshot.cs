@@ -1,7 +1,7 @@
 namespace Sekiban.Dcb.WasmRuntime;
 
 public record WasmStateSnapshot(
-    string StateJson,
+    string? StateJson,
     int SafeVersion,
     int UnsafeVersion,
     string? SafeLastSortableUniqueId,
@@ -11,4 +11,5 @@ public record WasmStateSnapshot(
     string? ProjectorVersion = null,
     string? TagGroup = null,
     string? TagContent = null,
-    string? TagProjector = null);
+    string? TagProjector = null,
+    byte[]? CompressedStateJson = null);
