@@ -169,7 +169,10 @@ internal static class RuntimeHostStorageConfigurationResolver
                ?? throw new InvalidOperationException(
                    "Cosmos storage requires a connection string in " +
                    "'ConnectionStrings:SekibanDcbCosmos', 'ConnectionStrings:SekibanDcbCosmosDb', " +
-                   "'ConnectionStrings:CosmosDb', or 'ConnectionStrings:cosmosdb'.");
+                   "'ConnectionStrings:CosmosDb', 'ConnectionStrings:cosmosdb', " +
+                   "'ConnectionStrings__SekibanDcbCosmos', 'ConnectionStrings__SekibanDcbCosmosDb', " +
+                   "'ConnectionStrings__CosmosDb', 'ConnectionStrings__cosmosdb', " +
+                   "or 'SEKIBAN_DCB_COSMOS_CONNECTION'.");
     }
 
     private static string ResolveCosmosDatabaseName(IConfiguration configuration)

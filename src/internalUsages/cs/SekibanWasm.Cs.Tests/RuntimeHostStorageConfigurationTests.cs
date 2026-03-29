@@ -75,6 +75,24 @@ public class RuntimeHostStorageConfigurationTests
     }
 
     [Fact]
+    public void Resolve_ShouldDescribeAllSupportedCosmosConnectionInputs_WhenMissing()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["SEKIBAN_STORAGE_PROVIDER"] = "cosmos"
+            })
+            .Build();
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            RuntimeHostStorageConfigurationResolver.Resolve(configuration, Directory.GetCurrentDirectory()));
+
+        Assert.Contains("ConnectionStrings:SekibanDcbCosmos", exception.Message);
+        Assert.Contains("ConnectionStrings__SekibanDcbCosmos", exception.Message);
+        Assert.Contains("SEKIBAN_DCB_COSMOS_CONNECTION", exception.Message);
+    }
+
+    [Fact]
     public void ConfigureServices_ShouldRegisterSqliteStore_WhenSqliteIsSelected()
     {
         var contentRoot = Path.Combine(Path.GetTempPath(), "runtime-host-sqlite-tests", Guid.NewGuid().ToString("N"));

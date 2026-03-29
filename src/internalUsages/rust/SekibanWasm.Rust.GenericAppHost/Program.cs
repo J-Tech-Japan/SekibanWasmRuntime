@@ -83,7 +83,13 @@ switch (storageProvider)
                 ? sqlitePathRaw
                 : Path.GetFullPath(Path.Combine(builder.AppHostDirectory, sqlitePathRaw)));
 
-        Directory.CreateDirectory(Path.GetDirectoryName(sqlitePath)!);
+        var sqliteDirectory = Path.GetDirectoryName(sqlitePath);
+        if (string.IsNullOrWhiteSpace(sqliteDirectory))
+        {
+            sqliteDirectory = builder.AppHostDirectory;
+        }
+
+        Directory.CreateDirectory(sqliteDirectory);
 
         runtimeBuilder = runtimeBuilder
             .WithEnvironment("SEKIBAN_SQLITE_PATH", sqlitePath)
@@ -102,7 +108,9 @@ switch (storageProvider)
         if (string.IsNullOrWhiteSpace(cosmosConnectionString))
         {
             throw new InvalidOperationException(
-                "Cosmos storage requires ConnectionStrings__SekibanDcbCosmos (or an equivalent Cosmos connection string environment variable).");
+                "Cosmos storage requires a configured connection string. Set one of: " +
+                "ConnectionStrings__SekibanDcbCosmos, ConnectionStrings__SekibanDcbCosmosDb, " +
+                "ConnectionStrings__CosmosDb, ConnectionStrings__cosmosdb, or SEKIBAN_DCB_COSMOS_CONNECTION.");
         }
 
         var cosmosDatabaseName = AppHostInfrastructure.GetFirstConfiguredEnvironmentValue(
