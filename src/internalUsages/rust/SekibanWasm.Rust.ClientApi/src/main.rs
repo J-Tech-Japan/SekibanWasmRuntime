@@ -1,7 +1,6 @@
 use std::{env, net::SocketAddr, sync::Arc};
 
 use anyhow::Result;
-use async_trait::async_trait;
 use axum::{
     extract::{Query as AxumQuery, State},
     http::StatusCode,
@@ -10,24 +9,18 @@ use axum::{
     Json, Router,
 };
 use sekiban_core::prelude::*;
-use sekiban_executor::{
-    build_commit_request_from_output, ExecuteCommandError, HttpCommandContext, HttpSekibanExecutor,
-    SekibanCommandCommitRequestBuilder, StaticTagProjectorResolver,
-};
+use sekiban_executor::{ExecuteCommandError, RemoteSekibanExecutor, StaticTagProjectorResolver};
 use sekiban_wasm_domain::{
     CountResult, CreateWeatherForecast, DeleteWeatherForecast, GetWeatherForecastCountQuery,
     GetWeatherForecastListQuery, UpdateWeatherForecastLocation, WeatherForecastItem,
 };
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 #[derive(Clone)]
 struct AppState {
-    executor: Arc<HttpSekibanExecutor<WeatherCommandCommitRequestBuilder>>,
+    executor: Arc<RemoteSekibanExecutor>,
 }
-
-#[derive(Clone, Copy, Default)]
-struct WeatherCommandCommitRequestBuilder;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -41,9 +34,8 @@ async fn main() -> Result<()> {
     let wasmserver_base = resolve_wasmserver_base();
     tracing::info!(%wasmserver_base, "resolved wasmserver base");
 
-    let executor = Arc::new(HttpSekibanExecutor::new(
+    let executor = Arc::new(RemoteSekibanExecutor::new(
         wasmserver_base,
-        WeatherCommandCommitRequestBuilder,
         StaticTagProjectorResolver::new().with_tag_group("weather", "WeatherForecastProjector"),
     ));
 
@@ -67,32 +59,6 @@ async fn main() -> Result<()> {
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
     Ok(())
-}
-
-#[async_trait]
-impl SekibanCommandCommitRequestBuilder for WeatherCommandCommitRequestBuilder {
-    async fn build_commit_request(
-        &self,
-        context: &HttpCommandContext,
-        command_name: &str,
-        command_payload: &Value,
-    ) -> Result<Option<sekiban_executor::CommitRequest>, CommandError> {
-        match command_name {
-            CreateWeatherForecast::COMMAND_TYPE => {
-                build_commit_request::<CreateWeatherForecast>(context, command_payload).await
-            }
-            UpdateWeatherForecastLocation::COMMAND_TYPE => {
-                build_commit_request::<UpdateWeatherForecastLocation>(context, command_payload)
-                    .await
-            }
-            DeleteWeatherForecast::COMMAND_TYPE => {
-                build_commit_request::<DeleteWeatherForecast>(context, command_payload).await
-            }
-            _ => Err(CommandError::Validation(format!(
-                "unsupported command: {command_name}"
-            ))),
-        }
-    }
 }
 
 async fn health() -> impl IntoResponse {
@@ -214,7 +180,7 @@ async fn execute_command<T>(
     command: &T,
 ) -> axum::response::Response
 where
-    T: CommandMeta + Serialize + Send + Sync,
+    T: Command + Serialize + Send + Sync,
 {
     match state.executor.execute_command(command).await {
         Ok(result) => {
@@ -251,24 +217,6 @@ where
             }),
         )
             .into_response(),
-    }
-}
-
-async fn build_commit_request<T>(
-    context: &HttpCommandContext,
-    payload: &Value,
-) -> Result<Option<sekiban_executor::CommitRequest>, CommandError>
-where
-    T: CommandHandler + DeserializeOwned,
-{
-    let command: T = serde_json::from_value(payload.clone())
-        .map_err(|err| CommandError::Serialization(err.to_string()))?;
-    let output = command.handle(context).await?;
-    match output {
-        Some(output) => build_commit_request_from_output(context, output)
-            .await
-            .map(Some),
-        None => Ok(None),
     }
 }
 

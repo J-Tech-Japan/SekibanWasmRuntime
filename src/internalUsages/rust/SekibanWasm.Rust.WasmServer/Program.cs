@@ -139,6 +139,29 @@ app.MapPost("/api/sekiban/serialized/tag-state", async (HttpContext http, TagSta
     return Results.Ok(result.GetValue());
 });
 
+app.MapPost("/api/sekiban/serialized/tag-latest-sortable", async (
+    HttpContext http,
+    TagLatestSortableRequest request) =>
+{
+    var actorAccessor = http.RequestServices.GetRequiredService<IActorObjectAccessor>();
+    var actorResult = await actorAccessor.GetActorAsync<ITagConsistentActorCommon>(request.Tag);
+    if (!actorResult.IsSuccess)
+    {
+        return Results.Ok(new TagLatestSortableResponse(false, string.Empty));
+    }
+
+    var latestSortableResult = await actorResult.GetValue().GetLatestSortableUniqueIdAsync();
+    if (!latestSortableResult.IsSuccess)
+    {
+        return Results.BadRequest(new { error = latestSortableResult.GetException().Message });
+    }
+
+    string lastSortableUniqueId = latestSortableResult.GetValue();
+    return Results.Ok(new TagLatestSortableResponse(
+        !string.IsNullOrWhiteSpace(lastSortableUniqueId),
+        lastSortableUniqueId));
+});
+
 app.MapPost("/api/sekiban/serialized/commit", async (HttpContext http, SerializedCommitRequest request, CancellationToken ct) =>
 {
     var executor = http.RequestServices.GetRequiredService<ISerializedSekibanDcbExecutor>();
@@ -299,6 +322,8 @@ static async Task<string> DecompressToStringAsync(byte[] value)
 }
 
 public record TagStateRequest(string TagStateId);
+public record TagLatestSortableRequest(string Tag);
+public record TagLatestSortableResponse(bool Exists, string LastSortableUniqueId);
 public record SerializedQueryRequest(
     string QueryType,
     string QueryParamsJson,

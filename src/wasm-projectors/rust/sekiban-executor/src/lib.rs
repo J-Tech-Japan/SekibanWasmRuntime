@@ -4,7 +4,7 @@ use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use reqwest::{Client, StatusCode};
-use sekiban_core::{CommandContext, CommandError, CommandMeta, CommandOutput};
+use sekiban_core::{Command, CommandContext, CommandError, CommandMeta, CommandOutput};
 use sekiban_core::{ListQuery, Query, StatePayload, Tag};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
@@ -140,6 +140,8 @@ pub struct HttpCommandContext {
     resolver: Arc<dyn TagStateProjectorResolver>,
 }
 
+pub type RemoteCommandContext = HttpCommandContext;
+
 impl HttpCommandContext {
     fn new(transport: HttpSekibanTransport, resolver: Arc<dyn TagStateProjectorResolver>) -> Self {
         Self {
@@ -192,6 +194,47 @@ impl HttpCommandContext {
                 CommandError::Serialization(format!("invalid tag-state response: {err}"))
             })
     }
+
+    pub async fn get_tag_latest_sortable_unique_id(
+        &self,
+        tag: &str,
+    ) -> Result<Option<String>, CommandError> {
+        let request = TagLatestSortableRequest {
+            tag: tag.to_string(),
+        };
+
+        let response = self
+            .transport
+            .post_with_retry("/api/sekiban/serialized/tag-latest-sortable", &request)
+            .await
+            .map_err(|err| {
+                CommandError::Validation(format!("tag-latest-sortable request failed: {err}"))
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response
+                .text()
+                .await
+                .unwrap_or_else(|err| format!("<failed to read error body: {err}>"));
+            return Err(CommandError::Validation(format!(
+                "tag-latest-sortable request failed with status {}: {}",
+                status, body
+            )));
+        }
+
+        let body = response
+            .json::<TagLatestSortableResponse>()
+            .await
+            .map_err(|err| {
+                CommandError::Serialization(format!("invalid tag-latest-sortable response: {err}"))
+            })?;
+
+        Ok(body
+            .exists
+            .then_some(body.last_sortable_unique_id)
+            .filter(|value| !value.is_empty()))
+    }
 }
 
 #[async_trait]
@@ -215,8 +258,10 @@ impl CommandContext for HttpCommandContext {
     }
 
     async fn tag_exists<T: Tag>(&self, tag: &T) -> Result<bool, CommandError> {
-        let response = self.get_tag_state(&tag.to_tag_string()).await?;
-        Ok(!response.payload.is_empty())
+        Ok(self
+            .get_tag_latest_sortable_unique_id(&tag.to_tag_string())
+            .await?
+            .is_some())
     }
 }
 
@@ -268,6 +313,12 @@ pub trait SekibanExecutor: Send + Sync {
 pub struct HttpSekibanExecutor<B> {
     transport: HttpSekibanTransport,
     builder: Arc<B>,
+    resolver: Arc<dyn TagStateProjectorResolver>,
+}
+
+#[derive(Clone)]
+pub struct RemoteSekibanExecutor {
+    transport: HttpSekibanTransport,
     resolver: Arc<dyn TagStateProjectorResolver>,
 }
 
@@ -351,11 +402,7 @@ where
         Q: Query + Serialize + Send + Sync,
         R: DeserializeOwned,
     {
-        let request = SerializedQueryRequest {
-            query_type: Q::QUERY_TYPE.to_string(),
-            query_params_json: serde_json::to_string(query)?,
-            wait_for_sortable_unique_id: query.wait_for_sortable_id().map(ToOwned::to_owned),
-        };
+        let request = build_query_request::<Q>(query)?;
 
         let value = self.execute_query_value(request).await?;
         Ok(serde_json::from_value(value)?)
@@ -366,13 +413,90 @@ where
         Q: ListQuery + Serialize + Send + Sync,
         R: DeserializeOwned,
     {
-        let request = SerializedQueryRequest {
-            query_type: Q::QUERY_TYPE.to_string(),
-            query_params_json: serde_json::to_string(query)?,
-            wait_for_sortable_unique_id: query.wait_for_sortable_id().map(ToOwned::to_owned),
-        };
+        let request = build_list_query_request::<Q>(query)?;
 
         let value = self.execute_list_query_value(request).await?;
+        Ok(serde_json::from_value(value)?)
+    }
+}
+
+impl RemoteSekibanExecutor {
+    pub fn new(
+        base_url: impl Into<String>,
+        resolver: impl TagStateProjectorResolver + 'static,
+    ) -> Self {
+        let options = HttpSekibanExecutorOptions::default();
+        Self::with_client_and_options(
+            base_url,
+            build_default_http_client(&options),
+            resolver,
+            options,
+        )
+    }
+
+    pub fn with_client(
+        base_url: impl Into<String>,
+        client: Client,
+        resolver: impl TagStateProjectorResolver + 'static,
+    ) -> Self {
+        Self::with_client_and_options(
+            base_url,
+            client,
+            resolver,
+            HttpSekibanExecutorOptions::default(),
+        )
+    }
+
+    pub fn with_client_and_options(
+        base_url: impl Into<String>,
+        client: Client,
+        resolver: impl TagStateProjectorResolver + 'static,
+        options: HttpSekibanExecutorOptions,
+    ) -> Self {
+        Self {
+            transport: HttpSekibanTransport::new(base_url, client, options),
+            resolver: Arc::new(resolver),
+        }
+    }
+
+    pub fn command_context(&self) -> RemoteCommandContext {
+        HttpCommandContext::new(self.transport.clone(), self.resolver.clone())
+    }
+
+    pub async fn execute_command<T>(
+        &self,
+        command: &T,
+    ) -> Result<CommandExecutionResult, ExecuteCommandError>
+    where
+        T: Command + Send + Sync,
+    {
+        let context = self.command_context();
+        let output = command.handle(&context).await?;
+        let Some(output) = output else {
+            return Ok(successful_noop_command_result());
+        };
+
+        let commit_request = build_commit_request_from_output(&context, output).await?;
+        post_commit_request(&self.transport, &commit_request).await
+    }
+
+    pub async fn execute_query<Q, R>(&self, query: &Q) -> anyhow::Result<R>
+    where
+        Q: Query + Serialize + Send + Sync,
+        R: DeserializeOwned,
+    {
+        let request = build_query_request::<Q>(query)?;
+        let value = execute_query_request(&self.transport, request).await?;
+        Ok(serde_json::from_value(value)?)
+    }
+
+    pub async fn execute_list_query<Q, R>(&self, query: &Q) -> anyhow::Result<R>
+    where
+        Q: ListQuery + Serialize + Send + Sync,
+        R: DeserializeOwned,
+    {
+        let request = build_list_query_request::<Q>(query)?;
+        let value = execute_list_query_request(&self.transport, request).await?;
         Ok(serde_json::from_value(value)?)
     }
 }
@@ -394,57 +518,21 @@ where
             .await?;
 
         let Some(commit_request) = commit_request else {
-            return Ok(CommandExecutionResult {
-                status_code: 200,
-                success: true,
-                sortable_unique_id: None,
-                response_body: serde_json::json!({ "success": true }),
-            });
+            return Ok(successful_noop_command_result());
         };
 
-        let response = self
-            .transport
-            .post_with_retry("/api/sekiban/serialized/commit", &commit_request)
-            .await
-            .context("commit request failed")?;
-
-        let status = response.status();
-        let response_body: Value = response
-            .json()
-            .await
-            .unwrap_or_else(|_| serde_json::json!({ "error": "failed to read commit response" }));
-
-        Ok(CommandExecutionResult {
-            status_code: status.as_u16(),
-            success: status.is_success(),
-            sortable_unique_id: extract_sortable_unique_id(&response_body),
-            response_body,
-        })
+        post_commit_request(&self.transport, &commit_request).await
     }
 
     async fn execute_query_value(&self, request: SerializedQueryRequest) -> anyhow::Result<Value> {
-        let response = self
-            .transport
-            .post_with_retry("/api/sekiban/serialized/query", &request)
-            .await
-            .context("serialized query request failed")?;
-        let body: SerializedQueryResponse =
-            deserialize_success_json(response, "serialized query request").await?;
-        Ok(serde_json::from_str(&body.result_json)?)
+        execute_query_request(&self.transport, request).await
     }
 
     async fn execute_list_query_value(
         &self,
         request: SerializedQueryRequest,
     ) -> anyhow::Result<Value> {
-        let response = self
-            .transport
-            .post_with_retry("/api/sekiban/serialized/list-query", &request)
-            .await
-            .context("serialized list query request failed")?;
-        let body: SerializedListQueryResponse =
-            deserialize_success_json(response, "serialized list-query request").await?;
-        Ok(serde_json::from_str(&body.items_json)?)
+        execute_list_query_request(&self.transport, request).await
     }
 }
 
@@ -454,6 +542,86 @@ fn build_default_http_client(options: &HttpSekibanExecutorOptions) -> Client {
         .connect_timeout(options.connect_timeout)
         .build()
         .expect("default HTTP client configuration should be valid")
+}
+
+fn build_query_request<Q>(query: &Q) -> anyhow::Result<SerializedQueryRequest>
+where
+    Q: Query + Serialize,
+{
+    Ok(SerializedQueryRequest {
+        query_type: Q::QUERY_TYPE.to_string(),
+        query_params_json: serde_json::to_string(query)?,
+        wait_for_sortable_unique_id: query.wait_for_sortable_id().map(ToOwned::to_owned),
+    })
+}
+
+fn build_list_query_request<Q>(query: &Q) -> anyhow::Result<SerializedQueryRequest>
+where
+    Q: ListQuery + Serialize,
+{
+    Ok(SerializedQueryRequest {
+        query_type: Q::QUERY_TYPE.to_string(),
+        query_params_json: serde_json::to_string(query)?,
+        wait_for_sortable_unique_id: query.wait_for_sortable_id().map(ToOwned::to_owned),
+    })
+}
+
+fn successful_noop_command_result() -> CommandExecutionResult {
+    CommandExecutionResult {
+        status_code: 200,
+        success: true,
+        sortable_unique_id: None,
+        response_body: serde_json::json!({ "success": true }),
+    }
+}
+
+async fn post_commit_request(
+    transport: &HttpSekibanTransport,
+    commit_request: &CommitRequest,
+) -> Result<CommandExecutionResult, ExecuteCommandError> {
+    let response = transport
+        .post_with_retry("/api/sekiban/serialized/commit", commit_request)
+        .await
+        .context("commit request failed")?;
+
+    let status = response.status();
+    let response_body: Value = response
+        .json()
+        .await
+        .unwrap_or_else(|_| serde_json::json!({ "error": "failed to read commit response" }));
+
+    Ok(CommandExecutionResult {
+        status_code: status.as_u16(),
+        success: status.is_success(),
+        sortable_unique_id: extract_sortable_unique_id(&response_body),
+        response_body,
+    })
+}
+
+async fn execute_query_request(
+    transport: &HttpSekibanTransport,
+    request: SerializedQueryRequest,
+) -> anyhow::Result<Value> {
+    let response = transport
+        .post_with_retry("/api/sekiban/serialized/query", &request)
+        .await
+        .context("serialized query request failed")?;
+    let body: SerializedQueryResponse =
+        deserialize_success_json(response, "serialized query request").await?;
+    Ok(serde_json::from_str(&body.result_json)?)
+}
+
+async fn execute_list_query_request(
+    transport: &HttpSekibanTransport,
+    request: SerializedQueryRequest,
+) -> anyhow::Result<Value> {
+    let response = transport
+        .post_with_retry("/api/sekiban/serialized/list-query", &request)
+        .await
+        .context("serialized list query request failed")?;
+    let body: SerializedListQueryResponse =
+        deserialize_success_json(response, "serialized list-query request").await?;
+    Ok(serde_json::from_str(&body.items_json)?)
 }
 
 async fn deserialize_success_json<T: DeserializeOwned>(
@@ -538,6 +706,19 @@ pub struct TagStateRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct TagLatestSortableRequest {
+    pub tag: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TagLatestSortableResponse {
+    pub exists: bool,
+    pub last_sortable_unique_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SerializableTagStateResponse {
     pub payload: String,
     pub version: i32,
@@ -615,6 +796,13 @@ fn parse_tag(tag: &str) -> Option<(&str, &str)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::{extract::State, routing::post, Json, Router};
+    use base64::engine::general_purpose::STANDARD;
+    use sekiban_core::{CommandHandler, EventPayload};
+    use serde::{Deserialize, Serialize};
+    use std::net::SocketAddr;
+    use std::sync::{Arc, Mutex};
+    use tokio::task::JoinHandle;
 
     #[test]
     fn static_resolver_prefers_explicit_tag_mapping() {
@@ -707,5 +895,253 @@ mod tests {
             error.to_string(),
             "serialized list-query request failed with status 500 Internal Server Error: unexpected failure"
         );
+    }
+
+    #[tokio::test]
+    async fn remote_executor_executes_command_handler_and_posts_commit() {
+        let server = TestServer::spawn(TestServerState::default()).await;
+        let executor = RemoteSekibanExecutor::new(
+            server.base_url(),
+            StaticTagProjectorResolver::new().with_tag_group("weather", "WeatherProjector"),
+        );
+
+        let result = executor
+            .execute_command(&CreateWeatherCommand {
+                forecast_id: "f-1".to_string(),
+            })
+            .await
+            .expect("command should succeed");
+
+        assert!(result.success);
+        assert_eq!(result.sortable_unique_id.as_deref(), Some("sort-123"));
+
+        let requests = server.requests();
+        assert!(requests
+            .iter()
+            .any(|req| req.path == "/api/sekiban/serialized/tag-state"));
+        let commit = requests
+            .iter()
+            .find(|req| req.path == "/api/sekiban/serialized/commit")
+            .expect("commit request should be recorded");
+        assert_eq!(
+            commit.body["eventCandidates"][0]["eventPayloadName"],
+            "WeatherCreated"
+        );
+        assert_eq!(commit.body["consistencyTags"][0]["tag"], "weather:f-1");
+        assert_eq!(
+            commit.body["consistencyTags"][0]["lastSortableUniqueId"],
+            "sort-000"
+        );
+    }
+
+    #[tokio::test]
+    async fn command_context_tag_exists_uses_latest_sortable_endpoint() {
+        let state = TestServerState {
+            latest_sortable: Some("sort-456".to_string()),
+            ..Default::default()
+        };
+        let server = TestServer::spawn(state).await;
+        let executor = RemoteSekibanExecutor::new(
+            server.base_url(),
+            StaticTagProjectorResolver::new().with_tag_group("weather", "WeatherProjector"),
+        );
+
+        let exists = executor
+            .command_context()
+            .tag_exists(&WeatherTag {
+                forecast_id: "f-1".to_string(),
+            })
+            .await
+            .expect("tag exists should succeed");
+
+        assert!(exists);
+        let requests = server.requests();
+        assert!(requests
+            .iter()
+            .any(|req| req.path == "/api/sekiban/serialized/tag-latest-sortable"));
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    struct WeatherTag {
+        forecast_id: String,
+    }
+
+    impl Tag for WeatherTag {
+        const TAG_GROUP: &'static str = "weather";
+
+        fn tag_id(&self) -> String {
+            self.forecast_id.clone()
+        }
+    }
+
+    #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+    struct WeatherState {
+        exists: bool,
+    }
+
+    impl StatePayload for WeatherState {
+        const STATE_TYPE: &'static str = "WeatherState";
+
+        fn is_empty(&self) -> bool {
+            !self.exists
+        }
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    struct WeatherCreated {
+        forecast_id: String,
+    }
+
+    impl EventPayload for WeatherCreated {
+        const EVENT_TYPE: &'static str = "WeatherCreated";
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    struct CreateWeatherCommand {
+        forecast_id: String,
+    }
+
+    impl CommandMeta for CreateWeatherCommand {
+        const COMMAND_TYPE: &'static str = "CreateWeatherCommand";
+    }
+
+    #[async_trait]
+    impl CommandHandler for CreateWeatherCommand {
+        async fn handle<C: CommandContext + ?Sized>(
+            &self,
+            context: &C,
+        ) -> Result<Option<CommandOutput>, CommandError> {
+            let tag = WeatherTag {
+                forecast_id: self.forecast_id.clone(),
+            };
+            let (state, version): (WeatherState, i32) = context.get_state(&tag).await?;
+            if !state.is_empty() {
+                return Err(CommandError::AlreadyExists(self.forecast_id.clone()));
+            }
+
+            let output = CommandOutput::single(
+                WeatherCreated {
+                    forecast_id: self.forecast_id.clone(),
+                },
+                tag.clone(),
+            )
+            .map_err(|err| CommandError::Serialization(err.to_string()))?
+            .with_expected_version(tag, version);
+            Ok(Some(output))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    struct LoggedRequest {
+        path: String,
+        body: Value,
+    }
+
+    #[derive(Clone, Default)]
+    struct TestServerState {
+        requests: Arc<Mutex<Vec<LoggedRequest>>>,
+        latest_sortable: Option<String>,
+    }
+
+    struct TestServer {
+        address: SocketAddr,
+        state: TestServerState,
+        handle: JoinHandle<()>,
+    }
+
+    impl TestServer {
+        async fn spawn(state: TestServerState) -> Self {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+                .await
+                .expect("listener should bind");
+            let address = listener
+                .local_addr()
+                .expect("listener should provide local address");
+            let app = Router::new()
+                .route("/api/sekiban/serialized/tag-state", post(handle_tag_state))
+                .route(
+                    "/api/sekiban/serialized/tag-latest-sortable",
+                    post(handle_latest_sortable),
+                )
+                .route("/api/sekiban/serialized/commit", post(handle_commit))
+                .with_state(state.clone());
+            let handle = tokio::spawn(async move {
+                axum::serve(listener, app)
+                    .await
+                    .expect("test server should serve");
+            });
+
+            Self {
+                address,
+                state,
+                handle,
+            }
+        }
+
+        fn base_url(&self) -> String {
+            format!("http://{}", self.address)
+        }
+
+        fn requests(&self) -> Vec<LoggedRequest> {
+            self.state
+                .requests
+                .lock()
+                .expect("requests lock should succeed")
+                .clone()
+        }
+    }
+
+    impl Drop for TestServer {
+        fn drop(&mut self) {
+            self.handle.abort();
+        }
+    }
+
+    async fn handle_tag_state(
+        State(state): State<TestServerState>,
+        Json(body): Json<Value>,
+    ) -> Json<SerializableTagStateResponse> {
+        push_request(&state, "/api/sekiban/serialized/tag-state", body);
+        Json(SerializableTagStateResponse {
+            payload: STANDARD.encode(r#"{"exists":false}"#),
+            version: 0,
+            last_sorted_unique_id: "sort-000".to_string(),
+        })
+    }
+
+    async fn handle_latest_sortable(
+        State(state): State<TestServerState>,
+        Json(body): Json<Value>,
+    ) -> Json<TagLatestSortableResponse> {
+        push_request(&state, "/api/sekiban/serialized/tag-latest-sortable", body);
+        Json(TagLatestSortableResponse {
+            exists: state.latest_sortable.is_some(),
+            last_sortable_unique_id: state.latest_sortable.unwrap_or_default(),
+        })
+    }
+
+    async fn handle_commit(
+        State(state): State<TestServerState>,
+        Json(body): Json<Value>,
+    ) -> Json<Value> {
+        push_request(&state, "/api/sekiban/serialized/commit", body);
+        Json(serde_json::json!({
+            "writtenEvents": [
+                {
+                    "sortableUniqueIdValue": "sort-123"
+                }
+            ]
+        }))
+    }
+
+    fn push_request(state: &TestServerState, path: &str, body: Value) {
+        state
+            .requests
+            .lock()
+            .expect("requests lock should succeed")
+            .push(LoggedRequest {
+                path: path.to_string(),
+                body,
+            });
     }
 }
