@@ -11,13 +11,19 @@ public record SseStreamUpdate(
 public sealed class SseSubscription : IDisposable
 {
     private readonly Action _onDispose;
+    private readonly CancellationTokenRegistration _registration;
     private bool _disposed;
 
-    public SseSubscription(Guid id, ChannelReader<SseStreamUpdate> reader, Action onDispose)
+    public SseSubscription(
+        Guid id,
+        ChannelReader<SseStreamUpdate> reader,
+        Action onDispose,
+        CancellationTokenRegistration registration)
     {
         Id = id;
         Reader = reader;
         _onDispose = onDispose;
+        _registration = registration;
     }
 
     public Guid Id { get; }
@@ -27,6 +33,7 @@ public sealed class SseSubscription : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _registration.Dispose();
         _onDispose();
     }
 }
@@ -52,11 +59,16 @@ public sealed class SseTopicHub
             if (_topics.TryGetValue(topic, out var current) && current.TryRemove(id, out var removed))
             {
                 removed.Writer.TryComplete();
+                if (current.IsEmpty)
+                {
+                    ((ICollection<KeyValuePair<string, ConcurrentDictionary<Guid, Channel<SseStreamUpdate>>>>)_topics)
+                        .Remove(new KeyValuePair<string, ConcurrentDictionary<Guid, Channel<SseStreamUpdate>>>(topic, current));
+                }
             }
         }
 
-        cancellationToken.Register(Remove);
-        return new SseSubscription(id, channel.Reader, Remove);
+        var registration = cancellationToken.Register(Remove);
+        return new SseSubscription(id, channel.Reader, Remove, registration);
     }
 
     public void Publish(string topic, SseStreamUpdate update)

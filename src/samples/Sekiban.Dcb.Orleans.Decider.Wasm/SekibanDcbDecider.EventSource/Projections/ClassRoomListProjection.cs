@@ -50,6 +50,7 @@ public record ClassRoomListProjection : IMultiProjector<ClassRoomListProjection>
                     new FilledClassRoomState(
                         state.ClassRoomId,
                         state.Name,
+                        state.MaxStudents,
                         state.Evolve(enrolled).EnrolledStudentIds,
                         true),
                 (AvailableClassRoomState state, StudentDroppedFromClassRoom dropped) =>
@@ -58,7 +59,7 @@ public record ClassRoomListProjection : IMultiProjector<ClassRoomListProjection>
                     new AvailableClassRoomState(
                         state.ClassRoomId,
                         state.Name,
-                        state.EnrolledStudentIds.Count,
+                        state.MaxStudents,
                         state.Evolve(dropped).EnrolledStudentIds),
                 _ => currentState
             };

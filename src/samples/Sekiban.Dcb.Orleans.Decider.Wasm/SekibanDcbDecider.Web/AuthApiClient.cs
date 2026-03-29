@@ -1,6 +1,6 @@
 using System.Net.Http.Json;
 
-namespace SekibanDcbOrleans.Web;
+namespace SekibanDcbDecider.Web;
 
 /// <summary>
 ///     API client for authentication endpoints.

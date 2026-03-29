@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
 
 namespace SekibanDcbDecider.ApiService.Auth;
@@ -24,6 +25,27 @@ public static class AuthServiceExtensions
         services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
         var jwtSettings = configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>()
             ?? throw new InvalidOperationException("JWT settings not configured");
+        var environmentName = configuration["DOTNET_ENVIRONMENT"]
+            ?? configuration["ASPNETCORE_ENVIRONMENT"]
+            ?? Environments.Production;
+
+        if (string.IsNullOrWhiteSpace(jwtSettings.SecretKey))
+        {
+            throw new InvalidOperationException(
+                "Jwt:SecretKey is required. Configure it with user-secrets, environment variables, or your secret store.");
+        }
+
+        if (jwtSettings.SecretKey.Length < 32)
+        {
+            throw new InvalidOperationException("Jwt:SecretKey must be at least 32 characters long.");
+        }
+
+        if (string.Equals(jwtSettings.SecretKey, JwtSettings.PlaceholderSecretKey, StringComparison.Ordinal) &&
+            !string.Equals(environmentName, Environments.Development, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "Jwt:SecretKey is still set to the sample placeholder. Configure a real key outside development.");
+        }
 
         // Add Identity DbContext with PostgreSQL
         services.AddDbContext<ApplicationDbContext>(options =>

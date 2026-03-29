@@ -4,7 +4,8 @@ namespace SekibanDcbDecider.ApiService.Health;
 
 /// <summary>
 ///     Orleans Silo health check
-///     Readiness: Verifies that the Silo has joined the cluster
+///     Liveness: Verifies that the Orleans GrainFactory is available from DI,
+///     indicating that the Orleans infrastructure has started.
 /// </summary>
 public class OrleansHealthCheck(IGrainFactory grainFactory, ILogger<OrleansHealthCheck> logger) : IHealthCheck
 {
@@ -17,17 +18,13 @@ public class OrleansHealthCheck(IGrainFactory grainFactory, ILogger<OrleansHealt
     {
         try
         {
-            // If IGrainFactory is available, Orleans has started
-            // Orleans 9.x/10.x doesn't have IClusterClient.IsInitialized,
-            // so we check GrainFactory availability as an alternative
             if (_grainFactory is null)
             {
                 _logger.LogWarning("Orleans GrainFactory is not available");
                 return Task.FromResult(HealthCheckResult.Unhealthy("Orleans GrainFactory is not available"));
             }
 
-            // If GrainFactory is available from DI, the Silo is running
-            return Task.FromResult(HealthCheckResult.Healthy("Orleans Silo is running"));
+            return Task.FromResult(HealthCheckResult.Healthy("Orleans GrainFactory is available"));
         }
         catch (Exception ex)
         {

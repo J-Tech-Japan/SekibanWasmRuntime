@@ -13,7 +13,7 @@
         <TargetFramework>net10.0</TargetFramework>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
-        <RootNamespace>SekibanDcbOrleans.Web</RootNamespace>
+        <RootNamespace>SekibanDcbDecider.Web</RootNamespace>
     </PropertyGroup>
 
 </Project>

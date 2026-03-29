@@ -99,4 +99,61 @@ public class TagTests
         var parsed = UserMonthlyReservationTag.FromContent(content);
         Assert.Equal(tag.GetId(), parsed.GetId());
     }
+
+    [Fact]
+    public void RoomDailyActivityTag_Should_RoundTrip_Content()
+    {
+        var roomId = Guid.NewGuid();
+        var date = new DateOnly(2026, 3, 29);
+        var tag = new RoomDailyActivityTag(roomId, date);
+
+        var content = tag.GetTagContent();
+        var parsed = RoomDailyActivityTag.FromContent(content);
+
+        Assert.Equal(roomId, parsed.RoomId);
+        Assert.Equal(date, parsed.Date);
+    }
+
+    [Fact]
+    public void RoomDailyActivityTag_FromContent_Should_Throw_For_Invalid_Content()
+    {
+        Assert.Throws<FormatException>(() => RoomDailyActivityTag.FromContent("invalid"));
+    }
+
+    [Fact]
+    public void RoomDailyActivityTag_CreateTagsForTimeRange_Should_Return_Same_Day_Tag()
+    {
+        var roomId = Guid.NewGuid();
+        var tags = RoomDailyActivityTag.CreateTagsForTimeRange(
+            roomId,
+            new DateTime(2026, 3, 29, 9, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 3, 29, 11, 0, 0, DateTimeKind.Utc)).ToList();
+
+        var tag = Assert.Single(tags);
+        Assert.Equal(new DateOnly(2026, 3, 29), tag.Date);
+    }
+
+    [Fact]
+    public void RoomDailyActivityTag_CreateTagsForTimeRange_Should_Handle_MultiDay_And_Midnight_End()
+    {
+        var roomId = Guid.NewGuid();
+
+        var multiDay = RoomDailyActivityTag.CreateTagsForTimeRange(
+            roomId,
+            new DateTime(2026, 3, 29, 23, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 3, 31, 9, 0, 0, DateTimeKind.Utc)).ToList();
+
+        Assert.Equal(
+            [new DateOnly(2026, 3, 29), new DateOnly(2026, 3, 30), new DateOnly(2026, 3, 31)],
+            multiDay.Select(tag => tag.Date).ToList());
+
+        var endAtMidnight = RoomDailyActivityTag.CreateTagsForTimeRange(
+            roomId,
+            new DateTime(2026, 3, 29, 23, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 3, 31, 0, 0, 0, DateTimeKind.Utc)).ToList();
+
+        Assert.Equal(
+            [new DateOnly(2026, 3, 29), new DateOnly(2026, 3, 30)],
+            endAtMidnight.Select(tag => tag.Date).ToList());
+    }
 }

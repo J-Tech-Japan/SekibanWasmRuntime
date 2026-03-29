@@ -26,6 +26,7 @@ public class ClassRoomProjector : ITagProjector<ClassRoomProjector>
                 new FilledClassRoomState(
                     state.ClassRoomId,
                     state.Name,
+                    state.MaxStudents,
                     state.Evolve(enrolled).EnrolledStudentIds,
                     true),
 
@@ -38,7 +39,7 @@ public class ClassRoomProjector : ITagProjector<ClassRoomProjector>
                 new AvailableClassRoomState(
                     state.ClassRoomId,
                     state.Name,
-                    state.EnrolledStudentIds.Count,
+                    state.MaxStudents,
                     state.Evolve(dropped).EnrolledStudentIds),
 
             _ => current

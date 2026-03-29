@@ -7,6 +7,7 @@ namespace SekibanDcbDecider.ApiService.Auth;
 public class JwtSettings
 {
     public const string SectionName = "Jwt";
+    public const string PlaceholderSecretKey = "CHANGE_ME_IN_USER_SECRETS_OR_ENVIRONMENT_32_CHARS_MIN";
 
     /// <summary>
     ///     Secret key for signing tokens (minimum 32 characters)

@@ -1,5 +1,5 @@
-using SekibanDcbOrleans.Web;
-using SekibanDcbOrleans.Web.Components;
+using SekibanDcbDecider.Web;
+using SekibanDcbDecider.Web.Components;
 
 var builder = WebApplication.CreateBuilder(args);
 

@@ -2,7 +2,7 @@ using Dcb.EventSource.Student;
 using Dcb.ImmutableModels.States.Student;
 using System.Text.Json;
 
-namespace SekibanDcbOrleans.Web;
+namespace SekibanDcbDecider.Web;
 
 public class StudentApiClient(HttpClient httpClient)
 {

@@ -66,7 +66,7 @@ public static class StudentEnrolledInClassRoomDecider
     /// <summary>
     ///     Apply StudentEnrolledInClassRoom event to FilledClassRoomState
     /// </summary>
-    public static FilledClassRoomState Evolve(this FilledClassRoomState state, StudentEnrolledInClassRoom enrolled, int maxStudents)
+    public static FilledClassRoomState Evolve(this FilledClassRoomState state, StudentEnrolledInClassRoom enrolled)
     {
         // Idempotency: if already enrolled, return same state
         if (state.EnrolledStudentIds.Contains(enrolled.StudentId))
@@ -76,7 +76,7 @@ public static class StudentEnrolledInClassRoomDecider
         return state with
         {
             EnrolledStudentIds = newEnrolledStudents,
-            IsFull = newEnrolledStudents.Count >= maxStudents
+            IsFull = newEnrolledStudents.Count >= state.MaxStudents
         };
     }
 }

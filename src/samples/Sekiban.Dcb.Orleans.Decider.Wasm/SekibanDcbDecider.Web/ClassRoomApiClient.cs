@@ -1,7 +1,7 @@
 using Dcb.EventSource.ClassRoom;
 using System.Text.Json;
 
-namespace SekibanDcbOrleans.Web;
+namespace SekibanDcbDecider.Web;
 
 public class ClassRoomApiClient(HttpClient httpClient)
 {

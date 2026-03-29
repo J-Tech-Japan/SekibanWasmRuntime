@@ -17,4 +17,9 @@
     </PackageReference>
     <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SekibanDcbDecider.EventSource\SekibanDcbDecider.EventSource.csproj" />
+    <ProjectReference Include="..\SekibanDcbDecider.ImmutableModels\SekibanDcbDecider.ImmutableModels.csproj" />
+  </ItemGroup>
 </Project>

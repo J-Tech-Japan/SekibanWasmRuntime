@@ -6,6 +6,7 @@ using Microsoft.Azure.Cosmos;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using SekibanDcbDecider.Cli;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.CosmosDb;

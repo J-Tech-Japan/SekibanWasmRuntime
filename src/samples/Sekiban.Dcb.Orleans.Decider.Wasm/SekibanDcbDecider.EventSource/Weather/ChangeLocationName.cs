@@ -29,16 +29,13 @@ public record ChangeLocationName : ICommandWithHandler<ChangeLocationName>
 
         var state = await context.GetStateAsync<WeatherForecastState, WeatherForecastProjector>(tag);
 
-        // Use Decider.Validate - handles both IsDeleted check and same-name check
-        try
+        // Idempotency: if the location name is unchanged, no event is needed.
+        if (string.Equals(state.Payload.Location, command.NewLocationName, StringComparison.Ordinal))
         {
-            state.Payload.Validate(command.NewLocationName);
-        }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("already"))
-        {
-            // Same location name - return empty (idempotent)
             return EventOrNone.Empty;
         }
+
+        state.Payload.Validate(command.NewLocationName);
 
         return new LocationNameChanged(
             command.ForecastId,

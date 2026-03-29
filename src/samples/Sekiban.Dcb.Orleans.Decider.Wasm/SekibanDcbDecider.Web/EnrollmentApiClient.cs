@@ -1,7 +1,7 @@
 using Dcb.EventSource.Enrollment;
 using System.Text.Json;
 
-namespace SekibanDcbOrleans.Web;
+namespace SekibanDcbDecider.Web;
 
 public class EnrollmentApiClient(HttpClient httpClient)
 {
