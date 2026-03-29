@@ -3,28 +3,6 @@ using SekibanWasm.AppHostShared;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
-var postgresPort = AppHostInfrastructure.ResolveConfiguredPort(
-    5434,
-    "RUST_GENERIC_POSTGRES_PORT",
-    "POSTGRES_PORT");
-
-var postgresServer = builder
-    .AddPostgres("sekibanRustGenericPostgres")
-    .WithHostPort(postgresPort);
-
-var postgres = postgresServer.AddDatabase("SekibanRustGenericDb");
-
-var dbGatePort = AppHostInfrastructure.ResolveConfiguredPort(
-    6301,
-    "RUST_GENERIC_DBGATE_PORT",
-    "DBGATE_PORT");
-
-builder.AddDbGateForPostgres(
-    name: "dbgate",
-    postgresDatabase: postgres,
-    label: "Rust Generic Weather Postgres",
-    hostPort: dbGatePort);
-
 var wasmModulePathRaw = Environment.GetEnvironmentVariable("WASM_MODULE_PATH");
 var wasmModulePath = string.IsNullOrWhiteSpace(wasmModulePathRaw)
     ? Path.GetFullPath(Path.Combine(
@@ -43,11 +21,133 @@ if (!File.Exists(wasmModulePath))
         "Set WASM_MODULE_PATH to the path of the Rust .wasm module, or build it via ./build/scripts/build-rust-wasm.sh.");
 }
 
+var storageProvider = AppHostInfrastructure.ResolveStorageProvider();
+
 var runtimeBuilder = builder
     .AddProject<Sekiban_Dcb_WasmRuntime_Host>("runtime")
-    .WithReference(postgres, "SekibanDcb")
-    .WaitFor(postgres)
+    .WithEnvironment("SEKIBAN_STORAGE_PROVIDER", storageProvider.ToString().ToLowerInvariant())
     .WithEnvironment("WASM_MODULE_PATH", wasmModulePath);
+
+switch (storageProvider)
+{
+    case AppHostStorageProvider.Postgres:
+    {
+        var externalConnectionString = AppHostInfrastructure.GetFirstConfiguredEnvironmentValue(
+            "ConnectionStrings__SekibanDcb",
+            "SEKIBAN_DCB_CONNECTION");
+
+        if (string.IsNullOrWhiteSpace(externalConnectionString))
+        {
+            var postgresPort = AppHostInfrastructure.ResolveConfiguredPort(
+                5434,
+                "RUST_GENERIC_POSTGRES_PORT",
+                "POSTGRES_PORT");
+
+            var postgresServer = builder
+                .AddPostgres("sekibanRustGenericPostgres")
+                .WithHostPort(postgresPort);
+
+            var postgres = postgresServer.AddDatabase("SekibanRustGenericDb");
+
+            var dbGatePort = AppHostInfrastructure.ResolveConfiguredPort(
+                6301,
+                "RUST_GENERIC_DBGATE_PORT",
+                "DBGATE_PORT");
+
+            builder.AddDbGateForPostgres(
+                name: "dbgate",
+                postgresDatabase: postgres,
+                label: "Rust Generic Weather Postgres",
+                hostPort: dbGatePort);
+
+            runtimeBuilder = runtimeBuilder
+                .WithReference(postgres, "SekibanDcb")
+                .WaitFor(postgres);
+        }
+        else
+        {
+            runtimeBuilder = runtimeBuilder.WithEnvironment("ConnectionStrings__SekibanDcb", externalConnectionString);
+        }
+
+        break;
+    }
+    case AppHostStorageProvider.Sqlite:
+    {
+        var sqlitePathRaw = AppHostInfrastructure.GetFirstConfiguredEnvironmentValue(
+            "SEKIBAN_SQLITE_PATH",
+            "ConnectionStrings__SekibanDcbSqlite",
+            "ConnectionStrings__Sqlite");
+        var sqlitePath = string.IsNullOrWhiteSpace(sqlitePathRaw)
+            ? Path.GetFullPath(Path.Combine(builder.AppHostDirectory, ".data", "sekiban-runtime.sqlite"))
+            : (Path.IsPathRooted(sqlitePathRaw)
+                ? sqlitePathRaw
+                : Path.GetFullPath(Path.Combine(builder.AppHostDirectory, sqlitePathRaw)));
+
+        var sqliteDirectory = Path.GetDirectoryName(sqlitePath);
+        if (string.IsNullOrWhiteSpace(sqliteDirectory))
+        {
+            sqliteDirectory = builder.AppHostDirectory;
+        }
+
+        Directory.CreateDirectory(sqliteDirectory);
+
+        runtimeBuilder = runtimeBuilder
+            .WithEnvironment("SEKIBAN_SQLITE_PATH", sqlitePath)
+            .WithEnvironment("ConnectionStrings__SekibanDcbSqlite", sqlitePath);
+        break;
+    }
+    case AppHostStorageProvider.Cosmos:
+    {
+        var cosmosConnectionString = AppHostInfrastructure.GetFirstConfiguredEnvironmentValue(
+            "ConnectionStrings__SekibanDcbCosmos",
+            "ConnectionStrings__SekibanDcbCosmosDb",
+            "ConnectionStrings__CosmosDb",
+            "ConnectionStrings__cosmosdb",
+            "SEKIBAN_DCB_COSMOS_CONNECTION");
+
+        if (string.IsNullOrWhiteSpace(cosmosConnectionString))
+        {
+            throw new InvalidOperationException(
+                "Cosmos storage requires a configured connection string. Set one of: " +
+                "ConnectionStrings__SekibanDcbCosmos, ConnectionStrings__SekibanDcbCosmosDb, " +
+                "ConnectionStrings__CosmosDb, ConnectionStrings__cosmosdb, or SEKIBAN_DCB_COSMOS_CONNECTION.");
+        }
+
+        var cosmosDatabaseName = AppHostInfrastructure.GetFirstConfiguredEnvironmentValue(
+            "CosmosDb__DatabaseName",
+            "SEKIBAN_COSMOS_DATABASE") ?? "SekibanDcb";
+
+        runtimeBuilder = runtimeBuilder
+            .WithEnvironment("ConnectionStrings__SekibanDcbCosmos", cosmosConnectionString)
+            .WithEnvironment("CosmosDb__DatabaseName", cosmosDatabaseName);
+        break;
+    }
+}
+
+foreach (var envVarName in new[]
+         {
+             "Sekiban__ColdEvent__Enabled",
+             "Sekiban__ColdEvent__Storage__Type",
+             "Sekiban__ColdEvent__Storage__Provider",
+             "Sekiban__ColdEvent__Storage__Format",
+             "Sekiban__ColdEvent__Storage__BasePath",
+             "Sekiban__ColdEvent__Storage__JsonlDirectory",
+             "Sekiban__ColdEvent__Storage__SqliteFile",
+             "Sekiban__ColdEvent__Storage__DuckDbFile",
+             "Sekiban__ColdEvent__Storage__AzureBlobClientName",
+             "Sekiban__ColdEvent__Storage__AzureContainerName",
+             "Sekiban__ColdEvent__Storage__AzurePrefix",
+             "ColdExport__Interval",
+             "ColdExport__CycleBudget",
+             "ConnectionStrings__MultiProjectionOffload"
+         })
+{
+    var configuredValue = Environment.GetEnvironmentVariable(envVarName);
+    if (!string.IsNullOrWhiteSpace(configuredValue))
+    {
+        runtimeBuilder = runtimeBuilder.WithEnvironment(envVarName, configuredValue);
+    }
+}
 
 var manifestPathRaw = Environment.GetEnvironmentVariable("SEKIBAN_MANIFEST_PATH");
 if (!string.IsNullOrWhiteSpace(manifestPathRaw))

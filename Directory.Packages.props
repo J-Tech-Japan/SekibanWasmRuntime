@@ -48,6 +48,8 @@
     <PackageVersion Include="Sekiban.Dcb.Core.Model" Version="10.1.9" />
     <PackageVersion Include="Sekiban.Dcb.Orleans.Core" Version="10.1.9" />
     <PackageVersion Include="Sekiban.Dcb.Orleans.WithoutResult" Version="10.1.9" />
+    <PackageVersion Include="Sekiban.Dcb.CosmosDb" Version="10.1.9" />
+    <PackageVersion Include="Sekiban.Dcb.ColdStorage" Version="10.1.9" />
     <PackageVersion Include="Sekiban.Dcb.Postgres" Version="10.1.9" />
     <PackageVersion Include="Sekiban.Dcb.Sqlite" Version="10.1.9" />
     <PackageVersion Include="Sekiban.Dcb.WithoutResult" Version="10.1.9" />

@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Orleans.Configuration;
 using Orleans.Hosting;
@@ -35,13 +36,11 @@ manifest.Validate();
 var jsonOptions = ManifestDomainTypes.CreateJsonOptions();
 var domainTypes = ManifestDomainTypes.Create(manifest, jsonOptions);
 var registry = manifest.CreateRegistry();
-var databaseType = ResolveDatabaseType(builder.Configuration);
-var connectionString = string.Equals(databaseType, "sqlite", StringComparison.OrdinalIgnoreCase)
-    ? null
-    : ResolveConnectionString(builder.Configuration);
-var sqliteDatabasePath = string.Equals(databaseType, "sqlite", StringComparison.OrdinalIgnoreCase)
-    ? ResolveSqliteDatabasePath(builder.Configuration)
-    : null;
+var storageConfiguration = RuntimeHostStorageConfigurationResolver.Resolve(
+    builder.Configuration,
+    builder.Environment.ContentRootPath);
+var databaseType = storageConfiguration.Provider.ToString().ToLowerInvariant();
+var sqliteDatabasePath = storageConfiguration.SqlitePath;
 var waitForSortableUniqueIdTimeout = ResolveWaitForSortableUniqueIdTimeout(builder.Configuration);
 var queryResponseTimeout = ResolveQueryResponseTimeout(builder.Configuration);
 var enableProjectionStatusEndpoint = builder.Environment.IsDevelopment()
@@ -81,20 +80,11 @@ builder.Services.Configure<MessagingOptions>(options =>
 });
 
 builder.Services.AddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
-builder.Services.AddSekibanDcbColdEventDefaults();
-if (string.Equals(databaseType, "sqlite", StringComparison.OrdinalIgnoreCase))
-{
-    builder.Services.AddSekibanDcbSqlite(sqliteDatabasePath!);
-}
-else
-{
-    builder.Services.AddSekibanDcbPostgres(connectionString!);
-}
-if (builder.Configuration.GetValue<bool>("Sekiban:ColdEvent:Enabled"))
-{
-    builder.Services.AddSekibanDcbColdExport(builder.Configuration, builder.Environment.ContentRootPath);
-    builder.Services.AddSekibanDcbColdEventHybridRead();
-}
+RuntimeHostStorageConfigurationResolver.ConfigureServices(
+    builder.Services,
+    builder.Configuration,
+    storageConfiguration,
+    builder.Environment.ContentRootPath);
 builder.Services.AddSekibanDcbNativeRuntime();
 builder.Services.AddSingleton<IEventSubscriptionResolver>(_ =>
     new DefaultOrleansEventSubscriptionResolver(
@@ -124,7 +114,7 @@ builder.Services.AddWasmTagStateRuntime(options =>
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
-if (string.Equals(databaseType, "postgres", StringComparison.OrdinalIgnoreCase))
+if (storageConfiguration.RequiresRelationalMigration)
 {
     await app.MigrateSekibanDcbDatabaseAsync();
 }
@@ -372,8 +362,9 @@ static async Task<IResult?> TryExecuteDirectSnapshotQueryAsync(
     ILogger logger,
     CancellationToken ct)
 {
-    var databaseType = ResolveDatabaseType(http.RequestServices.GetRequiredService<IConfiguration>());
-    if (!string.Equals(databaseType, "sqlite", StringComparison.OrdinalIgnoreCase))
+    var storageProvider = RuntimeHostStorageConfigurationResolver.ResolveProvider(
+        http.RequestServices.GetRequiredService<IConfiguration>());
+    if (storageProvider != RuntimeHostStorageProvider.Sqlite)
     {
         return null;
     }
@@ -660,95 +651,6 @@ static async Task<string> DecompressToStringAsync(byte[] compressedData)
     using var reader = new StreamReader(gzip, Encoding.UTF8);
     return await reader.ReadToEndAsync();
 }
-
-static string ResolveConnectionString(IConfiguration configuration)
-{
-    var candidates = new[]
-    {
-        configuration.GetConnectionString("SekibanDcb"),
-        Environment.GetEnvironmentVariable("ConnectionStrings__SekibanDcb"),
-        Environment.GetEnvironmentVariable("SEKIBAN_DCB_CONNECTION"),
-        "Host=127.0.0.1;Port=5432;Database=sekiban;Username=postgres;Password=postgres"
-    };
-
-    return candidates.First(static candidate => !string.IsNullOrWhiteSpace(candidate))!;
-}
-
-static string ResolveDatabaseType(IConfiguration configuration)
-{
-    var candidates = new[]
-    {
-        configuration["Sekiban:Database"],
-        Environment.GetEnvironmentVariable("SEKIBAN_DATABASE"),
-        "postgres"
-    };
-
-    return candidates.First(static candidate => !string.IsNullOrWhiteSpace(candidate))!
-        .Trim()
-        .ToLowerInvariant();
-}
-
-static string ResolveSqliteDatabasePath(IConfiguration configuration)
-{
-    var directPathCandidates = new[]
-    {
-        configuration["Sekiban:SqlitePath"],
-        Environment.GetEnvironmentVariable("SEKIBAN_SQLITE_PATH")
-    };
-
-    foreach (var candidate in directPathCandidates)
-    {
-        if (string.IsNullOrWhiteSpace(candidate))
-        {
-            continue;
-        }
-
-        var resolved = ResolveSqlitePath(candidate);
-        if (File.Exists(resolved))
-        {
-            return resolved;
-        }
-    }
-
-    var cacheDirCandidates = new[]
-    {
-        configuration["Sekiban:SqliteCachePath"],
-        Environment.GetEnvironmentVariable("SEKIBAN_SQLITE_CACHE_PATH")
-    };
-
-    foreach (var candidate in cacheDirCandidates)
-    {
-        if (string.IsNullOrWhiteSpace(candidate))
-        {
-            continue;
-        }
-
-        var resolved = ResolveSqlitePath(candidate);
-        if (File.Exists(resolved))
-        {
-            return resolved;
-        }
-    }
-
-    throw new InvalidOperationException(
-        "SQLite database path is required when Sekiban:Database=sqlite. " +
-        "Set Sekiban:SqlitePath, SEKIBAN_SQLITE_PATH, Sekiban:SqliteCachePath, or SEKIBAN_SQLITE_CACHE_PATH.");
-}
-
-static string ResolveSqlitePath(string pathOrDirectory)
-{
-    var resolved = Path.IsPathRooted(pathOrDirectory)
-        ? pathOrDirectory
-        : Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), pathOrDirectory));
-
-    if (resolved.EndsWith(".db", StringComparison.OrdinalIgnoreCase))
-    {
-        return resolved;
-    }
-
-    return Path.Combine(resolved, "events.db");
-}
-
 static TimeSpan ResolveWaitForSortableUniqueIdTimeout(IConfiguration configuration)
 {
     var candidates = new[]
