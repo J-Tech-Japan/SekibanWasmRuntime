@@ -120,7 +120,7 @@ static async Task<IResult> ExecuteRemoteCommandAsync<TCommand>(
     }
     catch (Exception ex)
     {
-        return Results.BadRequest(new CommandResponse(false, ex.Message, null));
+        return HandleCommandFailure(http, ex);
     }
 }
 
@@ -139,8 +139,23 @@ static async Task<IResult> ExecuteSerializedCommandAsync(
     }
     catch (Exception ex)
     {
-        return Results.BadRequest(new CommandResponse(false, ex.Message, null));
+        return HandleCommandFailure(http, ex);
     }
+}
+
+static IResult HandleCommandFailure(HttpContext http, Exception ex)
+{
+    var logger = http.RequestServices
+        .GetRequiredService<ILoggerFactory>()
+        .CreateLogger("SekibanWasm.Cs.ClientApi.Commands");
+    logger.LogWarning(
+        ex,
+        "ClientApi command failed for {Method} {Path}. TraceId: {TraceId}",
+        http.Request.Method,
+        http.Request.Path,
+        http.TraceIdentifier);
+
+    return Results.BadRequest(new CommandResponse(false, "Command execution failed.", null));
 }
 
 static string ResolveWasmServerBase(IConfiguration configuration)
