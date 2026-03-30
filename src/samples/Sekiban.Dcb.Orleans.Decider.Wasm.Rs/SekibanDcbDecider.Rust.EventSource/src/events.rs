@@ -8,6 +8,7 @@ use uuid::Uuid;
 pub struct WeatherForecastCreated {
     pub forecast_id: Uuid,
     pub location: String,
+    pub date: String,
     pub temperature_c: i32,
     pub summary: String,
     pub created_at: String,

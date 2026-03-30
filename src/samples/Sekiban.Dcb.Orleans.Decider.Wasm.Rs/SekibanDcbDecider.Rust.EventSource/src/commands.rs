@@ -14,6 +14,7 @@ use crate::tags::*;
 pub struct CreateWeatherForecast {
     pub forecast_id: Option<Uuid>,
     pub location: String,
+    pub date: String,
     pub temperature_c: i32,
     pub summary: String,
 }
@@ -34,6 +35,7 @@ impl CommandHandler for CreateWeatherForecast {
         let event = WeatherForecastCreated {
             forecast_id,
             location: self.location.clone(),
+            date: self.date.clone(),
             temperature_c: self.temperature_c,
             summary: self.summary.clone(),
             created_at: Utc::now().to_rfc3339(),

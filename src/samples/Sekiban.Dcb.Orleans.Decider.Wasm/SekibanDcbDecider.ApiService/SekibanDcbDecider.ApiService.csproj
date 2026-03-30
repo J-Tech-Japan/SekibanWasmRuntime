@@ -9,6 +9,11 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <ProjectReference Include="..\..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.BlobStorage.AzureStorage\Sekiban.Dcb.BlobStorage.AzureStorage.csproj" />
+        <ProjectReference Include="..\..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.CosmosDb\Sekiban.Dcb.CosmosDb.csproj" />
+        <ProjectReference Include="..\..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.Orleans.WithoutResult\Sekiban.Dcb.Orleans.WithoutResult.csproj" />
+        <ProjectReference Include="..\..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.Postgres\Sekiban.Dcb.Postgres.csproj" />
+        <ProjectReference Include="..\..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.Sqlite\Sekiban.Dcb.Sqlite.csproj" />
         <ProjectReference Include="..\SekibanDcbDecider.Interactions\SekibanDcbDecider.Interactions.csproj" />
         <ProjectReference Include="..\SekibanDcbDecider.ServiceDefaults\SekibanDcbDecider.ServiceDefaults.csproj" />
         <ProjectReference Include="..\..\..\lib\Sekiban.Dcb.WasmRuntime\Sekiban.Dcb.WasmRuntime.csproj" />
@@ -42,11 +47,6 @@
         <!-- via Microsoft.Orleans.Streaming.EventHubs. The Aspire package adds health checks that -->
         <!-- require extra configuration (EventHubName or EntityPath in ConnectionString). -->
         <PackageReference Include="Scalar.AspNetCore" Version="2.12.50" />
-        <PackageReference Include="Sekiban.Dcb.BlobStorage.AzureStorage" Version="10.1.8" />
-        <PackageReference Include="Sekiban.Dcb.Orleans.WithoutResult" Version="10.1.8" />
-        <PackageReference Include="Sekiban.Dcb.Postgres" Version="10.1.8" />
-        <PackageReference Include="Sekiban.Dcb.CosmosDb" Version="10.1.8" />
-        <PackageReference Include="Sekiban.Dcb.Sqlite" Version="10.1.8" />
         <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
     </ItemGroup>
 

@@ -26,6 +26,7 @@ impl Projector for WeatherForecastProjector {
             WeatherForecastCreated(e) => WeatherForecastState {
                 forecast_id: e.forecast_id,
                 location: e.location.clone(),
+                date: e.date.clone(),
                 temperature_c: e.temperature_c,
                 summary: e.summary.clone(),
                 created_at: e.created_at.clone(),
@@ -65,6 +66,7 @@ impl Projector for WeatherForecastListProjector {
                 new_state.items.push(WeatherForecastItem {
                     forecast_id: e.forecast_id,
                     location: e.location.clone(),
+                    date: e.date.clone(),
                     temperature_c: e.temperature_c,
                     summary: e.summary.clone(),
                 });

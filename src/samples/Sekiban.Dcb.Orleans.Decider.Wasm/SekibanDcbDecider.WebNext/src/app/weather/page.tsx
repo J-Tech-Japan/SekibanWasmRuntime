@@ -68,6 +68,14 @@ export default function WeatherPage() {
     waitForSortableUniqueId: lastSortableUniqueId,
   });
 
+  useEffect(() => {
+    if (!lastSortableUniqueId) {
+      return;
+    }
+
+    void refetch();
+  }, [lastSortableUniqueId, refetch]);
+
   const createMutation = trpc.weather.create.useMutation({
     onSuccess: (data) => {
       setLastSortableUniqueId(data.sortableUniqueId);

@@ -7,10 +7,10 @@
     <IsPackable>true</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.WithoutResult\Sekiban.Dcb.WithoutResult.csproj" />
     <ProjectReference Include="..\SekibanDcbDecider.EventSource\SekibanDcbDecider.EventSource.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Sekiban.Dcb.WithoutResult" Version="10.1.8" />
     <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
   </ItemGroup>
 </Project>

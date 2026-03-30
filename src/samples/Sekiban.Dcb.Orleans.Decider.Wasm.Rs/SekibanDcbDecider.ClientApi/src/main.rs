@@ -89,6 +89,18 @@ struct WeatherListQueryParams {
     location_filter: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawWeatherForecastItem {
+    forecast_id: uuid::Uuid,
+    location: String,
+    date: Option<String>,
+    temperature_c: i32,
+    summary: Option<String>,
+    created_at: Option<String>,
+    is_deleted: Option<bool>,
+}
+
 async fn get_forecasts(
     State(state): State<AppState>,
     AxumQuery(query): AxumQuery<WeatherListQueryParams>,
@@ -101,10 +113,16 @@ async fn get_forecasts(
 
     match state
         .executor
-        .execute_list_query::<_, Vec<WeatherForecastItem>>(&list_query)
+        .execute_list_query::<_, Vec<RawWeatherForecastItem>>(&list_query)
         .await
     {
-        Ok(items) => (StatusCode::OK, Json(items)).into_response(),
+        Ok(items) => {
+            let items = items
+                .into_iter()
+                .filter_map(normalize_weather_forecast_item)
+                .collect::<Vec<_>>();
+            (StatusCode::OK, Json(items)).into_response()
+        }
         Err(err) => {
             tracing::warn!(error = %err, "list query failed");
             (
@@ -154,6 +172,7 @@ async fn create_forecast(
     let normalized = CreateWeatherForecast {
         forecast_id: Some(forecast_id),
         location: command.location,
+        date: command.date,
         temperature_c: command.temperature_c,
         summary: command.summary,
     };
@@ -296,6 +315,7 @@ async fn build_create_commit_request(
     let event = WeatherForecastCreated {
         forecast_id,
         location: command.location,
+        date: command.date,
         temperature_c: command.temperature_c,
         summary: command.summary,
         created_at: Utc::now().to_rfc3339(),
@@ -482,10 +502,34 @@ async fn get_forecast(
 
     state
         .executor
-        .execute_list_query::<_, Vec<WeatherForecastItem>>(&list_query)
+        .execute_list_query::<_, Vec<RawWeatherForecastItem>>(&list_query)
         .await
-        .map(|items| items.into_iter().next())
+        .map(|items| items.into_iter().filter_map(normalize_weather_forecast_item).next())
         .map_err(|err| ExecuteCommandError::Transport(anyhow::anyhow!(err)))
+}
+
+fn normalize_weather_forecast_item(raw: RawWeatherForecastItem) -> Option<WeatherForecastItem> {
+    if raw.is_deleted.unwrap_or(false) {
+        return None;
+    }
+
+    let date = raw.date.or_else(|| {
+        raw.created_at.as_ref().map(|created_at| {
+            created_at
+                .split('T')
+                .next()
+                .unwrap_or(created_at)
+                .to_string()
+        })
+    })?;
+
+    Some(WeatherForecastItem {
+        forecast_id: raw.forecast_id,
+        location: raw.location,
+        date,
+        temperature_c: raw.temperature_c,
+        summary: raw.summary.unwrap_or_default(),
+    })
 }
 
 #[derive(Serialize)]

@@ -7,11 +7,11 @@
     <IsPackable>true</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.WithoutResult\Sekiban.Dcb.WithoutResult.csproj" />
     <ProjectReference Include="..\SekibanDcbDecider.ImmutableModels\SekibanDcbDecider.ImmutableModels.csproj" />
     <ProjectReference Include="..\SekibanDcbDecider.MeetingRoomModels\SekibanDcbDecider.MeetingRoomModels.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Sekiban.Dcb.WithoutResult" Version="10.1.8" />
     <PackageReference Include="ResultBoxes" Version="0.4.0" />
     <PackageReference Include="Microsoft.Orleans.Serialization" Version="10.0.1" />
     <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />

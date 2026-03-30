@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { router, publicProcedure } from "../api/trpc";
 
+const weatherApiBaseUrl = process.env.CLIENT_API_BASE_URL ?? process.env.API_BASE_URL;
+const usesClientApi = Boolean(process.env.CLIENT_API_BASE_URL);
+
 const weatherForecastSchema = z.object({
   forecastId: z.string().uuid(),
   location: z.string(),
@@ -36,11 +39,14 @@ export const weatherRouter = router({
       params.set("pageNumber", input.pageNumber.toString());
       params.set("pageSize", input.pageSize.toString());
       if (input.waitForSortableUniqueId) {
-        params.set("waitForSortableUniqueId", input.waitForSortableUniqueId);
+        params.set(
+          usesClientApi ? "waitForSortableId" : "waitForSortableUniqueId",
+          input.waitForSortableUniqueId
+        );
       }
 
       const res = await fetch(
-        `${process.env.API_BASE_URL}/api/weatherforecast?${params.toString()}`
+        `${weatherApiBaseUrl}/api/weatherforecast?${params.toString()}`
       );
       if (!res.ok) {
         throw new Error("Failed to fetch weather forecasts");
@@ -53,7 +59,9 @@ export const weatherRouter = router({
     .input(createWeatherForecastSchema)
     .mutation(async ({ input }) => {
       const res = await fetch(
-        `${process.env.API_BASE_URL}/api/inputweatherforecast`,
+        usesClientApi
+          ? `${weatherApiBaseUrl}/api/weatherforecast`
+          : `${weatherApiBaseUrl}/api/inputweatherforecast`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -77,13 +85,17 @@ export const weatherRouter = router({
     .input(updateLocationSchema)
     .mutation(async ({ input }) => {
       const res = await fetch(
-        `${process.env.API_BASE_URL}/api/updateweatherforecastlocation`,
+        usesClientApi
+          ? `${weatherApiBaseUrl}/api/weatherforecast/update-location`
+          : `${weatherApiBaseUrl}/api/updateweatherforecastlocation`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             forecastId: input.forecastId,
-            newLocationName: input.newLocationName,
+            ...(usesClientApi
+              ? { newLocation: input.newLocationName }
+              : { newLocationName: input.newLocationName }),
           }),
         }
       );
@@ -98,7 +110,9 @@ export const weatherRouter = router({
     .input(z.object({ forecastId: z.string().uuid() }))
     .mutation(async ({ input }) => {
       const res = await fetch(
-        `${process.env.API_BASE_URL}/api/removeweatherforecast`,
+        usesClientApi
+          ? `${weatherApiBaseUrl}/api/weatherforecast/delete`
+          : `${weatherApiBaseUrl}/api/removeweatherforecast`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

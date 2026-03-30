@@ -38,7 +38,6 @@ using Sekiban.Dcb.Primitives;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Runtime;
 using Sekiban.Dcb.WasmRuntime;
-using Sekiban.Dcb.WasmRuntime.Wasmtime;
 using SekibanDcbDecider.ApiService.Endpoints;
 using SekibanDcbDecider.ApiService.Auth;
 using SekibanDcbDecider.ApiService.Exceptions;
@@ -190,19 +189,10 @@ builder.Services.AddSingleton<IBlobStorageSnapshotAccessor>(sp =>
 builder.Services.AddTransient<ISekibanExecutor, OrleansDcbExecutor>();
 builder.Services.AddScoped<IActorObjectAccessor, OrleansActorObjectAccessor>();
 
-var wasmModulePath = ResolveWasmModulePath(builder.Configuration);
-var registry = BuildWasmProjectorRegistry(wasmModulePath);
-builder.Services.AddSingleton(registry);
-builder.Services.AddWasmtimeProjectionHost(options =>
-{
-    options.DefaultModulePath = wasmModulePath;
-});
 builder.Services.AddWasmTagStateRuntime(options =>
 {
-    options.Mode = WasmRuntimeMode.Wasm;
-    options.WasmModulePath = wasmModulePath;
+    options.Mode = WasmRuntimeMode.Native;
 });
-builder.Services.Replace(ServiceDescriptor.Singleton<IProjectionActorHostFactory, WasmProjectionActorHostFactory>());
 
 // Add CORS services
 builder.Services.AddCors(options =>
@@ -253,120 +243,6 @@ apiRoute.MapTestDataEndpoints();
 app.MapDefaultEndpoints();
 
 app.Run();
-
-static string ResolveWasmModulePath(IConfiguration configuration)
-{
-    string[] candidates =
-    [
-        Environment.GetEnvironmentVariable("WASM_MODULE_PATH") ?? string.Empty,
-        configuration["WASM_MODULE_PATH"] ?? string.Empty,
-        configuration["Wasm:DefaultModulePath"] ?? string.Empty,
-        Path.GetFullPath(Path.Combine(
-            Directory.GetCurrentDirectory(),
-            "..",
-            "modules",
-            "sekiban-dcb-decider.wasm")),
-        Path.GetFullPath(Path.Combine(
-            Directory.GetCurrentDirectory(),
-            "..",
-            "SekibanDcbDecider.Wasm",
-            "bin",
-            "Release",
-            "net10.0",
-            "wasi-wasm",
-            "publish",
-            "SekibanDcbDecider.Wasm.wasm")),
-        Path.GetFullPath(Path.Combine(
-            Directory.GetCurrentDirectory(),
-            "..",
-            "SekibanDcbDecider.Wasm",
-            "bin",
-            "Release",
-            "net10.0",
-            "wasi-wasm",
-            "native",
-            "SekibanDcbDecider.Wasm.wasm")),
-        Path.GetFullPath(Path.Combine(
-            Directory.GetCurrentDirectory(),
-            "..",
-            "SekibanDcbDecider.Wasm",
-            "bin",
-            "Release",
-            "net10.0",
-            "wasi-wasm",
-            "native",
-            "SekibanWasm.Cs.Wasm.wasm"))
-    ];
-
-    foreach (string candidate in candidates)
-    {
-        if (!string.IsNullOrWhiteSpace(candidate) && File.Exists(candidate))
-        {
-            return candidate;
-        }
-    }
-
-    throw new InvalidOperationException(
-        "WASM module not found. Set WASM_MODULE_PATH or build/publish SekibanDcbDecider.Wasm first.");
-}
-
-static WasmProjectorRegistry BuildWasmProjectorRegistry(string wasmModulePath)
-{
-    var registry = new WasmProjectorRegistry();
-    string[] projectorNames =
-    [
-        StudentProjector.ProjectorName,
-        ClassRoomProjector.ProjectorName,
-        WeatherForecastProjector.ProjectorName,
-        ApprovalRequestProjector.ProjectorName,
-        EquipmentTypeProjector.ProjectorName,
-        ReservationProjector.ProjectorName,
-        RoomProjector.ProjectorName,
-        RoomDailyActivityProjector.ProjectorName,
-        RoomReservationsProjector.ProjectorName,
-        UserAccessProjector.ProjectorName,
-        UserDirectoryProjector.ProjectorName,
-        UserMonthlyReservationProjector.ProjectorName,
-        StudentListProjection.MultiProjectorName,
-        ClassRoomListProjection.MultiProjectorName,
-        WeatherForecastProjection.MultiProjectorName,
-        WeatherForecastProjectorWithTagStateProjector.MultiProjectorName,
-        ApprovalRequestListProjection.MultiProjectorName,
-        EquipmentTypeListProjection.MultiProjectorName,
-        ReservationListProjection.MultiProjectorName,
-        RoomListProjection.MultiProjectorName,
-        StudentSummaries.MultiProjectorName,
-        UserAccessListProjection.MultiProjectorName,
-        UserDirectoryListProjection.MultiProjectorName
-    ];
-
-    foreach (string projectorName in projectorNames)
-    {
-        registry.Register(new WasmModuleRef(
-            ProjectorName: projectorName,
-            ModulePath: wasmModulePath,
-            AbiKind: "wasi-preview1",
-            ModuleVersion: "1.0.0",
-            ProjectorVersion: "1.0.0"));
-    }
-
-    registry.MapQueryToProjector(nameof(GetStudentListQuery), StudentListProjection.MultiProjectorName);
-    registry.MapQueryToProjector(nameof(GetClassRoomListQuery), ClassRoomListProjection.MultiProjectorName);
-    registry.MapQueryToProjector(nameof(GetWeatherForecastListQuery), WeatherForecastProjection.MultiProjectorName);
-    registry.MapQueryToProjector(nameof(GetWeatherForecastListGenericQuery), WeatherForecastProjection.MultiProjectorName);
-    registry.MapQueryToProjector(nameof(GetWeatherForecastListSingleQuery), WeatherForecastProjectorWithTagStateProjector.MultiProjectorName);
-    registry.MapQueryToProjector(nameof(GetWeatherForecastCountQuery), WeatherForecastProjection.MultiProjectorName);
-    registry.MapQueryToProjector(nameof(GetWeatherForecastCountGenericQuery), WeatherForecastProjection.MultiProjectorName);
-    registry.MapQueryToProjector(nameof(GetWeatherForecastCountSingleQuery), WeatherForecastProjectorWithTagStateProjector.MultiProjectorName);
-    registry.MapQueryToProjector(nameof(GetApprovalInboxQuery), ApprovalRequestListProjection.MultiProjectorName);
-    registry.MapQueryToProjector(nameof(GetEquipmentTypeListQuery), EquipmentTypeListProjection.MultiProjectorName);
-    registry.MapQueryToProjector(nameof(GetReservationListQuery), ReservationListProjection.MultiProjectorName);
-    registry.MapQueryToProjector(nameof(GetRoomListQuery), RoomListProjection.MultiProjectorName);
-    registry.MapQueryToProjector(nameof(GetUserAccessListQuery), UserAccessListProjection.MultiProjectorName);
-    registry.MapQueryToProjector(nameof(GetUserDirectoryListQuery), UserDirectoryListProjection.MultiProjectorName);
-
-    return registry;
-}
 
 // ============================================================================
 // Orleans Configuration Functions

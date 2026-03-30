@@ -20,12 +20,12 @@
     <PackageReference Include="Microsoft.Orleans.Server" Version="10.0.1" />
     <PackageReference Include="Microsoft.Orleans.Streaming" Version="10.0.1" />
     <PackageReference Include="Microsoft.Orleans.Streaming.AzureStorage" Version="10.0.1" />
-    <PackageReference Include="Sekiban.Dcb.WithoutResult" Version="10.1.9" />
-    <PackageReference Include="Sekiban.Dcb.Orleans.WithoutResult" Version="10.1.9" />
-    <PackageReference Include="Sekiban.Dcb.Postgres" Version="10.1.9" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.Orleans.WithoutResult\Sekiban.Dcb.Orleans.WithoutResult.csproj" />
+    <ProjectReference Include="..\..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.Postgres\Sekiban.Dcb.Postgres.csproj" />
+    <ProjectReference Include="..\..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.WithoutResult\Sekiban.Dcb.WithoutResult.csproj" />
     <ProjectReference Include="..\SekibanDcbDecider.ServiceDefaults\SekibanDcbDecider.ServiceDefaults.csproj" />
     <ProjectReference Include="..\..\..\lib\SekibanWasm.Rust.ServerBridge\SekibanWasm.Rust.ServerBridge.csproj" />
     <ProjectReference Include="..\..\..\lib\Sekiban.Dcb.WasmRuntime\Sekiban.Dcb.WasmRuntime.csproj" />
