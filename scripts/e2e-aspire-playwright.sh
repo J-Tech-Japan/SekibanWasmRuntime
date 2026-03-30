@@ -95,14 +95,14 @@ warm_client_api() {
   body_file="$(mktemp)"
 
   for attempt in $(seq 1 20); do
-    http_code="$(curl -s -o "$body_file" -w '%{http_code}' \
+    http_code="$(curl --max-time 5 -s -o "$body_file" -w '%{http_code}' \
       -H 'Content-Type: application/json' \
       -d "$payload" \
       "${CLIENT_API_BASE_URL}/api/weatherforecast" || true)"
 
     if [[ "$http_code" == "200" ]] && grep -q '"success":true' "$body_file"; then
       delete_payload="$(printf '{"forecastId":"%s"}' "$forecast_id")"
-      curl -s -o /dev/null \
+      curl --max-time 5 -s -o /dev/null \
         -H 'Content-Type: application/json' \
         -d "$delete_payload" \
         "${CLIENT_API_BASE_URL}/api/weatherforecast/delete" || true
