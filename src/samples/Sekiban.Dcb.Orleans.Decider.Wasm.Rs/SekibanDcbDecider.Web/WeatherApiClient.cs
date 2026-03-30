@@ -13,7 +13,7 @@ public class WeatherApiClient(HttpClient httpClient)
         var queryParams = new List<string>();
 
         if (!string.IsNullOrEmpty(waitForSortableUniqueId))
-            queryParams.Add($"waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}");
+            queryParams.Add($"waitForSortableId={Uri.EscapeDataString(waitForSortableUniqueId)}");
 
         if (pageNumber.HasValue)
             queryParams.Add($"pageNumber={pageNumber.Value}");
@@ -44,12 +44,12 @@ public class WeatherApiClient(HttpClient httpClient)
     {
         var payload = new
         {
+            ForecastId = command.ForecastId == Guid.Empty ? (Guid?)null : command.ForecastId,
             Location = command.Location,
-            Date = command.Date.ToString("yyyy-MM-dd"),
             Summary = command.Summary,
             TemperatureC = command.TemperatureC
         };
-        var response = await httpClient.PostAsJsonAsync("/api/inputweatherforecast", payload, cancellationToken);
+        var response = await httpClient.PostAsJsonAsync("/api/weatherforecast", payload, cancellationToken);
         return await response.Content.ReadFromJsonAsync<CommandResponse>(cancellationToken) ??
             throw new InvalidOperationException("Failed to deserialize CommandResponse");
     }
@@ -58,8 +58,11 @@ public class WeatherApiClient(HttpClient httpClient)
         Guid weatherForecastId,
         CancellationToken cancellationToken = default)
     {
-        var command = new DeleteWeatherForecast { ForecastId = weatherForecastId };
-        var response = await httpClient.PostAsJsonAsync("/api/removeweatherforecast", command, cancellationToken);
+        var command = new
+        {
+            ForecastId = weatherForecastId
+        };
+        var response = await httpClient.PostAsJsonAsync("/api/weatherforecast/delete", command, cancellationToken);
         return await response.Content.ReadFromJsonAsync<CommandResponse>(cancellationToken) ??
             throw new InvalidOperationException("Failed to deserialize CommandResponse");
     }
@@ -69,9 +72,13 @@ public class WeatherApiClient(HttpClient httpClient)
         string newLocation,
         CancellationToken cancellationToken = default)
     {
-        var command = new ChangeLocationName { ForecastId = weatherForecastId, NewLocationName = newLocation };
+        var command = new
+        {
+            ForecastId = weatherForecastId,
+            NewLocation = newLocation
+        };
         var response = await httpClient.PostAsJsonAsync(
-            "/api/updateweatherforecastlocation",
+            "/api/weatherforecast/update-location",
             command,
             cancellationToken);
         return await response.Content.ReadFromJsonAsync<CommandResponse>(cancellationToken) ??

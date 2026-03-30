@@ -14,7 +14,7 @@
 <h1>Weather</h1>
 
 <div>
-    <button class="btn btn-primary mb-3" @onclick="OpenAddForecastModal">Add New Weather Forecast</button>
+    <button class="btn btn-primary mb-3" @onclick="OpenAddForecastModal">Add New Forecast</button>
 </div>
 
 <h3>Weather Forecasts</h3>
@@ -46,7 +46,7 @@
     <p><em>Loading...</em></p>
 } else if (forecasts.Count == 0)
 {
-    <p>No weather forecasts available. Click "Add New Weather Forecast" to create one.</p>
+    <p>No weather forecasts available. Click "Add New Forecast" to create one.</p>
 } else
 {
     <table class="table">
@@ -74,7 +74,7 @@
                         Location
                     </button>
                     <button class="btn btn-danger btn-sm" @onclick="() => HandleRemoveForecast(forecast.ForecastId)">
-                        Remove
+                        Delete
                     </button>
                 </td>
             </tr>
@@ -117,13 +117,13 @@
 }
 
 <!-- Add Forecast Modal -->
-<div class="modal fade" id="addForecastModal" data-bs-backdrop="static" tabindex="-1"
-     aria-labelledby="addForecastModalLabel" aria-hidden="true">
+<div class="modal fade" id="addModal" data-bs-backdrop="static" tabindex="-1"
+     aria-labelledby="addModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <EditForm FormName="weather-forecast" Model="@forecastModel" OnValidSubmit="HandleAddForecastSubmit">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="addForecastModalLabel">Add Weather Forecast</h5>
+                    <h5 class="modal-title" id="addModalLabel">Add Forecast</h5>
                     <button type="button" class="btn-close" @onclick="CloseAddModal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
@@ -134,14 +134,14 @@
                         <ValidationMessage For="@(() => forecastModel.Location)" class="text-danger"/>
                     </div>
                     <div class="mb-3">
-                        <label for="date" class="form-label">Date</label>
-                        <InputDate id="date" class="form-control" @bind-Value="forecastModel.Date"/>
-                        <ValidationMessage For="@(() => forecastModel.Date)" class="text-danger"/>
-                    </div>
-                    <div class="mb-3">
                         <label for="temperatureC" class="form-label">Temperature (°C)</label>
                         <InputNumber id="temperatureC" class="form-control" @bind-Value="forecastModel.TemperatureC"/>
                         <ValidationMessage For="@(() => forecastModel.TemperatureC)" class="text-danger"/>
+                    </div>
+                    <div class="mb-3">
+                        <label for="date" class="form-label">Date</label>
+                        <InputDate id="date" class="form-control" @bind-Value="forecastModel.Date"/>
+                        <ValidationMessage For="@(() => forecastModel.Date)" class="text-danger"/>
                     </div>
                     <div class="mb-3">
                         <label for="summary" class="form-label">Summary</label>
@@ -163,7 +163,7 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" @onclick="CloseAddModal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Add Forecast</button>
+                    <button type="submit" class="btn btn-primary">Add</button>
                 </div>
             </EditForm>
         </div>
@@ -171,13 +171,13 @@
 </div>
 
 <!-- Edit Location Modal -->
-<div class="modal fade" id="editLocationModal" data-bs-backdrop="static" tabindex="-1"
-     aria-labelledby="editLocationModalLabel" aria-hidden="true">
+<div class="modal fade" id="editModal" data-bs-backdrop="static" tabindex="-1"
+     aria-labelledby="editModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <EditForm FormName="edit-location" Model="@editLocationModel" OnValidSubmit="HandleEditLocationSubmit">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="editLocationModalLabel">Edit Location</h5>
+                    <h5 class="modal-title" id="editModalLabel">Edit Location</h5>
                     <button type="button" class="btn-close" @onclick="CloseEditLocationModal"
                             aria-label="Close"></button>
                 </div>
@@ -198,7 +198,7 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" @onclick="CloseEditLocationModal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Update Location</button>
+                    <button type="submit" class="btn btn-primary">Update</button>
                 </div>
             </EditForm>
         </div>
@@ -327,19 +327,19 @@
     private async Task CloseAddModal()
     {
         forecastModel = new WeatherForecastModel();
-        await JsRuntime.InvokeVoidAsync("eval", "bootstrap.Modal.getInstance(document.getElementById('addForecastModal'))?.hide()");
+        await JsRuntime.InvokeVoidAsync("eval", "bootstrap.Modal.getInstance(document.getElementById('addModal'))?.hide()");
     }
 
     private async Task CloseEditLocationModal()
     {
         editLocationModel = new EditLocationModel();
-        await JsRuntime.InvokeVoidAsync("eval", "bootstrap.Modal.getInstance(document.getElementById('editLocationModal'))?.hide()");
+        await JsRuntime.InvokeVoidAsync("eval", "bootstrap.Modal.getInstance(document.getElementById('editModal'))?.hide()");
     }
 
     private async Task OpenAddForecastModal()
     {
         forecastModel = new WeatherForecastModel { Date = DateTime.Today };
-        await JsRuntime.InvokeVoidAsync("eval", "new bootstrap.Modal(document.getElementById('addForecastModal')).show()");
+        await JsRuntime.InvokeVoidAsync("eval", "new bootstrap.Modal(document.getElementById('addModal')).show()");
     }
 
     private async Task OpenEditLocationModal(WeatherForecastItem forecast)
@@ -349,7 +349,7 @@
             ForecastId = forecast.ForecastId,
             NewLocationName = forecast.Location
         };
-        await JsRuntime.InvokeVoidAsync("eval", "new bootstrap.Modal(document.getElementById('editLocationModal')).show()");
+        await JsRuntime.InvokeVoidAsync("eval", "new bootstrap.Modal(document.getElementById('editModal')).show()");
     }
 
     private async Task HandleEditLocationSubmit()

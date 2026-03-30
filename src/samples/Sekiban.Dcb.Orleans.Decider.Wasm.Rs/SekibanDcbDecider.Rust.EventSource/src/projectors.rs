@@ -96,15 +96,21 @@ impl MultiProjectorQuery for WeatherForecastListProjector {
             return None;
         }
         let query: LocationQuery = serde_json::from_str(params).unwrap_or_default();
-        let count = if let Some(filter) = query.location_filter {
-            state
-                .items
-                .iter()
-                .filter(|item| item.location.contains(&filter))
-                .count() as i32
-        } else {
-            state.items.len() as i32
-        };
+        let count = state
+            .items
+            .iter()
+            .filter(|item| {
+                query
+                    .forecast_id
+                    .is_none_or(|forecast_id| item.forecast_id == forecast_id)
+            })
+            .filter(|item| {
+                query
+                    .location_filter
+                    .as_ref()
+                    .is_none_or(|filter| item.location.contains(filter))
+            })
+            .count() as i32;
         Some(serde_json::to_string(&CountResult { count }).unwrap_or_else(|_| "{}".to_string()))
     }
 
@@ -113,16 +119,22 @@ impl MultiProjectorQuery for WeatherForecastListProjector {
             return None;
         }
         let query: LocationQuery = serde_json::from_str(params).unwrap_or_default();
-        let items: Vec<WeatherForecastItem> = if let Some(filter) = query.location_filter {
-            state
-                .items
-                .iter()
-                .cloned()
-                .filter(|item| item.location.contains(&filter))
-                .collect()
-        } else {
-            state.items.clone()
-        };
+        let items: Vec<WeatherForecastItem> = state
+            .items
+            .iter()
+            .filter(|item| {
+                query
+                    .forecast_id
+                    .is_none_or(|forecast_id| item.forecast_id == forecast_id)
+            })
+            .filter(|item| {
+                query
+                    .location_filter
+                    .as_ref()
+                    .is_none_or(|filter| item.location.contains(filter))
+            })
+            .cloned()
+            .collect();
         Some(serde_json::to_string(&items).unwrap_or_else(|_| "[]".to_string()))
     }
 }
