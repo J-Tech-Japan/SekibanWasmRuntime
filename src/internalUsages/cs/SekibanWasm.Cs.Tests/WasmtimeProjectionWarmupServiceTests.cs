@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Sekiban.Dcb.Primitives;
 using Sekiban.Dcb.WasmRuntime;
@@ -9,6 +10,21 @@ namespace SekibanWasm.Cs.Tests;
 
 public sealed class WasmtimeProjectionWarmupServiceTests
 {
+    [Fact]
+    public void AddWasmtimeProjectionHost_Registers_WarmupService()
+    {
+        var services = new ServiceCollection();
+
+        services.AddWasmtimeProjectionHost(_ => { });
+
+        var descriptor = Assert.Single(
+            services,
+            static service => service.ServiceType == typeof(IHostedService)
+                && service.ImplementationType == typeof(WasmtimeProjectionWarmupService));
+
+        Assert.Equal(typeof(WasmtimeProjectionWarmupService), descriptor.ImplementationType);
+    }
+
     [Fact]
     public async Task StartAsync_WarmsUp_And_Disposes_All_Registered_Projectors()
     {
