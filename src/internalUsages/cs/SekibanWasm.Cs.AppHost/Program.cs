@@ -66,6 +66,7 @@ clientApiBuilder = clientApiBuilder
     .WithEnvironment("ASPNETCORE_URLS", "http://127.0.0.1:" + clientApiPort);
 
 var clientApi = clientApiBuilder
+    .WithEnvironment("CLIENT_API_INCLUDE_ERROR_DETAILS", "1")
     .WithReference(wasmServer)
     .WaitFor(wasmServer);
 
