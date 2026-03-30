@@ -396,6 +396,16 @@ static async Task<IResult?> TryExecuteDirectSnapshotQueryAsync(
     }
 
     var record = recordOptional.Value;
+    if (!string.IsNullOrWhiteSpace(request.WaitForSortableUniqueId) &&
+        string.Compare(record.LastSortableUniqueId, request.WaitForSortableUniqueId, StringComparison.Ordinal) < 0)
+    {
+        logger.LogInformation(
+            "Direct snapshot query skipped for {ProjectorName}: persisted state {PersistedSortableUniqueId} is older than requested {RequestedSortableUniqueId}",
+            projectorName,
+            record.LastSortableUniqueId,
+            request.WaitForSortableUniqueId);
+        return null;
+    }
 
     var cache = http.RequestServices.GetRequiredService<DirectSnapshotQueryCache>();
     var cacheEntry = cache.GetOrAdd(projectorName);

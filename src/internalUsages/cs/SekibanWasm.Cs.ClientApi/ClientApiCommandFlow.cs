@@ -12,17 +12,20 @@ public sealed class ClientApiCommandFlow
     private readonly ISerializedDcbClient _client;
     private readonly ITagExistenceChecker _tagExistenceChecker;
     private readonly IWeatherQueryClient _queryClient;
+    private readonly IWeatherForecastConsistencyTracker _consistencyTracker;
     private readonly JsonSerializerOptions _jsonOptions;
 
     public ClientApiCommandFlow(
         ISerializedDcbClient client,
         ITagExistenceChecker tagExistenceChecker,
         IWeatherQueryClient queryClient,
+        IWeatherForecastConsistencyTracker consistencyTracker,
         DomainSerializerOptions jsonOptions)
     {
         _client = client;
         _tagExistenceChecker = tagExistenceChecker;
         _queryClient = queryClient;
+        _consistencyTracker = consistencyTracker;
         _jsonOptions = jsonOptions.Value;
     }
 
@@ -38,7 +41,9 @@ public sealed class ClientApiCommandFlow
             throw commitResult.GetException();
         }
 
-        return commitResult.GetValue();
+        var value = commitResult.GetValue();
+        TrackCommittedSortableUniqueId(command, value);
+        return value;
     }
 
     public async Task<SerializedCommitRequest> BuildCommitRequestAsync(
@@ -78,7 +83,10 @@ public sealed class ClientApiCommandFlow
         UpdateWeatherForecastLocation command,
         CancellationToken ct)
     {
-        var current = await _queryClient.GetForecastAsync(command.ForecastId, ct);
+        var current = await _queryClient.GetForecastAsync(
+            command.ForecastId,
+            _consistencyTracker.GetWaitForSortableUniqueId(command.ForecastId),
+            ct);
         if (current is null)
         {
             throw new InvalidOperationException($"Weather forecast {command.ForecastId} does not exist");
@@ -106,7 +114,10 @@ public sealed class ClientApiCommandFlow
         DeleteWeatherForecast command,
         CancellationToken ct)
     {
-        var current = await _queryClient.GetForecastAsync(command.ForecastId, ct);
+        var current = await _queryClient.GetForecastAsync(
+            command.ForecastId,
+            _consistencyTracker.GetWaitForSortableUniqueId(command.ForecastId),
+            ct);
         if (current is null)
         {
             throw new InvalidOperationException($"Weather forecast {command.ForecastId} does not exist");
@@ -135,5 +146,27 @@ public sealed class ClientApiCommandFlow
         return new SerializedCommitRequest(
             EventCandidates: [eventCandidate],
             ConsistencyTags: [new ConsistencyTagEntry(tag, string.Empty)]);
+    }
+
+    private void TrackCommittedSortableUniqueId(object command, SerializedCommitResult result)
+    {
+        string? sortableUniqueId = result.WrittenEvents.LastOrDefault()?.SortableUniqueIdValue;
+        if (string.IsNullOrWhiteSpace(sortableUniqueId))
+        {
+            return;
+        }
+
+        switch (command)
+        {
+            case CreateWeatherForecast create:
+                _consistencyTracker.Record(create.ForecastId, sortableUniqueId);
+                break;
+            case UpdateWeatherForecastLocation update:
+                _consistencyTracker.Record(update.ForecastId, sortableUniqueId);
+                break;
+            case DeleteWeatherForecast delete:
+                _consistencyTracker.Record(delete.ForecastId, sortableUniqueId);
+                break;
+        }
     }
 }

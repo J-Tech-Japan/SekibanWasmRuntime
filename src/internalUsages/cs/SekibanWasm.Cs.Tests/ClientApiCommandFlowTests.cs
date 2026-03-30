@@ -38,7 +38,7 @@ public class ClientApiCommandFlowTests
     [Fact]
     public async Task BuildCommitRequestAsync_Create_ShouldThrow_WhenForecastAlreadyExists()
     {
-        var flow = CreateFlow(tagExists: true, existingForecast: CreateForecast("f-1", "Tokyo"));
+        var flow = CreateFlow(tagExists: true, existingForecast: CreateForecastState("f-1", "Tokyo"));
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             flow.BuildCommitRequestAsync(
@@ -52,7 +52,7 @@ public class ClientApiCommandFlowTests
     [Fact]
     public async Task BuildCommitRequestAsync_Update_ShouldBuildUpdatedEvent()
     {
-        var flow = CreateFlow(tagExists: true, existingForecast: CreateForecast("f-1", "Tokyo"));
+        var flow = CreateFlow(tagExists: true, existingForecast: CreateForecastState("f-1", "Tokyo"));
 
         var result = await flow.BuildCommitRequestAsync(
             nameof(UpdateWeatherForecastLocation),
@@ -69,7 +69,7 @@ public class ClientApiCommandFlowTests
     [Fact]
     public async Task BuildCommitRequestAsync_Update_ShouldReturnEmptyCommit_WhenLocationIsUnchanged()
     {
-        var flow = CreateFlow(tagExists: true, existingForecast: CreateForecast("f-1", "Tokyo"));
+        var flow = CreateFlow(tagExists: true, existingForecast: CreateForecastState("f-1", "Tokyo"));
 
         var result = await flow.BuildCommitRequestAsync(
             nameof(UpdateWeatherForecastLocation),
@@ -83,7 +83,7 @@ public class ClientApiCommandFlowTests
     [Fact]
     public async Task BuildCommitRequestAsync_Update_ShouldThrow_WhenForecastIsDeleted()
     {
-        var flow = CreateFlow(tagExists: true, existingForecast: CreateForecast("f-1", "Tokyo", isDeleted: true));
+        var flow = CreateFlow(tagExists: true, existingForecast: CreateForecastState("f-1", "Tokyo", isDeleted: true));
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             flow.BuildCommitRequestAsync(
@@ -97,7 +97,7 @@ public class ClientApiCommandFlowTests
     [Fact]
     public async Task BuildCommitRequestAsync_Delete_ShouldBuildDeletedEvent()
     {
-        var flow = CreateFlow(tagExists: true, existingForecast: CreateForecast("f-1", "Tokyo"));
+        var flow = CreateFlow(tagExists: true, existingForecast: CreateForecastState("f-1", "Tokyo"));
 
         var result = await flow.BuildCommitRequestAsync(
             nameof(DeleteWeatherForecast),
@@ -127,14 +127,16 @@ public class ClientApiCommandFlowTests
         var client = new StubSerializedDcbClient();
         var tagExistenceChecker = new StubTagExistenceChecker { Exists = tagExists };
         var queryClient = new StubWeatherQueryClient { ForecastToReturn = existingForecast };
+        var tracker = new WeatherForecastConsistencyTracker();
         return new ClientApiCommandFlow(
             client,
             tagExistenceChecker,
             queryClient,
+            tracker,
             new DomainSerializerOptions(DomainJsonOptions));
     }
 
-    private static WeatherForecastItem CreateForecast(
+    private static WeatherForecastItem CreateForecastState(
         string forecastId,
         string location,
         bool isDeleted = false) =>
@@ -158,7 +160,10 @@ public class ClientApiCommandFlowTests
     {
         public WeatherForecastItem? ForecastToReturn { get; init; }
 
-        public Task<WeatherForecastItem?> GetForecastAsync(string forecastId, CancellationToken ct) =>
+        public Task<WeatherForecastItem?> GetForecastAsync(
+            string forecastId,
+            string? waitForSortableUniqueId,
+            CancellationToken ct) =>
             Task.FromResult(ForecastToReturn);
     }
 
