@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "SekibanDcbDecider.ClientApi",
+    "SekibanDcbDecider.Rust.EventSource",
+    "SekibanDcbDecider.Rust.Wasm",
+]
+resolver = "2"

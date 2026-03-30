@@ -1,0 +1,17 @@
+[package]
+name = "sekiban-dcb-decider-rust-eventsource"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "sekiban_dcb_decider_rust_eventsource"
+path = "src/lib.rs"
+
+[dependencies]
+async-trait = "0.1"
+chrono = { version = "0.4", features = ["serde", "clock"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = { version = "1", features = ["serde", "v7"] }
+sekiban-core = { path = "../../../wasm-projectors/rust/sekiban-core" }
+sekiban-derive = { path = "../../../wasm-projectors/rust/sekiban-derive" }
