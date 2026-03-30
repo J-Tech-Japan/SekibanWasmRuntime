@@ -10,15 +10,18 @@ namespace SekibanWasm.Cs.ClientApi;
 public sealed class ClientApiCommandFlow
 {
     private readonly ISerializedDcbClient _client;
+    private readonly ITagExistenceChecker _tagExistenceChecker;
     private readonly IWeatherQueryClient _queryClient;
     private readonly JsonSerializerOptions _jsonOptions;
 
     public ClientApiCommandFlow(
         ISerializedDcbClient client,
+        ITagExistenceChecker tagExistenceChecker,
         IWeatherQueryClient queryClient,
         DomainSerializerOptions jsonOptions)
     {
         _client = client;
+        _tagExistenceChecker = tagExistenceChecker;
         _queryClient = queryClient;
         _jsonOptions = jsonOptions.Value;
     }
@@ -56,8 +59,7 @@ public sealed class ClientApiCommandFlow
         CreateWeatherForecast command,
         CancellationToken ct)
     {
-        var existing = await _queryClient.GetForecastAsync(command.ForecastId, ct);
-        if (existing is not null)
+        if (await _tagExistenceChecker.ExistsAsync(new WeatherForecastTag(command.ForecastId), ct))
         {
             throw new InvalidOperationException($"Weather forecast {command.ForecastId} already exists");
         }
