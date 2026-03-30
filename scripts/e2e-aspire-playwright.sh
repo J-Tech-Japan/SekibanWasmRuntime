@@ -91,8 +91,108 @@ dump_apphost_tail() {
   tail -n 200 "$APPHOST_LOG" | tee "$ARTIFACT_DIR/apphost-tail.txt" || true
 }
 
+json_field() {
+  local json="$1"
+  local expression="$2"
+  node -e '
+const payload = JSON.parse(process.argv[1]);
+const expr = process.argv[2];
+let value = payload;
+for (const part of expr.split(".")) {
+  value = value?.[part];
+}
+if (value === undefined || value === null) {
+  process.exit(1);
+}
+if (typeof value === "object") {
+  process.stdout.write(JSON.stringify(value));
+} else {
+  process.stdout.write(String(value));
+}
+' "$json" "$expression"
+}
+
+forecast_location_from_list() {
+  local json="$1"
+  local forecast_id="$2"
+  node -e '
+const items = JSON.parse(process.argv[1]);
+const forecastId = process.argv[2];
+const item = Array.isArray(items) ? items.find((entry) => entry.forecastId === forecastId) : undefined;
+if (!item) process.exit(1);
+process.stdout.write(String(item.location ?? ""));
+' "$json" "$forecast_id"
+}
+
+forecast_exists_in_list() {
+  local json="$1"
+  local forecast_id="$2"
+  node -e '
+const items = JSON.parse(process.argv[1]);
+const forecastId = process.argv[2];
+process.exit(Array.isArray(items) && items.some((entry) => entry.forecastId === forecastId) ? 0 : 1);
+' "$json" "$forecast_id"
+}
+
+wait_for_forecast_location() {
+  local forecast_id="$1"
+  local expected_location="$2"
+  local sortable_unique_id="$3"
+  local body_file
+  body_file="$(mktemp)"
+
+  for attempt in $(seq 1 30); do
+    local http_code
+    http_code="$(curl --max-time 10 -s -o "$body_file" -w '%{http_code}' \
+      "${CLIENT_API_BASE_URL}/api/weatherforecast?waitForSortableId=${sortable_unique_id}" || true)"
+
+    if [[ "$http_code" == "200" ]]; then
+      local location=""
+      location="$(forecast_location_from_list "$(cat "$body_file")" "$forecast_id" 2>/dev/null || true)"
+      if [[ "$location" == "$expected_location" ]]; then
+        rm -f "$body_file"
+        return 0
+      fi
+    fi
+
+    sleep 2
+  done
+
+  echo "[e2e-playwright] Forecast did not become visible in time for $forecast_id"
+  cat "$body_file"
+  echo
+  rm -f "$body_file"
+  return 1
+}
+
+wait_for_forecast_absent() {
+  local forecast_id="$1"
+  local sortable_unique_id="$2"
+  local body_file
+  body_file="$(mktemp)"
+
+  for attempt in $(seq 1 30); do
+    local http_code
+    http_code="$(curl --max-time 10 -s -o "$body_file" -w '%{http_code}' \
+      "${CLIENT_API_BASE_URL}/api/weatherforecast?waitForSortableId=${sortable_unique_id}" || true)"
+
+    if [[ "$http_code" == "200" ]] && ! forecast_exists_in_list "$(cat "$body_file")" "$forecast_id"; then
+      rm -f "$body_file"
+      return 0
+    fi
+
+    sleep 2
+  done
+
+  echo "[e2e-playwright] Forecast did not disappear in time for $forecast_id"
+  cat "$body_file"
+  echo
+  rm -f "$body_file"
+  return 1
+}
+
 warm_client_api() {
-  local unique forecast_id location payload body_file http_code delete_payload
+  local unique forecast_id location payload body_file http_code delete_payload create_body delete_body create_sortable delete_sortable
   unique="$(date +%s%N)"
   forecast_id="00000000-0000-0000-0000-${unique: -12}"
   location="warmup-${LANGUAGE_SAMPLE}-${unique}"
@@ -106,11 +206,29 @@ warm_client_api() {
       "${CLIENT_API_BASE_URL}/api/weatherforecast" || true)"
 
     if [[ "$http_code" == "200" ]] && grep -q '"success":true' "$body_file"; then
+      create_body="$(cat "$body_file")"
+      create_sortable="$(json_field "$create_body" "sortableUniqueId" 2>/dev/null || true)"
+      if [[ -n "$create_sortable" ]]; then
+        wait_for_forecast_location "$forecast_id" "$location" "$create_sortable" || {
+          dump_apphost_tail
+          rm -f "$body_file"
+          exit 1
+        }
+      fi
+
       delete_payload="$(printf '{"forecastId":"%s"}' "$forecast_id")"
-      curl --max-time 5 -s -o /dev/null \
+      delete_body="$(curl --max-time 10 -s \
         -H 'Content-Type: application/json' \
         -d "$delete_payload" \
-        "${CLIENT_API_BASE_URL}/api/weatherforecast/delete" || true
+        "${CLIENT_API_BASE_URL}/api/weatherforecast/delete" || true)"
+      delete_sortable="$(json_field "$delete_body" "sortableUniqueId" 2>/dev/null || true)"
+      if [[ -n "$delete_sortable" ]]; then
+        wait_for_forecast_absent "$forecast_id" "$delete_sortable" || {
+          dump_apphost_tail
+          rm -f "$body_file"
+          exit 1
+        }
+      fi
       rm -f "$body_file"
       return 0
     fi
@@ -244,6 +362,9 @@ echo "[e2e-playwright] Running Playwright (headless)..."
   E2E_SAMPLE="$LANGUAGE_SAMPLE" \
   E2E_APPHOST_KIND="$APPHOST_KIND" \
   npx playwright test "${PLAYWRIGHT_SPECS[@]}" --project=chromium --output "$ARTIFACT_DIR/test-results"
-)
+) || {
+  dump_apphost_tail
+  exit 1
+}
 
 echo "[e2e-playwright] OK (artifacts: $ARTIFACT_DIR)"
