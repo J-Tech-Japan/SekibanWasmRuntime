@@ -86,6 +86,48 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+warm_client_api() {
+  local unique forecast_id location payload body_file http_code delete_payload
+  unique="$(date +%s%N)"
+  forecast_id="00000000-0000-0000-0000-${unique: -12}"
+  location="warmup-${LANGUAGE_SAMPLE}-${unique}"
+  payload="$(printf '{"forecastId":"%s","location":"%s","temperatureC":21,"summary":"Warmup"}' "$forecast_id" "$location")"
+  body_file="$(mktemp)"
+
+  for attempt in $(seq 1 20); do
+    http_code="$(curl -s -o "$body_file" -w '%{http_code}' \
+      -H 'Content-Type: application/json' \
+      -d "$payload" \
+      "${CLIENT_API_BASE_URL}/api/weatherforecast" || true)"
+
+    if [[ "$http_code" == "200" ]] && grep -q '"success":true' "$body_file"; then
+      delete_payload="$(printf '{"forecastId":"%s"}' "$forecast_id")"
+      curl -s -o /dev/null \
+        -H 'Content-Type: application/json' \
+        -d "$delete_payload" \
+        "${CLIENT_API_BASE_URL}/api/weatherforecast/delete" || true
+      rm -f "$body_file"
+      return 0
+    fi
+
+    if ! kill -0 "$APPHOST_PID" 2>/dev/null; then
+      echo "[e2e-playwright] AppHost exited during ClientApi warmup. See: $APPHOST_LOG"
+      tail -n 200 "$APPHOST_LOG" >"$ARTIFACT_DIR/apphost-tail.txt" || true
+      rm -f "$body_file"
+      exit 1
+    fi
+
+    sleep 2
+  done
+
+  echo "[e2e-playwright] ClientApi warmup failed after repeated create attempts. Last response:"
+  cat "$body_file"
+  echo
+  tail -n 200 "$APPHOST_LOG" >"$ARTIFACT_DIR/apphost-tail.txt" || true
+  rm -f "$body_file"
+  exit 1
+}
+
 APPHOST_ENV=()
 case "$STACK_ID" in
   cs-apphost|rust-apphost)
@@ -178,6 +220,9 @@ until curl -fsS --max-time 2 "${WEB_BASE_URL}/" >/dev/null 2>&1; do
   fi
   sleep 2
 done
+
+echo "[e2e-playwright] Warming up ClientApi command path..."
+warm_client_api
 
 echo "[e2e-playwright] Running Playwright (headless)..."
 (
