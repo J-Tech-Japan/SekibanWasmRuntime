@@ -86,6 +86,11 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+dump_apphost_tail() {
+  echo "[e2e-playwright] Last AppHost log lines:"
+  tail -n 200 "$APPHOST_LOG" | tee "$ARTIFACT_DIR/apphost-tail.txt" || true
+}
+
 warm_client_api() {
   local unique forecast_id location payload body_file http_code delete_payload
   unique="$(date +%s%N)"
@@ -112,7 +117,7 @@ warm_client_api() {
 
     if ! kill -0 "$APPHOST_PID" 2>/dev/null; then
       echo "[e2e-playwright] AppHost exited during ClientApi warmup. See: $APPHOST_LOG"
-      tail -n 200 "$APPHOST_LOG" >"$ARTIFACT_DIR/apphost-tail.txt" || true
+      dump_apphost_tail
       rm -f "$body_file"
       exit 1
     fi
@@ -123,7 +128,7 @@ warm_client_api() {
   echo "[e2e-playwright] ClientApi warmup failed after repeated create attempts. Last response:"
   cat "$body_file"
   echo
-  tail -n 200 "$APPHOST_LOG" >"$ARTIFACT_DIR/apphost-tail.txt" || true
+  dump_apphost_tail
   rm -f "$body_file"
   exit 1
 }
