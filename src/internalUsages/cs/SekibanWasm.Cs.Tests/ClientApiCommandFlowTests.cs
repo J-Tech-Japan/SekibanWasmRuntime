@@ -15,7 +15,6 @@ public class ClientApiCommandFlowTests
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
-
     [Fact]
     public async Task BuildCommitRequestAsync_Create_ShouldBuildCreatedEvent()
     {
@@ -148,19 +147,19 @@ public class ClientApiCommandFlowTests
             IsDeleted: isDeleted,
             DeletedAt: isDeleted ? DateTimeOffset.Parse("2026-03-12T00:00:00+00:00") : null);
 
+    private sealed class StubTagExistenceChecker : ITagExistenceChecker
+    {
+        public bool Exists { get; init; }
+
+        public Task<bool> ExistsAsync(ITag tag, CancellationToken ct) => Task.FromResult(Exists);
+    }
+
     private sealed class StubWeatherQueryClient : IWeatherQueryClient
     {
         public WeatherForecastItem? ForecastToReturn { get; init; }
 
         public Task<WeatherForecastItem?> GetForecastAsync(string forecastId, CancellationToken ct) =>
             Task.FromResult(ForecastToReturn);
-    }
-
-    private sealed class StubTagExistenceChecker : ITagExistenceChecker
-    {
-        public bool Exists { get; init; }
-
-        public Task<bool> ExistsAsync(ITag tag, CancellationToken ct) => Task.FromResult(Exists);
     }
 
     private sealed class StubSerializedDcbClient : ISerializedDcbClient
