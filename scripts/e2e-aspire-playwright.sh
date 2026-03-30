@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PREVIEW2_SHIM_DIR="$ROOT/external/wasmtime-dotnet/native/wasmtime-preview2-shim"
 
 E2E_SAMPLE="${E2E_SAMPLE:-cs}"
 case "$E2E_SAMPLE" in
@@ -54,6 +55,46 @@ server.listen(0, '127.0.0.1', () => {
 NODE
 }
 
+preview2_shim_filename() {
+  case "$(uname -s)" in
+    Darwin)
+      printf 'libwasmtime_preview2_shim.dylib'
+      ;;
+    Linux)
+      printf 'libwasmtime_preview2_shim.so'
+      ;;
+    *)
+      printf 'wasmtime_preview2_shim.dll'
+      ;;
+  esac
+}
+
+ensure_preview2_shim() {
+  local shim_path="$PREVIEW2_SHIM_DIR/target/release/$(preview2_shim_filename)"
+  if [[ -f "$shim_path" ]]; then
+    printf '%s' "$shim_path"
+    return 0
+  fi
+
+  if [[ ! -d "$PREVIEW2_SHIM_DIR" ]]; then
+    echo "[e2e-playwright] preview2 shim directory not found: $PREVIEW2_SHIM_DIR" >&2
+    return 1
+  fi
+
+  echo "[e2e-playwright] Building Wasmtime preview2 shim..."
+  (
+    cd "$PREVIEW2_SHIM_DIR"
+    cargo build --release
+  ) >&2
+
+  if [[ ! -f "$shim_path" ]]; then
+    echo "[e2e-playwright] preview2 shim build did not produce: $shim_path" >&2
+    return 1
+  fi
+
+  printf '%s' "$shim_path"
+}
+
 E2E_WEB_PORT="${E2E_WEB_PORT:-$(pick_free_port)}"
 E2E_API_PORT="${E2E_API_PORT:-$(pick_free_port)}"
 E2E_CLIENT_API_PORT="${E2E_CLIENT_API_PORT:-$(pick_free_port)}"
@@ -76,6 +117,8 @@ if [[ ! -f "$WASM_MODULE" ]]; then
   echo "[e2e-playwright] WASM module not found. Building via: $BUILD_WASM_SCRIPT"
   "$BUILD_WASM_SCRIPT"
 fi
+
+PREVIEW2_SHIM_PATH="$(ensure_preview2_shim)"
 
 cleanup() {
   if [[ -n "${APPHOST_PID:-}" ]] && kill -0 "$APPHOST_PID" 2>/dev/null; then
@@ -279,6 +322,7 @@ APPHOST_ENV+=("DOTNET_DASHBOARD_OTLP_ENDPOINT_URL=http://127.0.0.1:${OTLP_PORT}"
 APPHOST_ENV+=("ASPIRE_ALLOW_UNSECURED_TRANSPORT=true")
 APPHOST_ENV+=("SEKIBAN_PROJECTION_RUNTIME=wasm")
 APPHOST_ENV+=("WASM_MODULE_PATH=$WASM_MODULE")
+APPHOST_ENV+=("WASMTIME_PREVIEW2_SHIM_PATH=$PREVIEW2_SHIM_PATH")
 
 PLAYWRIGHT_SPECS=(
   "tests/weather-clientapi-crud.spec.js"
