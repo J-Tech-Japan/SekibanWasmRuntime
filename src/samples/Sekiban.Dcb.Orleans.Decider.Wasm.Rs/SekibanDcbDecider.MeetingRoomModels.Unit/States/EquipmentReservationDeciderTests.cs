@@ -120,6 +120,31 @@ public class EquipmentReservationDeciderTests
     }
 
     [Fact]
+    public void EquipmentReservationReturnedDecider_Should_Keep_CheckedOut_State_For_Partial_Return()
+    {
+        var checkedOut = new EquipmentReservationState.EquipmentReservationCheckedOut(
+            _reservationId, _typeId, null, _requesterId, _startTime, _endTime,
+            [_itemId1, _itemId2], _requesterId, DateTime.UtcNow.AddHours(-1));
+        var ev = new EquipmentReturned(_reservationId, _itemId1, _requesterId, DateTime.UtcNow, "Good");
+
+        var state = checkedOut.Evolve(ev, totalItemsToReturn: 2);
+
+        Assert.Same(checkedOut, state);
+    }
+
+    [Fact]
+    public void EquipmentReservationReturnedDecider_Should_Be_Idempotent_For_Returned_State()
+    {
+        var returned = new EquipmentReservationState.EquipmentReservationReturned(
+            _reservationId, _typeId, null, DateTime.UtcNow.AddMinutes(-5));
+        var ev = new EquipmentReturned(_reservationId, _itemId1, _requesterId, DateTime.UtcNow, "Still good");
+
+        var state = returned.Evolve(ev);
+
+        Assert.Same(returned, state);
+    }
+
+    [Fact]
     public void EquipmentReservationCancelledDecider_Should_Cancel_Pending()
     {
         var pending = new EquipmentReservationState.EquipmentReservationPending(

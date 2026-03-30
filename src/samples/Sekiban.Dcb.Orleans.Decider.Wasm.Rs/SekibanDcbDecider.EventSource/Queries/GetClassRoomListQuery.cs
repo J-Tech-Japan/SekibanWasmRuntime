@@ -39,7 +39,7 @@ public record GetClassRoomListQuery :
                 {
                     ClassRoomId = filled.ClassRoomId,
                     Name = filled.Name,
-                    MaxStudents = filled.EnrolledStudentIds.Count, // When full, max equals enrolled
+                    MaxStudents = filled.MaxStudents,
                     EnrolledCount = filled.EnrolledStudentIds.Count,
                     IsFull = true,
                     RemainingCapacity = 0

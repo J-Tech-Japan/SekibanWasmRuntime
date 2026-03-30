@@ -6,15 +6,16 @@ using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Queries;
 namespace Dcb.EventSource.MeetingRoom.Queries;
 
+[GenerateSerializer]
 public record ApprovalInboxItem(
-    Guid ApprovalRequestId,
-    Guid ReservationId,
-    Guid RoomId,
-    Guid RequesterId,
-    string? RequestComment,
-    List<Guid> ApproverIds,
-    DateTime RequestedAt,
-    string Status);
+    [property: Id(0)] Guid ApprovalRequestId,
+    [property: Id(1)] Guid ReservationId,
+    [property: Id(2)] Guid RoomId,
+    [property: Id(3)] Guid RequesterId,
+    [property: Id(4)] string? RequestComment,
+    [property: Id(5)] List<Guid> ApproverIds,
+    [property: Id(6)] DateTime RequestedAt,
+    [property: Id(7)] string Status);
 
 public record GetApprovalInboxQuery :
     IMultiProjectionListQuery<ApprovalRequestListProjection, GetApprovalInboxQuery, ApprovalInboxItem>,

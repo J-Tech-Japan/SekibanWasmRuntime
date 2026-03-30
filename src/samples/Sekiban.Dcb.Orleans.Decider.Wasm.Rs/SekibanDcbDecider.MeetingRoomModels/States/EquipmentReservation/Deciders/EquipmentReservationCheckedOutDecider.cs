@@ -31,7 +31,7 @@ public static class EquipmentReservationCheckedOutDecider
                     assigned.RequesterId,
                     assigned.StartTime,
                     assigned.EndTime,
-                    assigned.AssignedItemIds,
+                    [..assigned.AssignedItemIds],
                     checkedOut.CheckedOutBy,
                     checkedOut.CheckedOutAt),
             EquipmentReservationState.EquipmentReservationCheckedOut existing =>

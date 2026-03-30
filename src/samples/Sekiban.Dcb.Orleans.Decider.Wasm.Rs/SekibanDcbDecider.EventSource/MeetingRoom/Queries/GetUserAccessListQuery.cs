@@ -6,11 +6,12 @@ using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Queries;
 namespace Dcb.EventSource.MeetingRoom.Queries;
 
+[GenerateSerializer]
 public record UserAccessListItem(
-    Guid UserId,
-    List<string> Roles,
-    bool IsActive,
-    DateTime GrantedAt);
+    [property: Id(0)] Guid UserId,
+    [property: Id(1)] List<string> Roles,
+    [property: Id(2)] bool IsActive,
+    [property: Id(3)] DateTime GrantedAt);
 
 public record GetUserAccessListQuery :
     IMultiProjectionListQuery<UserAccessListProjection, GetUserAccessListQuery, UserAccessListItem>,

@@ -6,12 +6,13 @@ using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Queries;
 namespace Dcb.EventSource.MeetingRoom.Queries;
 
+[GenerateSerializer]
 public record EquipmentTypeListItem(
-    Guid EquipmentTypeId,
-    string Name,
-    string Description,
-    int TotalQuantity,
-    int MaxPerReservation);
+    [property: Id(0)] Guid EquipmentTypeId,
+    [property: Id(1)] string Name,
+    [property: Id(2)] string Description,
+    [property: Id(3)] int TotalQuantity,
+    [property: Id(4)] int MaxPerReservation);
 
 public record GetEquipmentTypeListQuery :
     IMultiProjectionListQuery<EquipmentTypeListProjection, GetEquipmentTypeListQuery, EquipmentTypeListItem>,

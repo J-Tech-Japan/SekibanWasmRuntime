@@ -20,7 +20,7 @@ public class RuntimeHostStorageConfigurationTests
         var resolved = RuntimeHostStorageConfigurationResolver.Resolve(configuration, Directory.GetCurrentDirectory());
 
         Assert.Equal(RuntimeHostStorageProvider.Postgres, resolved.Provider);
-        Assert.True(resolved.RequiresRelationalMigration);
+        Assert.False(resolved.RequiresRelationalMigration);
         Assert.Contains("Host=127.0.0.1", resolved.ConnectionString);
     }
 
@@ -43,7 +43,7 @@ public class RuntimeHostStorageConfigurationTests
             var resolved = RuntimeHostStorageConfigurationResolver.Resolve(configuration, contentRoot);
 
             Assert.Equal(RuntimeHostStorageProvider.Sqlite, resolved.Provider);
-            Assert.False(resolved.RequiresRelationalMigration);
+            Assert.True(resolved.RequiresRelationalMigration);
             Assert.Equal(
                 Path.Combine(contentRoot, "data", "runtime.sqlite"),
                 resolved.SqlitePath);
