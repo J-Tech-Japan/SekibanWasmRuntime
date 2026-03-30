@@ -3,13 +3,6 @@ using SekibanWasm.AppHostShared;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
-var storage = builder
-    .AddAzureStorage("azurestorage")
-    .RunAsEmulator();
-var clusteringTable = storage.AddTables("SekibanCsClusteringTable");
-var grainStorage = storage.AddBlobs("SekibanCsGrainState");
-var queue = storage.AddQueues("SekibanCsQueue");
-
 var postgres = builder
     .AddPostgres("sekibanCsPostgres")
     .AddDatabase("SekibanCsDb");
@@ -20,12 +13,6 @@ builder.AddDbGateForPostgres(
     postgresDatabase: postgres,
     label: "C# Weather Postgres",
     hostPort: dbGatePort);
-
-var orleans = builder
-    .AddOrleans("default")
-    .WithClustering(clusteringTable)
-    .WithGrainStorage("Default", grainStorage)
-    .WithStreaming(queue);
 
 // Prefer explicit env var, but allow the default repo-relative path for local dev.
 var wasmModulePathRaw = Environment.GetEnvironmentVariable("WASM_MODULE_PATH");
@@ -43,11 +30,12 @@ if (!File.Exists(wasmModulePath))
 }
 
 var wasmServerBuilder = builder
-    .AddProject<SekibanWasm_Cs_WasmServer>("wasmserver")
-    .WithReference(postgres)
-    .WithReference(orleans)
+    .AddProject<Sekiban_Dcb_WasmRuntime_Host>("wasmserver")
+    .WithEnvironment("SEKIBAN_STORAGE_PROVIDER", "postgres")
+    .WithEnvironment("WASM_MODULE_PATH", wasmModulePath)
+    .WithReference(postgres, "SekibanDcb")
     .WaitFor(postgres)
-    .WithEnvironment("Wasm__DefaultModulePath", wasmModulePath);
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
 
 var wasmApiPort = AppHostInfrastructure.ResolveConfiguredPort(5199, "E2E_API_PORT");
 wasmServerBuilder = wasmServerBuilder

@@ -6,9 +6,6 @@ var builder = DistributedApplication.CreateBuilder(args);
 var storage = builder
     .AddAzureStorage("azurestorage")
     .RunAsEmulator();
-var clusteringTable = storage.AddTables("SekibanRustClusteringTable");
-var grainStorage = storage.AddBlobs("SekibanRustGrainState");
-var queue = storage.AddQueues("SekibanRustQueue");
 var apiClusteringTable = storage.AddTables("DcbOrleansClusteringTable");
 var apiGrainTable = storage.AddTables("DcbOrleansGrainTable");
 var apiGrainStorage = storage.AddBlobs("DcbOrleansGrainState");
@@ -21,11 +18,6 @@ var postgres = postgresServer.AddDatabase("SekibanRustDb");
 var dcbPostgres = postgresServer.AddDatabase("DcbPostgres");
 var identityPostgres = postgresServer.AddDatabase("IdentityPostgres");
 
-var orleans = builder
-    .AddOrleans("default")
-    .WithClustering(clusteringTable)
-    .WithGrainStorage("Default", grainStorage)
-    .WithStreaming(queue);
 var apiOrleans = builder
     .AddOrleans("api-orleans")
     .WithClustering(apiClusteringTable)
@@ -43,15 +35,15 @@ builder.AddDbGateForPostgres(
     hostPort: dbGatePort);
 
 var rustWasmModulePath = ResolveRustWasmModulePath();
-var apiServiceWasmModulePath = ResolveApiServiceWasmModulePath();
 var apiServicePort = AppHostInfrastructure.ResolveConfiguredPort(6197, "E2E_API_SERVICE_PORT", "API_SERVICE_PORT");
 
 var wasmServerBuilder = builder
-    .AddProject<SekibanDcbDecider_WasmServer>("wasmserver")
-    .WithReference(postgres)
-    .WithReference(orleans)
+    .AddProject<Sekiban_Dcb_WasmRuntime_Host>("wasmserver")
+    .WithEnvironment("SEKIBAN_STORAGE_PROVIDER", "postgres")
+    .WithEnvironment("WASM_MODULE_PATH", rustWasmModulePath)
+    .WithReference(postgres, "SekibanDcb")
     .WaitFor(postgres)
-    .WithEnvironment("Wasm__DefaultModulePath", rustWasmModulePath);
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
 
 var wasmApiPort = AppHostInfrastructure.ResolveConfiguredPort(6199, "E2E_API_PORT");
 wasmServerBuilder = wasmServerBuilder
@@ -72,7 +64,6 @@ var apiServiceBuilder = builder
     .WithReference(identityPostgres)
     .WithReference(apiOrleans)
     .WithReference(multiProjectionOffload)
-    .WithEnvironment("WASM_MODULE_PATH", apiServiceWasmModulePath)
     .WaitFor(dcbPostgres)
     .WaitFor(identityPostgres);
 
@@ -201,65 +192,4 @@ static string ResolveRustWasmModulePath()
 
     throw new InvalidOperationException(
         "Rust WASM module not found. Set RUST_WASM_MODULE_PATH or build SekibanDcbDecider.Rust.Wasm first.");
-}
-
-static string ResolveApiServiceWasmModulePath()
-{
-    string? envPath = Environment.GetEnvironmentVariable("API_WASM_MODULE_PATH");
-    if (!string.IsNullOrWhiteSpace(envPath))
-    {
-        return Path.IsPathRooted(envPath)
-            ? envPath
-            : Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), envPath));
-    }
-
-    string[] candidates =
-    [
-        Path.GetFullPath(Path.Combine(
-            Directory.GetCurrentDirectory(),
-            "..",
-            "modules",
-            "sekiban-dcb-decider.wasm")),
-        Path.GetFullPath(Path.Combine(
-            Directory.GetCurrentDirectory(),
-            "..",
-            "SekibanDcbDecider.Wasm",
-            "bin",
-            "Release",
-            "net10.0",
-            "wasi-wasm",
-            "publish",
-            "SekibanDcbDecider.Wasm.wasm")),
-        Path.GetFullPath(Path.Combine(
-            Directory.GetCurrentDirectory(),
-            "..",
-            "SekibanDcbDecider.Wasm",
-            "bin",
-            "Release",
-            "net10.0",
-            "wasi-wasm",
-            "native",
-            "SekibanDcbDecider.Wasm.wasm")),
-        Path.GetFullPath(Path.Combine(
-            Directory.GetCurrentDirectory(),
-            "..",
-            "SekibanDcbDecider.Wasm",
-            "bin",
-            "Release",
-            "net10.0",
-            "wasi-wasm",
-            "native",
-            "SekibanWasm.Cs.Wasm.wasm"))
-    ];
-
-    foreach (string candidate in candidates)
-    {
-        if (File.Exists(candidate))
-        {
-            return candidate;
-        }
-    }
-
-    throw new InvalidOperationException(
-        "ApiService WASM module not found. Set API_WASM_MODULE_PATH or build SekibanDcbDecider.Wasm first.");
 }

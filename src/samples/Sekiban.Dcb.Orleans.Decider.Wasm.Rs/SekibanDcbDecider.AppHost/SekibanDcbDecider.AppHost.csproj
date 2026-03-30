@@ -21,7 +21,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\SekibanDcbDecider.ApiService\SekibanDcbDecider.ApiService.csproj" />
-        <ProjectReference Include="..\SekibanDcbDecider.WasmServer\SekibanDcbDecider.WasmServer.csproj" />
+        <ProjectReference Include="..\..\..\runtime\Sekiban.Dcb.WasmRuntime.Host\Sekiban.Dcb.WasmRuntime.Host.csproj" />
         <ProjectReference Include="..\SekibanDcbDecider.Web\SekibanDcbDecider.Web.csproj" />
     </ItemGroup>
 

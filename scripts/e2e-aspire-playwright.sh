@@ -11,7 +11,7 @@ case "$E2E_SAMPLE" in
     BUILD_WASM_SCRIPT="$ROOT/build/scripts/build-csharp-wasm.sh"
     WASM_MODULE="$ROOT/src/internalUsages/cs/modules/csharp-weather.wasm"
     LANGUAGE_SAMPLE="cs"
-    APPHOST_KIND="apphost"
+    APPHOST_KIND="generic"
     ;;
   rust)
     STACK_ID="rust-apphost"
@@ -19,7 +19,7 @@ case "$E2E_SAMPLE" in
     BUILD_WASM_SCRIPT="$ROOT/build/scripts/build-rust-wasm.sh"
     WASM_MODULE="$ROOT/src/internalUsages/rust/modules/rust-weather.wasm"
     LANGUAGE_SAMPLE="rust"
-    APPHOST_KIND="apphost"
+    APPHOST_KIND="generic"
     ;;
   cs-generic)
     STACK_ID="cs-generic"
