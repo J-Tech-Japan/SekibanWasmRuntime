@@ -298,19 +298,6 @@ static async Task<IResult> ExecuteSerializedQueryAsync(
         return Results.BadRequest(new { error = $"Projector '{projectorName}' is not registered." });
     }
 
-    var directResult = await TryExecuteDirectSnapshotQueryAsync(
-        http,
-        manifest,
-        projectorName,
-        request,
-        isListQuery,
-        logger,
-        ct);
-    if (directResult is not null)
-    {
-        return directResult;
-    }
-
     var clusterClient = http.RequestServices.GetRequiredService<IClusterClient>();
     var serviceIdProvider = http.RequestServices.GetRequiredService<IServiceIdProvider>();
     var grainKey = ServiceIdGrainKey.Build(serviceIdProvider.GetCurrentServiceId(), projectorName);
@@ -327,6 +314,19 @@ static async Task<IResult> ExecuteSerializedQueryAsync(
             waitTimeout,
             logger,
             ct);
+    }
+
+    var directResult = await TryExecuteDirectSnapshotQueryAsync(
+        http,
+        manifest,
+        projectorName,
+        request,
+        isListQuery,
+        logger,
+        ct);
+    if (directResult is not null)
+    {
+        return directResult;
     }
 
     var parameter = new SerializableQueryParameter
@@ -364,12 +364,8 @@ static async Task<IResult?> TryExecuteDirectSnapshotQueryAsync(
 {
     var storageProvider = RuntimeHostStorageConfigurationResolver.ResolveProvider(
         http.RequestServices.GetRequiredService<IConfiguration>());
-    if (storageProvider != RuntimeHostStorageProvider.Sqlite)
-    {
-        return null;
-    }
-
-    if (!string.IsNullOrWhiteSpace(request.WaitForSortableUniqueId))
+    if (storageProvider is not RuntimeHostStorageProvider.Sqlite
+        and not RuntimeHostStorageProvider.Postgres)
     {
         return null;
     }
@@ -400,6 +396,16 @@ static async Task<IResult?> TryExecuteDirectSnapshotQueryAsync(
     }
 
     var record = recordOptional.Value;
+    if (!string.IsNullOrWhiteSpace(request.WaitForSortableUniqueId) &&
+        string.Compare(record.LastSortableUniqueId, request.WaitForSortableUniqueId, StringComparison.Ordinal) < 0)
+    {
+        logger.LogInformation(
+            "Direct snapshot query skipped for {ProjectorName}: persisted state {PersistedSortableUniqueId} is older than requested {RequestedSortableUniqueId}",
+            projectorName,
+            record.LastSortableUniqueId,
+            request.WaitForSortableUniqueId);
+        return null;
+    }
 
     var cache = http.RequestServices.GetRequiredService<DirectSnapshotQueryCache>();
     var cacheEntry = cache.GetOrAdd(projectorName);

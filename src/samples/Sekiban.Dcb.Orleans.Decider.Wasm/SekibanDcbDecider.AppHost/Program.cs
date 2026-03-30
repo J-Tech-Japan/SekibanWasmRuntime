@@ -1,7 +1,7 @@
 using Projects;
 var builder = DistributedApplication.CreateBuilder(args);
 
-var wasmModulePath = ResolveWasmModulePath();
+var apiServicePort = ResolveConfiguredPort(5141, "E2E_API_SERVICE_PORT", "API_SERVICE_PORT");
 
 // Add Azure Storage emulator for Orleans
 var storage = builder
@@ -40,15 +40,26 @@ var orleans = builder
     .WithStreaming(queue);
 
 // Add the API Service
-var apiService = builder
+var apiServiceBuilder = builder
     .AddProject<SekibanDcbDecider_ApiService>("apiservice")
     .WithReference(postgres)
     .WithReference(identityPostgres)
     .WithReference(orleans)
     .WithReference(multiProjectionOffload)
-    .WithEnvironment("WASM_MODULE_PATH", wasmModulePath)
     .WaitFor(postgres)
     .WaitFor(identityPostgres);
+
+apiServiceBuilder = apiServiceBuilder
+    .WithEndpoint("http", endpoint =>
+    {
+        endpoint.Port = apiServicePort;
+        endpoint.TargetPort = apiServicePort;
+        endpoint.UriScheme = "http";
+        endpoint.IsProxied = false;
+    })
+    .WithEnvironment("ASPNETCORE_URLS", "http://127.0.0.1:" + apiServicePort);
+
+var apiService = apiServiceBuilder;
 
 // Add the Web frontend
 builder
@@ -58,72 +69,27 @@ builder
     .WaitFor(apiService);
 
 // Add the Next.js Web frontend (uses tRPC as BFF within Next.js)
+var webNextPort = ResolveConfiguredPort(3000, "E2E_WEBNEXT_PORT", "WEBNEXT_PORT");
 builder
     .AddJavaScriptApp("webnext", "../SekibanDcbDecider.WebNext")
-    .WithHttpEndpoint(port: 3000, env: "PORT")
+    .WithHttpEndpoint(port: webNextPort, env: "PORT")
     .WithExternalHttpEndpoints()
-    .WithEnvironment("API_BASE_URL", apiService.GetEndpoint("http"))
+    .WithEnvironment("NODE_ENV", "development")
+    .WithEnvironment("API_BASE_URL", "http://127.0.0.1:" + apiServicePort)
     .WaitFor(apiService);
 
 builder.Build().Run();
 
-static string ResolveWasmModulePath()
+static int ResolveConfiguredPort(int defaultPort, params string[] envNames)
 {
-    string? envPath = Environment.GetEnvironmentVariable("WASM_MODULE_PATH");
-    if (!string.IsNullOrWhiteSpace(envPath))
+    foreach (string envName in envNames)
     {
-        return Path.IsPathRooted(envPath)
-            ? envPath
-            : Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), envPath));
-    }
-
-    string[] candidates =
-    [
-        Path.GetFullPath(Path.Combine(
-            Directory.GetCurrentDirectory(),
-            "..",
-            "modules",
-            "sekiban-dcb-decider.wasm")),
-        Path.GetFullPath(Path.Combine(
-            Directory.GetCurrentDirectory(),
-            "..",
-            "SekibanDcbDecider.Wasm",
-            "bin",
-            "Release",
-            "net10.0",
-            "wasi-wasm",
-            "publish",
-            "SekibanDcbDecider.Wasm.wasm")),
-        Path.GetFullPath(Path.Combine(
-            Directory.GetCurrentDirectory(),
-            "..",
-            "SekibanDcbDecider.Wasm",
-            "bin",
-            "Release",
-            "net10.0",
-            "wasi-wasm",
-            "native",
-            "SekibanDcbDecider.Wasm.wasm")),
-        Path.GetFullPath(Path.Combine(
-            Directory.GetCurrentDirectory(),
-            "..",
-            "SekibanDcbDecider.Wasm",
-            "bin",
-            "Release",
-            "net10.0",
-            "wasi-wasm",
-            "native",
-            "SekibanWasm.Cs.Wasm.wasm"))
-    ];
-
-    foreach (string candidate in candidates)
-    {
-        if (File.Exists(candidate))
+        string? value = Environment.GetEnvironmentVariable(envName);
+        if (int.TryParse(value, out int port))
         {
-            return candidate;
+            return port;
         }
     }
 
-    throw new InvalidOperationException(
-        "WASM module not found. Set WASM_MODULE_PATH or build/publish SekibanDcbDecider.Wasm first.");
+    return defaultPort;
 }

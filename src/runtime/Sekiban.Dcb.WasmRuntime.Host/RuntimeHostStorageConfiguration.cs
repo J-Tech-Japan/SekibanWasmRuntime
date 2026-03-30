@@ -19,7 +19,7 @@ internal sealed record RuntimeHostStorageConfiguration(
     string? SqlitePath = null,
     string? CosmosDatabaseName = null)
 {
-    public bool RequiresRelationalMigration => Provider == RuntimeHostStorageProvider.Postgres;
+    public bool RequiresRelationalMigration => Provider == RuntimeHostStorageProvider.Sqlite;
 }
 
 internal static class RuntimeHostStorageConfigurationResolver
@@ -55,7 +55,7 @@ internal static class RuntimeHostStorageConfigurationResolver
         switch (storageConfiguration.Provider)
         {
             case RuntimeHostStorageProvider.Postgres:
-                services.AddSekibanDcbPostgres(storageConfiguration.ConnectionString!);
+                services.AddSekibanDcbPostgresWithAspire("SekibanDcb");
                 break;
             case RuntimeHostStorageProvider.Sqlite:
                 EnsureParentDirectoryExists(storageConfiguration.SqlitePath!);

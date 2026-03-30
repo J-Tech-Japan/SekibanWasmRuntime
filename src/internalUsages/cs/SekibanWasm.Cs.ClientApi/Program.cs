@@ -42,6 +42,10 @@ builder.Services.AddScoped<ISerializedQueryClient>(sp =>
         sp.GetRequiredService<TransportSerializerOptions>().Value,
         sp.GetRequiredService<DomainSerializerOptions>().Value));
 builder.Services.AddScoped<IWeatherQueryClient, WeatherQueryClient>();
+builder.Services.AddSingleton<IWeatherForecastConsistencyTracker, WeatherForecastConsistencyTracker>();
+builder.Services.AddScoped<ITagExistenceChecker>(sp =>
+    new TagExistenceChecker(
+        sp.GetRequiredService<IHttpClientFactory>().CreateClient("wasmserver")));
 builder.Services.AddScoped<ClientApiCommandFlow>();
 builder.Services.AddSingleton<IEventPublisher, NoOpEventPublisher>();
 builder.Services.AddScoped<ISekibanExecutor>(sp =>
@@ -127,6 +131,7 @@ static async Task<IResult> ExecuteSerializedCommandAsync(
 
 static IResult HandleCommandFailure(HttpContext http, Exception ex)
 {
+    var configuration = http.RequestServices.GetRequiredService<IConfiguration>();
     var logger = http.RequestServices
         .GetRequiredService<ILoggerFactory>()
         .CreateLogger("SekibanWasm.Cs.ClientApi.Commands");
@@ -137,7 +142,13 @@ static IResult HandleCommandFailure(HttpContext http, Exception ex)
         http.Request.Path,
         http.TraceIdentifier);
 
-    return Results.BadRequest(new CommandResponse(false, "Command execution failed.", null));
+    string errorMessage = "Command execution failed.";
+    if (configuration.GetValue<bool>("CLIENT_API_INCLUDE_ERROR_DETAILS"))
+    {
+        errorMessage = ex.GetBaseException().Message;
+    }
+
+    return Results.BadRequest(new CommandResponse(false, errorMessage, null));
 }
 
 static string ResolveWasmServerBase(IConfiguration configuration)

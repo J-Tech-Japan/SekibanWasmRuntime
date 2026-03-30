@@ -34,7 +34,7 @@ public class WeatherQueryClientTests
             queryClient,
             new DomainSerializerOptions(DomainJsonOptions));
 
-        var result = await client.GetForecastAsync("f-1", CancellationToken.None);
+        var result = await client.GetForecastAsync("f-1", "uid-001", CancellationToken.None);
 
         Assert.NotNull(result);
         Assert.Equal("f-1", result.ForecastId);
@@ -48,6 +48,7 @@ public class WeatherQueryClientTests
         Assert.Equal("f-1", queryDocument.RootElement.GetProperty("forecastId").GetString());
         Assert.True(queryDocument.RootElement.GetProperty("includeDeleted").GetBoolean());
         Assert.Equal(1, queryDocument.RootElement.GetProperty("pageSize").GetInt32());
+        Assert.Equal("uid-001", queryDocument.RootElement.GetProperty("waitForSortableUniqueId").GetString());
     }
 
     private sealed class StubSerializedQueryClient : ISerializedQueryClient

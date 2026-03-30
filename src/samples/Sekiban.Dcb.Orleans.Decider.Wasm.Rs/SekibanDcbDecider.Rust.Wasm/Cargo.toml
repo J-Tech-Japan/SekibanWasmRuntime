@@ -1,0 +1,12 @@
+[package]
+name = "sekiban-dcb-decider-rust-wasm"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+sekiban-core = { path = "../../../wasm-projectors/rust/sekiban-core" }
+sekiban-wasm = { path = "../../../wasm-projectors/rust/sekiban-wasm" }
+sekiban-dcb-decider-rust-eventsource = { path = "../SekibanDcbDecider.Rust.EventSource" }

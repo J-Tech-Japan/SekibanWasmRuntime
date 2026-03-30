@@ -6,7 +6,7 @@ namespace SekibanWasm.Cs.ClientApi;
 
 public interface IWeatherQueryClient
 {
-    Task<WeatherForecastItem?> GetForecastAsync(string forecastId, CancellationToken ct);
+    Task<WeatherForecastItem?> GetForecastAsync(string forecastId, string? waitForSortableUniqueId, CancellationToken ct);
 }
 
 public sealed class WeatherQueryClient : IWeatherQueryClient
@@ -22,7 +22,10 @@ public sealed class WeatherQueryClient : IWeatherQueryClient
         _domainJsonOptions = domainJsonOptions.Value;
     }
 
-    public async Task<WeatherForecastItem?> GetForecastAsync(string forecastId, CancellationToken ct)
+    public async Task<WeatherForecastItem?> GetForecastAsync(
+        string forecastId,
+        string? waitForSortableUniqueId,
+        CancellationToken ct)
     {
         var request = new SerializedQueryRequest(
             QueryType: nameof(GetWeatherForecastListQuery),
@@ -31,7 +34,8 @@ public sealed class WeatherQueryClient : IWeatherQueryClient
                 {
                     ForecastId = forecastId,
                     IncludeDeleted = true,
-                    PageSize = 1
+                    PageSize = 1,
+                    WaitForSortableUniqueId = waitForSortableUniqueId
                 },
                 _domainJsonOptions));
 

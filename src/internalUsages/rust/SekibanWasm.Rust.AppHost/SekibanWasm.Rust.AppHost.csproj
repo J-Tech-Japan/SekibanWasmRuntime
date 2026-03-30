@@ -16,7 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\SekibanWasm.Rust.WasmServer\SekibanWasm.Rust.WasmServer.csproj" />
+    <ProjectReference Include="..\..\..\runtime\Sekiban.Dcb.WasmRuntime.Host\Sekiban.Dcb.WasmRuntime.Host.csproj" />
     <ProjectReference Include="..\SekibanWasm.Rust.Web\SekibanWasm.Rust.Web.csproj" />
   </ItemGroup>
 
