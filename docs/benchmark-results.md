@@ -27,13 +27,13 @@ Pure event write throughput with no tag contention (UUID-based aggregates).
 
 | Metric | C# Native | C# WASM | Rust WASM |
 |--------|-----------|---------|-----------|
-| **Events/sec** | **1,843** | 1,566 | 399 |
-| **Duration** | **97.7s** | 114.9s | 451.5s |
-| **p50 latency** | **4.1ms** | 4.7ms | 19.4ms |
-| **p95 latency** | **5.8ms** | 7.4ms | 37.4ms |
-| **p99 latency** | **10.1ms** | 12.7ms | 48.7ms |
+| **Events/sec** | **1,843** | 1,566 | 437 |
+| **Duration** | **97.7s** | 114.9s | 411.8s |
+| **p50 latency** | **4.1ms** | 4.7ms | 18.7ms |
+| **p95 latency** | **5.8ms** | 7.4ms | 30.8ms |
+| **p99 latency** | **10.1ms** | 12.7ms | 38.7ms |
 | **Errors** | 0 | 0 | 0 |
-| **Throughput stability** | Stable ~1,843/s | Stable ~1,566/s | Degrading 1,155→399/s |
+| **Throughput stability** | Stable ~1,843/s | Stable ~1,566/s | Degrading 1,100→437/s |
 
 ### Reservation Lifecycle (120,000 event target, concurrency=8)
 
@@ -42,9 +42,9 @@ Complex domain workflow: QuickReservation (draft + hold + confirm = 3 events/cal
 | Metric | C# Native | C# WASM | Rust WASM |
 |--------|-----------|---------|-----------|
 | **Events created** | 6,854* | 120,024 | 120,023 |
-| **Events/sec** | 12* | 128 | 124 |
-| **p50 latency** | 1.5ms* | 142.2ms | 161.2ms |
-| **p95 latency** | 352.0ms* | 317.5ms | 268.0ms |
+| **Events/sec** | 12* | 128 | 130 |
+| **p50 latency** | 1.5ms* | 142.2ms | 154.4ms |
+| **p95 latency** | 352.0ms* | 317.5ms | 253.4ms |
 | **Errors** | 73,156* | 1,559 | **0** |
 
 *Native Reservation performance is not comparable: JWT authentication means all requests run as the same user, causing severe UserMonthlyReservation tag contention. WASM samples use per-request unique user IDs via X-Debug-User-Id header.
@@ -65,7 +65,7 @@ Complex domain workflow: QuickReservation (draft + hold + confirm = 3 events/cal
 | Metric | C# Native | C# WASM | Rust WASM |
 |--------|-----------|---------|-----------|
 | **Total events** | 186,874 | 300,044 | 300,043 |
-| **Total wall-clock** | 657.6s | 2,163.2s | 1,474.9s |
+| **Total wall-clock** | 657.6s | 2,163.2s | 1,389.5s |
 | **Total errors** | 73,156 | 1,594 | **0** |
 
 ## Analysis
@@ -75,7 +75,7 @@ Complex domain workflow: QuickReservation (draft + hold + confirm = 3 events/cal
 This is the fairest comparison since it measures pure event write + projection throughput without tag contention.
 
 - **C# Native is 18% faster than C# WASM** (1,843 vs 1,566 events/sec) - the WASM sandboxing overhead is modest
-- **C# WASM is 3.9x faster than Rust WASM** (1,566 vs 399 events/sec) - Rust WASM throughput still degrades as event count grows, though tag state caching improved it by 49%
+- **C# WASM is 3.6x faster than Rust WASM** (1,566 vs 437 events/sec) - Rust WASM throughput still degrades as event count grows, though optimizations improved it by 64% from original 267
 - **Native and CS WASM maintain stable throughput** even at 180k events, while Rust WASM drops from 960 to 267 events/sec
 
 ### 2. Scalability Characteristics
@@ -84,7 +84,7 @@ This is the fairest comparison since it measures pure event write + projection t
 
 **C# WASM**: Nearly flat. Slight dip around 35-50k events then recovers. The WASM layer adds consistent overhead but doesn't degrade at scale.
 
-**Rust WASM**: Still degrading after tag-state caching fix. Starts at 1,155 events/sec but falls to 399 events/sec at 180k events (improved from 960→267 before the fix). The remaining degradation is on the WasmServer side: Rust WASM projection replay grows linearly with event count, while C# WASM projections benefit from Orleans grain caching.
+**Rust WASM**: Still degrading after all optimizations. Starts at 1,100 events/sec but falls to 437 events/sec at 180k events (improved from original 960→267). Multiple optimizations applied: executor tag-state caching (+49%), HashMap-based multi-projector state (+10%), registry caching, query clone elimination. Remaining degradation is WasmServer-side event replay cost.
 
 ### 3. Reservation Lifecycle
 
@@ -109,8 +109,8 @@ Based on Weather Bulk (most comparable metric):
 | Comparison | Overhead |
 |------------|----------|
 | C# WASM vs Native | **+15%** latency, **-15%** throughput |
-| Rust WASM vs Native | **+373%** latency at 180k events |
-| Rust WASM vs C# WASM | **+313%** latency at 180k events |
+| Rust WASM vs Native | **+356%** latency at 180k events |
+| Rust WASM vs C# WASM | **+298%** latency at 180k events |
 
 The C# WASM overhead is relatively modest (~15% throughput reduction), making it a viable option for production where WASM sandboxing is desired. The Rust WASM runtime shows significant scalability issues that need investigation.
 
@@ -190,15 +190,50 @@ The `UserMonthlyReservationTag` uses a `{UserId}_{yyyy-MM}` key format. When mul
 
 ## Performance Tuning Applied
 
-### Rust Executor Tag State Caching (sekiban-executor)
+### 1. Rust Executor Tag State Caching (sekiban-executor)
 
-**Problem**: `HttpCommandContext.get_tag_state()` made redundant HTTP calls to WasmServer. During command execution, the command handler fetches tag state, then `build_commit_request_from_output()` fetches the same tag state again for consistency tag construction.
+**Problem**: `HttpCommandContext.get_tag_state()` made redundant HTTP calls to WasmServer.
 
-**Fix**: Added `tag_state_cache: Arc<Mutex<HashMap<String, SerializableTagStateResponse>>>` to `HttpCommandContext`. First call fetches from WasmServer and caches; subsequent calls for the same tag return cached result.
+**Fix**: Added `tag_state_cache` HashMap to `HttpCommandContext`. First call fetches from WasmServer and caches; subsequent calls return cached result.
 
-**Impact**: Weather Bulk improved from 267 → 399 events/sec (+49%). Total benchmark wall-clock reduced from 1,929s → 1,475s (-24%).
+**Impact**: Weather Bulk improved from 267 → 399 events/sec (+49%).
 
-**Remaining issue**: Throughput still degrades from 1,155 to 399 events/sec as event count grows. This is a WasmServer-side issue: Rust WASM projection replay grows linearly with event count because the WasmServer must replay all events for each tag state computation, unlike the C# WASM path where Orleans grains cache projection state.
+### 2. Multi-Projector Vec → HashMap Conversion (domain code)
+
+**Problem**: All multi-projector states used `Vec<T>` with O(n) linear search for updates/lookups.
+
+**Fix**: Converted to `HashMap<Uuid, T>` for O(1) lookups. Affected: WeatherForecastList, StudentList, ClassRoomList, UserDirectory, UserAccess, RoomList, ReservationList, ApprovalInbox.
+
+**Impact**: Weather Bulk improved from 399 → 437 events/sec (+10%). Query execution also benefits from avoiding `.cloned().collect()`.
+
+### 3. Registry Caching (sekiban-wasm library)
+
+**Problem**: `create_instance_by_name()` rebuilt the projector factory registry on every WASM instance creation.
+
+**Fix**: Cache registry in thread-local storage, build once per domain type.
+
+### 4. Query Clone Elimination (domain code)
+
+**Problem**: Query execution cloned entire state vectors before sorting/filtering.
+
+**Fix**: Use references (`state.items.values().collect()`) instead of `.cloned().collect()`.
+
+### 5. WasmServer DirectTagStateCache (WasmRuntime.Host)
+
+**Problem**: Every tag-state request replayed ALL historical events from scratch.
+
+**Fix**: Added `DirectTagStateCache` that stores tag state snapshots in memory. Subsequent requests restore from snapshot and only replay events after the snapshot's sortable unique ID.
+
+### Cumulative Improvement
+
+| Metric | Original | After All Optimizations | Improvement |
+|--------|----------|------------------------|-------------|
+| Weather Bulk events/sec | 267 | 437 | **+64%** |
+| Weather Duration | 674s | 412s | **-39%** |
+| Total wall-clock | 1,929s | 1,390s | **-28%** |
+| Total errors | 0 | 0 | - |
+
+**Remaining gap**: CS WASM (1,566 events/sec) is still 3.6x faster. The remaining difference is due to WasmServer-side full event replay for each unique tag (not yet cached in this test run) and Rust WASM module's serialization overhead vs C# WASM.
 
 ## Future Work
 
