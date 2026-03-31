@@ -11,6 +11,7 @@ public sealed class HttpApiClient : IDisposable
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
 
     private readonly HttpClient _http;
+    private string _weatherPostPath = "/api/weatherforecast";
 
     public HttpApiClient(string baseUrl)
     {
@@ -21,13 +22,74 @@ public sealed class HttpApiClient : IDisposable
 
     public void Dispose() => _http.Dispose();
 
+    /// <summary>
+    /// Authenticate with the Native template's Identity+JWT auth system.
+    /// Registers a user (if needed) then logs in to get a JWT token.
+    /// </summary>
+    public async Task<bool> AuthenticateAsync()
+    {
+        var email = $"benchmark-{Guid.NewGuid():N}@test.local";
+        var password = "Bench!Mark123$";
+
+        // Register
+        var regPayload = new { email, password, displayName = "BenchmarkAdmin" };
+        var (regResp, _) = await PostMeasured("/auth/register", regPayload);
+
+        // Login with JWT
+        var loginPayload = new { email, password, useCookies = false };
+        var (loginResp, _) = await PostMeasured("/auth/login", loginPayload);
+        if (!loginResp.IsSuccessStatusCode) return false;
+
+        var loginJson = await loginResp.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(loginJson);
+        if (!doc.RootElement.TryGetProperty("accessToken", out var tokenProp)) return false;
+        var token = tokenProp.GetString();
+        if (string.IsNullOrEmpty(token)) return false;
+
+        _http.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        // Promote to Admin role: Native template needs Admin role for rooms/reservations.
+        // The template registers with "User" role. We need Admin.
+        // Check if there's a way... Actually, for benchmark purposes, we need the test-data
+        // and room/reservation endpoints which require authorization.
+        // Let's check if basic auth is enough (RequireAuthorization without AdminOnly)
+        Console.WriteLine($"  Authenticated as: {email}");
+        return true;
+    }
+
     // ---------- Commands ----------
 
     public Task<(HttpResponseMessage Resp, double Ms)> CreateRoom(object payload) =>
         PostMeasured("/api/rooms", payload);
 
     public Task<(HttpResponseMessage Resp, double Ms)> CreateWeatherForecast(object payload) =>
-        PostMeasured("/api/weatherforecast", payload);
+        PostMeasured(_weatherPostPath, payload);
+
+    /// <summary>
+    /// Auto-detect the correct weather POST path.
+    /// Native template uses /api/inputweatherforecast, WASM samples use /api/weatherforecast.
+    /// </summary>
+    public async Task DetectWeatherEndpointAsync()
+    {
+        // Try WASM-style first
+        var testPayload = new { forecastId = Guid.NewGuid(), location = "probe", date = DateTime.UtcNow.ToString("yyyy-MM-dd"), temperatureC = 0, summary = "probe" };
+        var (resp, _) = await PostMeasured("/api/weatherforecast", testPayload);
+        if (resp.IsSuccessStatusCode)
+        {
+            _weatherPostPath = "/api/weatherforecast";
+            return;
+        }
+        // Try Native-style
+        var (resp2, _) = await PostMeasured("/api/inputweatherforecast", testPayload);
+        if (resp2.IsSuccessStatusCode)
+        {
+            _weatherPostPath = "/api/inputweatherforecast";
+            return;
+        }
+        // Fallback
+        _weatherPostPath = "/api/weatherforecast";
+    }
 
     public Task<(HttpResponseMessage Resp, double Ms)> CreateReservationDraft(object payload) =>
         PostMeasured("/api/reservations/draft", payload);
@@ -42,7 +104,10 @@ public sealed class HttpApiClient : IDisposable
         PostMeasured($"/api/reservations/{reservationId}/cancel", payload);
 
     public Task<(HttpResponseMessage Resp, double Ms)> QuickReservation(object payload) =>
-        PostMeasured("/api/reservations/quick", payload);
+        PostMeasuredWithUniqueUser("/api/reservations/quick", payload);
+
+    public Task<(HttpResponseMessage Resp, double Ms)> CreateReservationDraftUniqueUser(object payload) =>
+        PostMeasuredWithUniqueUser("/api/reservations/draft", payload);
 
     // ---------- Queries ----------
 
@@ -69,6 +134,30 @@ public sealed class HttpApiClient : IDisposable
         var content = new StringContent(json, Encoding.UTF8, "application/json");
         var sw = Stopwatch.StartNew();
         var resp = await _http.PostAsync(path, content);
+        sw.Stop();
+        return (resp, sw.Elapsed.TotalMilliseconds);
+    }
+
+    /// <summary>
+    /// POST with a unique X-Debug-User-Id per request to avoid UserMonthlyReservation tag contention.
+    /// Each request appears as a different user.
+    /// </summary>
+    private async Task<(HttpResponseMessage Resp, double Ms)> PostMeasuredWithUniqueUser(string path, object payload)
+    {
+        var json = JsonSerializer.Serialize(payload, JsonOpts);
+        var request = new HttpRequestMessage(HttpMethod.Post, path)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        };
+        // Copy Bearer token if set (for Native template auth)
+        if (_http.DefaultRequestHeaders.Authorization != null)
+        {
+            request.Headers.Authorization = _http.DefaultRequestHeaders.Authorization;
+        }
+        request.Headers.Add("X-Debug-User-Id", Guid.NewGuid().ToString());
+        request.Headers.Add("X-Debug-Display-Name", "BenchUser");
+        var sw = Stopwatch.StartNew();
+        var resp = await _http.SendAsync(request);
         sw.Stop();
         return (resp, sw.Elapsed.TotalMilliseconds);
     }

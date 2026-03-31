@@ -46,6 +46,16 @@ public sealed class BenchmarkRunner
 
         var totalSw = System.Diagnostics.Stopwatch.StartNew();
 
+        // Try to authenticate (needed for Native template with JWT auth)
+        // For WASM samples using X-Debug headers, this will fail silently and that's fine.
+        Console.WriteLine("\n--- Attempting authentication (for Native template) ---");
+        var authenticated = await client.AuthenticateAsync();
+        if (!authenticated)
+            Console.WriteLine("  Auth not available (using debug headers instead)");
+
+        // Detect correct weather endpoint path
+        await client.DetectWeatherEndpointAsync();
+
         // Phase 1: Setup
         List<Guid> roomIds;
         if (_skipSetup)
@@ -69,9 +79,16 @@ public sealed class BenchmarkRunner
         result.Phases.Add(weatherResult);
 
         // Phase 3: Reservation Lifecycle
-        var reservationResult = await ReservationLifecycleScenario.RunAsync(
-            client, roomIds, reservationEvents, _concurrency);
-        result.Phases.Add(reservationResult);
+        if (roomIds.Count > 0)
+        {
+            var reservationResult = await ReservationLifecycleScenario.RunAsync(
+                client, roomIds, reservationEvents, _concurrency);
+            result.Phases.Add(reservationResult);
+        }
+        else
+        {
+            Console.WriteLine("\n=== Phase 3: Reservation Lifecycle (SKIPPED - no rooms created) ===");
+        }
 
         // Phase 4/5: Query Performance
         var queryResult = await QueryPerformanceScenario.RunAsync(client, roomIds, 50);

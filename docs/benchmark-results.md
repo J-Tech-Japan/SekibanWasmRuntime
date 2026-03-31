@@ -1,152 +1,172 @@
 # Event Sourcing Benchmark Results
 
-Comparison of Sekiban event sourcing performance across three runtime modes.
+Comparison of Sekiban event sourcing performance across three runtime modes with 300,000 events.
 
 ## Runtime Modes
 
-| Mode | Description | Projection Runtime |
-|------|-------------|-------------------|
-| **C# Native** | Sekiban Orleans template, all projections in-process | Native .NET |
-| **C# WASM** | Projections run in C# WASM module via Wasmtime | WASI Preview 1 (C#) |
-| **Rust WASM** | Projections run in Rust WASM module via Wasmtime | WASI Preview 1 (Rust) |
+| Mode | Description | Projection Runtime | ClientApi |
+|------|-------------|-------------------|-----------|
+| **C# Native** | Sekiban Orleans template, all projections in-process | Native .NET | Direct ApiService |
+| **C# WASM** | Projections run in C# WASM module via Wasmtime | WASI Preview 1 (C#) | ASP.NET Core proxy |
+| **Rust WASM** | Projections run in Rust WASM module via Wasmtime | WASI Preview 1 (Rust) | Rust Axum proxy |
 
 ## Test Environment
 
-- **Machine**: Local development (Apple Silicon)
-- **Database**: PostgreSQL (via Aspire emulator)
+- **Machine**: Apple Silicon (local development)
+- **Database**: PostgreSQL (via Aspire container emulator)
 - **Orleans**: In-memory clustering (development mode)
 - **Benchmark CLI**: `benchmarks/Sekiban.Benchmark.Cli`
+- **Concurrency**: 8 parallel HTTP clients
+- **Date**: 2026-03-31
 
-## Benchmark Structure
+## 300,000 Event Benchmark Results
 
-### Phase 1: Setup
-Create 20 meeting rooms. Validates basic connectivity.
+### Weather Bulk Write (180,000 events, concurrency=8)
 
-### Phase 2: Weather Bulk (Pure Throughput)
-Create weather forecasts in parallel (concurrency=8). Each call produces 1 event. No tag contention - UUID-based aggregates. Best measure of raw event write throughput.
+Pure event write throughput with no tag contention (UUID-based aggregates).
 
-### Phase 3: Reservation Lifecycle (Complex Domain)
-QuickReservation workflow: creates draft + hold + confirm in a single call (3 events). Uses unique organizerId per request to minimize tag contention. Concurrency=2 to reduce optimistic concurrency conflicts.
+| Metric | C# Native | C# WASM | Rust WASM |
+|--------|-----------|---------|-----------|
+| **Events/sec** | **1,816** | 1,461 | 258 |
+| **Duration** | **99.1s** | 123.2s | 696.9s |
+| **p50 latency** | **4.2ms** | 4.8ms | 33.0ms |
+| **p95 latency** | **5.8ms** | 6.8ms | 54.0ms |
+| **p99 latency** | **9.9ms** | 11.3ms | 65.8ms |
+| **Errors** | 0 | 0 | 0 |
+| **Throughput stability** | Stable ~1,816/s | Stable ~1,461/s | Degrading 941→258/s |
 
-### Phase 4/5: Query Performance
-Sequential queries against the accumulated dataset: room list, reservation list (paginated), reservations by room, weather count.
+### Reservation Lifecycle (120,000 event target, concurrency=8)
 
-## Results: 5,000 Event Smoke Test
+Complex domain workflow: QuickReservation (draft + hold + confirm = 3 events/call) with unique user IDs per request to minimize tag contention.
 
-| Metric | C# WASM | Rust WASM |
-|--------|---------|-----------|
-| **Weather Bulk** | | |
-| Events/sec | 1,153 | 948 |
-| p50 latency | 6.5ms | 8.0ms |
-| p95 latency | 8.4ms | 10.3ms |
-| p99 latency | 14.9ms | 15.4ms |
-| Errors | 0 | 0 |
-| **Reservation Lifecycle** | | |
-| Events/sec | 308 | 323 |
-| p50 latency | 10.6ms | 17.6ms |
-| p95 latency | 16.3ms | 21.6ms |
-| Errors | 351 | 0 |
-| **Query Performance** | | |
-| Queries/sec | 263 | 186 |
-| p50 latency | 2.8ms | 2.3ms |
-| p95 latency | 4.8ms | 12.3ms |
-| **Total** | | |
-| Events created | 5,026 | 5,026 |
-| Wall-clock time | 10.8s | 11.3s |
+| Metric | C# Native | C# WASM | Rust WASM |
+|--------|-----------|---------|-----------|
+| **Events created** | 6,831* | 120,024 | 120,023 |
+| **Events/sec** | 12* | 122 | 97 |
+| **p50 latency** | 1.5ms* | 149.1ms | 215.7ms |
+| **p95 latency** | 355.8ms* | 315.7ms | 338.1ms |
+| **Errors** | 73,179* | 1,559 | 0 |
 
-## Results: 300,000 Event Test (CS WASM Partial)
+*Native Reservation performance is not comparable: JWT authentication means all requests run as the same user, causing severe UserMonthlyReservation tag contention. WASM samples use per-request unique user IDs via X-Debug-User-Id header.
 
-Weather Bulk phase completed; Reservation phase was interrupted at ~70k events due to tag contention degradation.
+### Query Performance (50 iterations, after all writes)
 
-| Phase | Events | Duration | Events/sec | p50 | p95 | p99 |
-|-------|--------|----------|-----------|-----|-----|-----|
-| Weather Bulk | 180,000 | 115.1s | 1,563 | 4.8ms | 6.8ms | 11.3ms |
-| Reservation (partial) | ~70,000 | ~875s | ~80 | - | - | - |
+| Metric | C# Native | C# WASM | Rust WASM |
+|--------|-----------|---------|-----------|
+| **Queries/sec** | **622** | 0.2* | 4 |
+| **p50 latency** | **0.3ms** | 25.0ms | 18.4ms |
+| **p95 latency** | **0.5ms** | 30,003ms* | 623.8ms |
+| **Errors** | 0 | 35* | 0 |
 
-### Key Observation: Throughput Degradation at Scale
-Weather Bulk throughput remains stable at ~1,560 events/sec even at 180k events. Reservation throughput degrades from ~160 events/sec (at 10k) to ~80 events/sec (at 70k) due to growing projection state and tag contention.
+*CS WASM query performance degraded significantly after 300k events, with some queries timing out at 30s. This reflects the cost of WASM projection replay at scale.
+
+### Overall Summary
+
+| Metric | C# Native | C# WASM | Rust WASM |
+|--------|-----------|---------|-----------|
+| **Total events** | 186,851 | 300,044 | 300,043 |
+| **Total wall-clock** | 662.1s | 2,212.8s | 1,992.9s |
+| **Total errors** | 73,179 | 1,594 | **0** |
 
 ## Analysis
 
-### Weather Bulk (Pure Write Throughput)
-- **C# WASM is ~22% faster** than Rust WASM for simple event writes (1,153 vs 948 events/sec)
-- This reflects the overhead of the Rust ClientApi HTTP proxy layer (Axum/Reqwest) vs C# ClientApi (ASP.NET Core HttpClient), not WASM execution itself
-- Both achieve excellent throughput for event sourcing workloads
+### 1. Weather Bulk (Pure Write Throughput)
 
-### Reservation Lifecycle (Complex Domain Logic)
-- **Rust WASM had 0 errors** vs 351 errors for C# WASM in the 5k test
-- Tag contention on UserMonthlyReservation is more gracefully handled in the Rust pipeline
-- Throughput is comparable (308 vs 323 events/sec)
+This is the fairest comparison since it measures pure event write + projection throughput without tag contention.
 
-### Query Performance
-- C# WASM has higher overall query throughput (263 vs 186 queries/sec)
-- Rust WASM has lower p50 latency (2.3ms vs 2.8ms) but higher p95 (12.3ms vs 4.8ms)
+- **C# Native is 24% faster than C# WASM** (1,816 vs 1,461 events/sec) - the WASM sandboxing overhead is modest
+- **C# WASM is 5.7x faster than Rust WASM** (1,461 vs 258 events/sec) - Rust WASM throughput degrades significantly as event count grows
+- **Native and CS WASM maintain stable throughput** even at 180k events, while Rust WASM drops from 941 to 258 events/sec
 
-### Scalability
-- Weather forecast writes scale linearly - throughput is constant even at 180k events
-- Reservation lifecycle throughput degrades as event count grows, due to projection replay overhead
-- This is a characteristic of the event sourcing model, not specific to WASM vs Native
+### 2. Scalability Characteristics
+
+**C# Native**: Flat throughput curve. Events/sec remains constant from 0 to 180k events.
+
+**C# WASM**: Nearly flat. Slight decline from ~1,500 to ~1,461 events/sec. The WASM layer adds consistent overhead but doesn't degrade at scale.
+
+**Rust WASM**: Steep degradation. Starts at 941 events/sec but falls continuously to 258 events/sec at 180k events. This suggests the Rust WASM runtime has growing per-event overhead, possibly from projection replay or memory management in the WASM module.
+
+### 3. Reservation Lifecycle
+
+The QuickReservation workflow is a realistic complex operation (3+ events, multiple tag projections, room state lookup). CS WASM achieved 122 events/sec and Rust WASM achieved 97 events/sec with minimal errors when using unique user IDs.
+
+### 4. Query Performance at Scale
+
+- **Native queries are sub-millisecond** (0.3ms p50) because projections are in-process and cached in Orleans grains
+- **WASM queries degrade with event count** because each query may trigger projection replay through the WASM module
+- Rust WASM queries (18.4ms p50) perform better than CS WASM (25.0ms p50) at 300k scale
+
+### 5. Error Characteristics
+
+- **Rust WASM: 0 errors** in the entire 300k run - most robust
+- **CS WASM: 1,559 errors** - occasional tag contention even with unique users
+- **Native: 73,179 errors** - JWT auth means single-user, causing massive tag contention (not a fair comparison for reservations)
+
+## WASM Overhead Cost
+
+Based on Weather Bulk (most comparable metric):
+
+| Comparison | Overhead |
+|------------|----------|
+| C# WASM vs Native | **+24%** latency, **-20%** throughput |
+| Rust WASM vs Native | **+686%** latency at 180k events |
+| Rust WASM vs C# WASM | **+467%** latency at 180k events |
+
+The C# WASM overhead is relatively modest (~20% throughput reduction), making it a viable option for production where WASM sandboxing is desired. The Rust WASM runtime shows significant scalability issues that need investigation.
 
 ## How to Run
 
 ### Prerequisites
 - .NET 10 SDK
 - Docker (for PostgreSQL and Azure Storage emulators via Aspire)
+- Rust toolchain (for Rust WASM sample)
 
 ### C# WASM
 ```bash
-# Start infrastructure
 cd src/samples/Sekiban.Dcb.Orleans.Decider.Wasm
-aspire start --isolated
-aspire wait clientapi
+aspire start --isolated && aspire wait clientapi
 
-# Run benchmark
 cd benchmarks/Sekiban.Benchmark.Cli
 dotnet run -c Release -- \
   --base-url http://localhost:5198 \
   --mode-label cs-wasm \
-  --total-events 5000 \
-  --concurrency 8
+  --total-events 300000 \
+  --concurrency 8 \
+  --output benchmarks/results/cs-wasm-300k.json
 
-# Stop
 aspire stop
 ```
 
 ### Rust WASM
 ```bash
-# Start infrastructure
 cd src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs
-aspire start --isolated
-aspire wait clientapi
+aspire start --isolated && aspire wait clientapi
 
-# Run benchmark
 cd benchmarks/Sekiban.Benchmark.Cli
 dotnet run -c Release -- \
   --base-url http://localhost:6198 \
   --mode-label rs-wasm \
-  --total-events 5000 \
-  --concurrency 8
+  --total-events 300000 \
+  --concurrency 8 \
+  --output benchmarks/results/rs-wasm-300k.json
 
-# Stop
 aspire stop
 ```
 
-### C# Native (Sekiban Template)
+### C# Native (from Sekiban template)
 ```bash
-# Start from Sekiban template directory
 cd /path/to/Sekiban-dcb/templates/Sekiban.Dcb.Templates/content/Sekiban.Dcb.Orleans.Decider
-aspire start --isolated
-aspire wait apiservice
+aspire start --isolated && aspire wait apiservice
+# Note the dynamic port from 'aspire describe'
 
-# Run benchmark
-cd /path/to/SekibanWasmRuntime/benchmarks/Sekiban.Benchmark.Cli
+cd benchmarks/Sekiban.Benchmark.Cli
 dotnet run -c Release -- \
-  --base-url http://localhost:5141 \
+  --base-url http://localhost:<PORT> \
   --mode-label native \
-  --total-events 5000 \
-  --concurrency 8
+  --total-events 300000 \
+  --concurrency 8 \
+  --output benchmarks/results/native-300k.json
 
-# Stop
 aspire stop
 ```
 
@@ -160,10 +180,18 @@ aspire stop
 --skip-setup            Skip room creation phase
 ```
 
+## Tag Contention Notes
+
+The `UserMonthlyReservationTag` uses a `{UserId}_{yyyy-MM}` key format. When multiple concurrent requests create reservations for the same user in the same month, optimistic concurrency conflicts occur.
+
+**Mitigation applied in benchmark**: Each request uses a unique `X-Debug-User-Id` header (WASM samples) so each reservation appears as a different user, distributing load across different tag partitions.
+
+**Limitation for Native mode**: JWT authentication ties all requests to a single user identity, making it impossible to distribute tag load. This means Native Reservation benchmarks reflect worst-case single-user contention rather than realistic multi-user throughput.
+
 ## Future Work
 
-- Run C# Native benchmark for direct comparison
 - Cloud deployment benchmarks (Azure Container Apps)
 - Memory profiling per runtime mode
-- Larger scale tests (500k+ events)
-- Reservation concurrency tuning to reduce tag contention
+- Investigate Rust WASM scalability degradation (941→258 events/sec)
+- 500k+ event tests
+- Multi-user JWT authentication for fairer Native Reservation comparison

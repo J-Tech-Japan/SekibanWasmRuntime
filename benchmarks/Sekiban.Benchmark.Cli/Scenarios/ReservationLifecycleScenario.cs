@@ -17,8 +17,9 @@ public static class ReservationLifecycleScenario
         int concurrency)
     {
         // QuickReservation produces ~3 events per call
-        // Use reduced concurrency (max 2) to avoid tag contention on room-level projections
-        var effectiveConcurrency = Math.Min(concurrency, 2);
+        // Each request uses a unique user ID (via X-Debug-User-Id header) to avoid
+        // UserMonthlyReservation tag contention
+        var effectiveConcurrency = concurrency;
         var estimatedCalls = targetEvents / 3;
 
         Console.WriteLine($"\n=== Phase 3: Reservation Lifecycle (~{estimatedCalls:N0} quick reservations, target {targetEvents:N0} events, concurrency={effectiveConcurrency}) ===");
@@ -93,7 +94,7 @@ public static class ReservationLifecycleScenario
                             selectedEquipment = Array.Empty<string>()
                         };
 
-                        var (resp, ms) = await client.CreateReservationDraft(payload);
+                        var (resp, ms) = await client.CreateReservationDraftUniqueUser(payload);
                         RecordOp(resp, ms);
                         if (resp.IsSuccessStatusCode)
                             Interlocked.Increment(ref eventsCreated);
