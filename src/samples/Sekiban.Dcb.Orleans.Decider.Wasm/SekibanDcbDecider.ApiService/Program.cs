@@ -147,7 +147,7 @@ var domainTypes = DomainType.GetDomainTypes();
 builder.Services.AddSingleton(domainTypes);
 builder.Services.AddSingleton<JsonSerializerOptions>(_ => new JsonSerializerOptions(JsonSerializerDefaults.Web));
 
-// Register native runtime abstraction interfaces
+// Register runtime abstraction interfaces (overridden by Wasm mode below)
 builder.Services.AddSekibanDcbNativeRuntime();
 builder.Services.AddSekibanDcbColdEventDefaults();
 
@@ -190,7 +190,7 @@ builder.Services.AddScoped<IActorObjectAccessor, OrleansActorObjectAccessor>();
 
 builder.Services.AddWasmTagStateRuntime(options =>
 {
-    options.Mode = WasmRuntimeMode.Native;
+    options.Mode = WasmRuntimeMode.Wasm;
 });
 
 // Add CORS services
