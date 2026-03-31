@@ -39,7 +39,7 @@ pub struct WeatherForecastItem {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, State, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct WeatherForecastListState {
-    pub items: Vec<WeatherForecastItem>,
+    pub items: HashMap<Uuid, WeatherForecastItem>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, State, PartialEq)]
@@ -82,13 +82,13 @@ pub struct ClassRoomItem {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, State, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct StudentListState {
-    pub items: Vec<StudentState>,
+    pub items: HashMap<Uuid, StudentState>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, State, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ClassRoomListState {
-    pub items: Vec<ClassRoomItem>,
+    pub items: HashMap<Uuid, ClassRoomItem>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, State, PartialEq)]
@@ -122,7 +122,7 @@ pub struct UserDirectoryListItem {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, State, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct UserDirectoryListState {
-    pub items: Vec<UserDirectoryListItem>,
+    pub items: HashMap<Uuid, UserDirectoryListItem>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, State, PartialEq)]
@@ -147,7 +147,7 @@ pub struct UserAccessListItem {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, State, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct UserAccessListState {
-    pub items: Vec<UserAccessListItem>,
+    pub items: HashMap<Uuid, UserAccessListItem>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, State, PartialEq)]
@@ -178,7 +178,7 @@ pub struct RoomListItem {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, State, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct RoomListState {
-    pub items: Vec<RoomListItem>,
+    pub items: HashMap<Uuid, RoomListItem>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -258,7 +258,7 @@ pub struct ReservationListItem {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, State, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ReservationListState {
-    pub items: Vec<ReservationListItem>,
+    pub items: HashMap<Uuid, ReservationListItem>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, State, PartialEq)]
@@ -312,7 +312,7 @@ pub struct ApprovalInboxItem {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, State, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ApprovalInboxState {
-    pub items: Vec<ApprovalInboxItem>,
+    pub items: HashMap<Uuid, ApprovalInboxItem>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, State, PartialEq)]

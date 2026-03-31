@@ -264,13 +264,25 @@ fn build_registry<D: DomainProjectorRegistration>() -> ProjectorFactoryRegistry 
     registry
 }
 
+thread_local! {
+    /// Cached registry to avoid rebuilding on every instance creation.
+    /// Uses a HashMap keyed by type name to support multiple domain registrations.
+    static REGISTRY_CACHE: RefCell<HashMap<&'static str, ProjectorFactoryRegistry>> = RefCell::new(HashMap::new());
+}
+
 /// Create an instance by projector name.
+/// Registry is built once per domain type and cached in thread-local storage.
 pub fn create_instance_by_name<D: DomainProjectorRegistration>(name: &str) -> i32 {
-    let registry = build_registry::<D>();
-    match registry.create_instance(name) {
-        Some(instance) => INSTANCES.with(|instances| instances.borrow_mut().push(instance)),
-        None => -1,
-    }
+    REGISTRY_CACHE.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        let registry = cache
+            .entry(std::any::type_name::<D>())
+            .or_insert_with(build_registry::<D>);
+        match registry.create_instance(name) {
+            Some(instance) => INSTANCES.with(|instances| instances.borrow_mut().push(instance)),
+            None => -1,
+        }
+    })
 }
 
 /// Apply event to instance.

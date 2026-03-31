@@ -28,4 +28,13 @@ impl Event {
             None
         }
     }
+
+    /// Create from borrowed strings without allocation (wraps references).
+    pub fn from_refs(event_type: &str, payload_json: &str) -> Self {
+        Self {
+            event_type: event_type.to_string(),
+            payload_json: payload_json.to_string(),
+            sortable_unique_id: None,
+        }
+    }
 }

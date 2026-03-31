@@ -72,6 +72,7 @@ builder.Services.AddSingleton<JsonSerializerOptions>(jsonOptions);
 builder.Services.AddSingleton(registry);
 builder.Services.AddSingleton<ProjectionInstanceStore>();
 builder.Services.AddSingleton<DirectSnapshotQueryCache>();
+builder.Services.AddSingleton<DirectTagStateCache>();
 builder.Services.AddSingleton(new WaitForSortableUniqueIdTimeoutOptions
 {
     Timeout = waitForSortableUniqueIdTimeout
@@ -333,17 +334,37 @@ static async Task<SerializableTagState?> TryGetSerializableTagStateDirectAsync(
         tagStateId,
         latestSortableUniqueId ?? "<none>");
 
+    // Try to restore from tag state cache (only replay new events)
+    var tagStateCache = http.RequestServices.GetRequiredService<DirectTagStateCache>();
+    var cacheKey = tagStateId.ToString();
+    var cachedEntry = tagStateCache.TryGet(cacheKey);
+
     using var accumulator = primitive.CreateAccumulator(tagStateId);
-    if (!accumulator.ApplyState(null))
+    if (cachedEntry is not null)
     {
-        logger.LogWarning(
-            "Direct tag-state ApplyState(null) failed: {TagStateId}",
-            tagStateId);
-        return null;
+        // Restore from cached snapshot
+        if (!accumulator.ApplyState(cachedEntry.CachedState))
+        {
+            logger.LogDebug("Direct tag-state cache restore failed, falling back to full replay");
+            cachedEntry = null;
+        }
+    }
+
+    if (cachedEntry is null)
+    {
+        if (!accumulator.ApplyState(null))
+        {
+            logger.LogWarning(
+                "Direct tag-state ApplyState(null) failed: {TagStateId}",
+                tagStateId);
+            return null;
+        }
     }
 
     var tag = new FallbackTag(tagStateId.TagGroup, tagStateId.TagContent);
-    var eventsResult = await eventStore.ReadSerializableEventsByTagAsync(tag);
+    var eventsResult = await eventStore.ReadSerializableEventsByTagAsync(
+        tag,
+        cachedEntry?.LastSortableUniqueId);
     if (!eventsResult.IsSuccess)
     {
         logger.LogWarning(
@@ -354,22 +375,35 @@ static async Task<SerializableTagState?> TryGetSerializableTagStateDirectAsync(
     }
 
     var events = eventsResult.GetValue().ToList();
-    logger.LogInformation(
-        "Direct tag-state events loaded: {TagStateId} => {EventCount}",
+    logger.LogDebug(
+        "Direct tag-state events loaded: {TagStateId} => {EventCount} (cached={FromCache})",
         tagStateId,
-        events.Count);
-    if (!accumulator.ApplyEvents(events, latestSortableUniqueId))
+        events.Count,
+        cachedEntry is not null);
+    if (events.Count > 0 && !accumulator.ApplyEvents(events, latestSortableUniqueId))
     {
         logger.LogWarning(
             "Direct tag-state ApplyEvents failed: {TagStateId}",
             tagStateId);
         return null;
     }
-    logger.LogInformation(
-        "Direct tag-state events applied: {TagStateId}",
-        tagStateId);
 
     var state = accumulator.GetSerializedState();
+
+    // Update cache with latest snapshot for future incremental replay
+    if (state.Payload.Length > 0 && latestSortableUniqueId is not null && moduleRef is not null)
+    {
+        var cachedState = new SerializableTagState(
+            Payload: state.Payload,
+            Version: state.Version,
+            LastSortedUniqueId: latestSortableUniqueId,
+            TagGroup: tagStateId.TagGroup,
+            TagContent: tagStateId.TagContent,
+            TagProjector: tagStateId.TagProjectorName,
+            TagPayloadName: state.TagPayloadName ?? "",
+            ProjectorVersion: moduleRef.ProjectorVersion);
+        tagStateCache.Set(cacheKey, cachedState, latestSortableUniqueId);
+    }
     logger.LogInformation(
         "Direct tag-state serialized: {TagStateId} payload={PayloadLength} payloadName={PayloadName}",
         tagStateId,
@@ -1080,3 +1114,23 @@ sealed class DirectSnapshotQueryCacheEntry : IDisposable
         EventsProcessed = 0;
     }
 }
+
+/// <summary>
+/// In-memory cache of tag state snapshots for the direct tag-state path.
+/// When a tag state is requested again, the cached snapshot is restored
+/// and only events after the snapshot's sortable unique ID are replayed.
+/// </summary>
+sealed class DirectTagStateCache
+{
+    private readonly ConcurrentDictionary<string, DirectTagStateCacheEntry> _entries = new(StringComparer.Ordinal);
+
+    public DirectTagStateCacheEntry? TryGet(string tagStateKey) =>
+        _entries.TryGetValue(tagStateKey, out var entry) ? entry : null;
+
+    public void Set(string tagStateKey, SerializableTagState cachedState, string lastSortableUniqueId)
+    {
+        _entries[tagStateKey] = new DirectTagStateCacheEntry(cachedState, lastSortableUniqueId);
+    }
+}
+
+sealed record DirectTagStateCacheEntry(SerializableTagState CachedState, string LastSortableUniqueId);

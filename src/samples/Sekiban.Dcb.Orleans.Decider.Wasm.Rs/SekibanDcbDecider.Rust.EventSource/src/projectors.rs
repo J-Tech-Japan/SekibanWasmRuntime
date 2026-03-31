@@ -66,7 +66,7 @@ impl Projector for WeatherForecastListProjector {
         match_event!(event, state, {
             WeatherForecastCreated(e) => {
                 let mut next = state;
-                next.items.push(WeatherForecastItem {
+                next.items.insert(e.forecast_id, WeatherForecastItem {
                     forecast_id: e.forecast_id,
                     location: e.location.clone(),
                     date: e.date.clone(),
@@ -77,14 +77,14 @@ impl Projector for WeatherForecastListProjector {
             },
             WeatherForecastLocationUpdated(e) => {
                 let mut next = state;
-                if let Some(item) = next.items.iter_mut().find(|item| item.forecast_id == e.forecast_id) {
+                if let Some(item) = next.items.get_mut(&e.forecast_id) {
                     item.location = e.new_location.clone();
                 }
                 next
             },
             WeatherForecastDeleted(e) => {
                 let mut next = state;
-                next.items.retain(|item| item.forecast_id != e.forecast_id);
+                next.items.remove(&e.forecast_id);
                 next
             },
         })
@@ -99,7 +99,7 @@ impl MultiProjectorQuery for WeatherForecastListProjector {
         let query: GetWeatherForecastCountQuery = serde_json::from_str(params).unwrap_or_default();
         let count = state
             .items
-            .iter()
+            .values()
             .filter(|item| query.forecast_id.is_none_or(|forecast_id| item.forecast_id == forecast_id))
             .filter(|item| {
                 query
@@ -116,9 +116,9 @@ impl MultiProjectorQuery for WeatherForecastListProjector {
             return None;
         }
         let query: GetWeatherForecastListQuery = serde_json::from_str(params).unwrap_or_default();
-        let mut items = state
+        let mut items: Vec<_> = state
             .items
-            .iter()
+            .values()
             .filter(|item| query.forecast_id.is_none_or(|forecast_id| item.forecast_id == forecast_id))
             .filter(|item| {
                 query
@@ -126,8 +126,7 @@ impl MultiProjectorQuery for WeatherForecastListProjector {
                     .as_ref()
                     .is_none_or(|filter| item.location.contains(filter))
             })
-            .cloned()
-            .collect::<Vec<_>>();
+            .collect();
         items.sort_by(|left, right| left.location.cmp(&right.location));
         Some(sort_json(&items, "[]"))
     }
@@ -187,7 +186,7 @@ impl Projector for StudentListProjector {
         match_event!(event, state, {
             StudentCreated(e) => {
                 let mut next = state;
-                next.items.push(StudentState {
+                next.items.insert(e.student_id, StudentState {
                     student_id: e.student_id,
                     name: e.name.clone(),
                     max_class_count: e.max_class_count,
@@ -197,7 +196,7 @@ impl Projector for StudentListProjector {
             },
             StudentEnrolledInClassRoom(e) => {
                 let mut next = state;
-                if let Some(student) = next.items.iter_mut().find(|item| item.student_id == e.student_id) {
+                if let Some(student) = next.items.get_mut(&e.student_id) {
                     if !student.enrolled_class_room_ids.contains(&e.class_room_id) {
                         student.enrolled_class_room_ids.push(e.class_room_id);
                     }
@@ -206,7 +205,7 @@ impl Projector for StudentListProjector {
             },
             StudentDroppedFromClassRoom(e) => {
                 let mut next = state;
-                if let Some(student) = next.items.iter_mut().find(|item| item.student_id == e.student_id) {
+                if let Some(student) = next.items.get_mut(&e.student_id) {
                     student.enrolled_class_room_ids.retain(|id| *id != e.class_room_id);
                 }
                 next
@@ -220,7 +219,7 @@ impl MultiProjectorQuery for StudentListProjector {
         if query_type != GetStudentListQuery::QUERY_TYPE {
             return None;
         }
-        let mut items = state.items.clone();
+        let mut items: Vec<_> = state.items.values().collect();
         items.sort_by(|left, right| left.name.cmp(&right.name));
         Some(sort_json(&items, "[]"))
     }
@@ -280,7 +279,7 @@ impl Projector for ClassRoomListProjector {
         match_event!(event, state, {
             ClassRoomCreated(e) => {
                 let mut next = state;
-                next.items.push(ClassRoomItem {
+                next.items.insert(e.class_room_id, ClassRoomItem {
                     class_room_id: e.class_room_id,
                     name: e.name.clone(),
                     max_students: e.max_students,
@@ -292,7 +291,7 @@ impl Projector for ClassRoomListProjector {
             },
             StudentEnrolledInClassRoom(e) => {
                 let mut next = state;
-                if let Some(item) = next.items.iter_mut().find(|item| item.class_room_id == e.class_room_id) {
+                if let Some(item) = next.items.get_mut(&e.class_room_id) {
                     item.enrolled_count += 1;
                     item.is_full = item.enrolled_count >= item.max_students;
                     item.remaining_capacity = (item.max_students - item.enrolled_count).max(0);
@@ -301,7 +300,7 @@ impl Projector for ClassRoomListProjector {
             },
             StudentDroppedFromClassRoom(e) => {
                 let mut next = state;
-                if let Some(item) = next.items.iter_mut().find(|item| item.class_room_id == e.class_room_id) {
+                if let Some(item) = next.items.get_mut(&e.class_room_id) {
                     item.enrolled_count = (item.enrolled_count - 1).max(0);
                     item.is_full = item.enrolled_count >= item.max_students;
                     item.remaining_capacity = (item.max_students - item.enrolled_count).max(0);
@@ -317,7 +316,7 @@ impl MultiProjectorQuery for ClassRoomListProjector {
         if query_type != GetClassRoomListQuery::QUERY_TYPE {
             return None;
         }
-        let mut items = state.items.clone();
+        let mut items: Vec<_> = state.items.values().collect();
         items.sort_by(|left, right| left.name.cmp(&right.name));
         Some(sort_json(&items, "[]"))
     }
@@ -373,7 +372,7 @@ impl Projector for UserDirectoryListProjector {
         match_event!(event, state, {
             UserRegistered(e) => {
                 let mut next = state;
-                next.items.push(UserDirectoryListItem {
+                next.items.insert(e.user_id, UserDirectoryListItem {
                     user_id: e.user_id,
                     display_name: e.display_name.clone(),
                     email: e.email.clone(),
@@ -388,7 +387,7 @@ impl Projector for UserDirectoryListProjector {
             },
             UserProfileUpdated(e) => {
                 let mut next = state;
-                if let Some(item) = next.items.iter_mut().find(|item| item.user_id == e.user_id) {
+                if let Some(item) = next.items.get_mut(&e.user_id) {
                     item.display_name = e.display_name.clone();
                     item.email = e.email.clone();
                     item.department = e.department.clone();
@@ -406,12 +405,11 @@ impl MultiProjectorQuery for UserDirectoryListProjector {
             return None;
         }
         let query: GetUserDirectoryListQuery = serde_json::from_str(params).unwrap_or_default();
-        let mut items = state
+        let mut items: Vec<_> = state
             .items
-            .iter()
+            .values()
             .filter(|item| !query.active_only || item.is_active)
-            .cloned()
-            .collect::<Vec<_>>();
+            .collect();
         items.sort_by(|left, right| left.display_name.cmp(&right.display_name));
         Some(sort_json(&items, "[]"))
     }
@@ -460,7 +458,7 @@ impl Projector for UserAccessListProjector {
         match_event!(event, state, {
             UserAccessGranted(e) => {
                 let mut next = state;
-                next.items.push(UserAccessListItem {
+                next.items.insert(e.user_id, UserAccessListItem {
                     user_id: e.user_id,
                     roles: vec![e.initial_role.clone()],
                     is_active: true,
@@ -470,7 +468,7 @@ impl Projector for UserAccessListProjector {
             },
             UserRoleGranted(e) => {
                 let mut next = state;
-                if let Some(item) = next.items.iter_mut().find(|item| item.user_id == e.user_id) {
+                if let Some(item) = next.items.get_mut(&e.user_id) {
                     append_unique(&mut item.roles, &e.role);
                 }
                 next
@@ -485,9 +483,9 @@ impl MultiProjectorQuery for UserAccessListProjector {
             return None;
         }
         let query: GetUserAccessListQuery = serde_json::from_str(params).unwrap_or_default();
-        let mut items = state
+        let mut items: Vec<_> = state
             .items
-            .iter()
+            .values()
             .filter(|item| !query.active_only || item.is_active)
             .filter(|item| {
                 query
@@ -495,8 +493,7 @@ impl MultiProjectorQuery for UserAccessListProjector {
                     .as_ref()
                     .is_none_or(|role| item.roles.iter().any(|item_role| item_role == role))
             })
-            .cloned()
-            .collect::<Vec<_>>();
+            .collect();
         items.sort_by(|left, right| right.granted_at.cmp(&left.granted_at));
         Some(sort_json(&items, "[]"))
     }
@@ -552,7 +549,7 @@ impl Projector for RoomListProjector {
         match_event!(event, state, {
             RoomCreated(e) => {
                 let mut next = state;
-                next.items.push(RoomListItem {
+                next.items.insert(e.room_id, RoomListItem {
                     room_id: e.room_id,
                     name: e.name.clone(),
                     capacity: e.capacity,
@@ -565,7 +562,7 @@ impl Projector for RoomListProjector {
             },
             RoomUpdated(e) => {
                 let mut next = state;
-                if let Some(item) = next.items.iter_mut().find(|item| item.room_id == e.room_id) {
+                if let Some(item) = next.items.get_mut(&e.room_id) {
                     item.name = e.name.clone();
                     item.capacity = e.capacity;
                     item.location = e.location.clone();
@@ -583,7 +580,7 @@ impl MultiProjectorQuery for RoomListProjector {
         if query_type != GetRoomListQuery::QUERY_TYPE {
             return None;
         }
-        let mut items = state.items.clone();
+        let mut items: Vec<_> = state.items.values().collect();
         items.sort_by(|left, right| left.name.cmp(&right.name));
         Some(sort_json(&items, "[]"))
     }
@@ -712,7 +709,7 @@ impl Projector for ReservationListProjector {
         match_event!(event, state, {
             ReservationDraftCreated(e) => {
                 let mut next = state;
-                next.items.push(ReservationListItem {
+                next.items.insert(e.reservation_id, ReservationListItem {
                     reservation_id: e.reservation_id,
                     room_id: e.room_id,
                     organizer_id: e.organizer_id,
@@ -731,7 +728,7 @@ impl Projector for ReservationListProjector {
             },
             ReservationHoldCommitted(e) => {
                 let mut next = state;
-                if let Some(item) = next.items.iter_mut().find(|item| item.reservation_id == e.reservation_id) {
+                if let Some(item) = next.items.get_mut(&e.reservation_id) {
                     item.status = "Held".to_string();
                     item.requires_approval = e.requires_approval;
                     item.approval_request_id = e.approval_request_id;
@@ -741,7 +738,7 @@ impl Projector for ReservationListProjector {
             },
             ReservationConfirmed(e) => {
                 let mut next = state;
-                if let Some(item) = next.items.iter_mut().find(|item| item.reservation_id == e.reservation_id) {
+                if let Some(item) = next.items.get_mut(&e.reservation_id) {
                     item.status = "Confirmed".to_string();
                     item.requires_approval = e.approval_request_id.is_some();
                     item.approval_request_id = e.approval_request_id;
@@ -752,7 +749,7 @@ impl Projector for ReservationListProjector {
             },
             ReservationCancelled(e) => {
                 let mut next = state;
-                if let Some(item) = next.items.iter_mut().find(|item| item.reservation_id == e.reservation_id) {
+                if let Some(item) = next.items.get_mut(&e.reservation_id) {
                     item.status = "Cancelled".to_string();
                     item.requires_approval = false;
                     item.approval_request_id = None;
@@ -763,7 +760,7 @@ impl Projector for ReservationListProjector {
             },
             ReservationRejected(e) => {
                 let mut next = state;
-                if let Some(item) = next.items.iter_mut().find(|item| item.reservation_id == e.reservation_id) {
+                if let Some(item) = next.items.get_mut(&e.reservation_id) {
                     item.status = "Rejected".to_string();
                     item.requires_approval = true;
                     item.approval_request_id = Some(e.approval_request_id);
@@ -782,12 +779,11 @@ impl MultiProjectorQuery for ReservationListProjector {
             return None;
         }
         let query: GetReservationListQuery = serde_json::from_str(params).unwrap_or_default();
-        let mut items = state
+        let mut items: Vec<_> = state
             .items
-            .iter()
+            .values()
             .filter(|item| query.room_id.is_none_or(|room_id| item.room_id == room_id))
-            .cloned()
-            .collect::<Vec<_>>();
+            .collect();
         items.sort_by(|left, right| left.start_time.cmp(&right.start_time));
         Some(sort_json(&items, "[]"))
     }
@@ -847,7 +843,7 @@ impl Projector for ApprovalInboxProjector {
         match_event!(event, state, {
             ApprovalFlowStarted(e) => {
                 let mut next = state;
-                next.items.push(ApprovalInboxItem {
+                next.items.insert(e.approval_request_id, ApprovalInboxItem {
                     approval_request_id: e.approval_request_id,
                     reservation_id: e.reservation_id,
                     room_id: e.room_id,
@@ -861,7 +857,7 @@ impl Projector for ApprovalInboxProjector {
             },
             ApprovalDecisionRecorded(e) => {
                 let mut next = state;
-                if let Some(item) = next.items.iter_mut().find(|item| item.approval_request_id == e.approval_request_id) {
+                if let Some(item) = next.items.get_mut(&e.approval_request_id) {
                     item.status = match e.decision {
                         ApprovalDecision::Approved => "Approved",
                         ApprovalDecision::Rejected => "Rejected",
@@ -881,12 +877,11 @@ impl MultiProjectorQuery for ApprovalInboxProjector {
             return None;
         }
         let query: GetApprovalInboxQuery = serde_json::from_str(params).unwrap_or_default();
-        let mut items = state
+        let mut items: Vec<_> = state
             .items
-            .iter()
+            .values()
             .filter(|item| !query.pending_only || item.status == "Pending")
-            .cloned()
-            .collect::<Vec<_>>();
+            .collect();
         items.sort_by(|left, right| right.requested_at.cmp(&left.requested_at));
         Some(sort_json(&items, "[]"))
     }
