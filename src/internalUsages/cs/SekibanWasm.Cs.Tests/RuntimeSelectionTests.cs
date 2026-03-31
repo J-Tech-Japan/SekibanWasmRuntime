@@ -6,6 +6,8 @@ using SekibanWasm.Cs.Domain.Weather;
 using Sekiban.Dcb.Primitives;
 using Sekiban.Dcb.Runtime;
 using Sekiban.Dcb.Domains;
+using Sekiban.Dcb.Runtime.Native;
+using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.WasmRuntime;
 using Sekiban.Dcb.Tags;
 using System.Text.Json;
@@ -326,6 +328,57 @@ public class RuntimeSelectionTests
         Assert.Contains(
             services,
             d => d.ServiceType == typeof(WasmTagStateOptions));
+    }
+
+    [Fact]
+    public void AddSekibanDcbSharedRuntime_ShouldRegisterOnlySharedRuntimeServices()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(DomainType.GetDomainTypes());
+
+        services.AddSekibanDcbSharedRuntime();
+
+        Assert.Contains(services, d => d.ServiceType == typeof(ITagProjectorTypes));
+        Assert.Contains(services, d => d.ServiceType == typeof(ITagTypes));
+        Assert.Contains(services, d => d.ServiceType == typeof(IEventTypes));
+        Assert.Contains(services, d => d.ServiceType == typeof(ITagStatePayloadTypes));
+        Assert.Contains(services, d => d.ServiceType == typeof(SnapshotTempFileOptions));
+        Assert.Contains(services, d => d.ServiceType == typeof(TempFileSnapshotManager));
+        Assert.DoesNotContain(services, d => d.ServiceType == typeof(IProjectionActorHostFactory));
+        Assert.DoesNotContain(services, d => d.ServiceType == typeof(ITagStateProjectionPrimitive));
+        Assert.DoesNotContain(services, d => d.ServiceType == typeof(IMultiProjectionProjectionPrimitive));
+    }
+
+    [Fact]
+    public void AddSekibanDcbFullNativeRuntime_ShouldRegisterSharedAndNativeRuntimeServices()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(DomainType.GetDomainTypes());
+
+        services.AddSekibanDcbFullNativeRuntime();
+
+        Assert.Contains(
+            services,
+            d => d.ServiceType == typeof(IProjectionActorHostFactory) &&
+                 d.ImplementationType == typeof(NativeProjectionActorHostFactory));
+        Assert.Contains(
+            services,
+            d => d.ServiceType == typeof(ITagStateProjectionPrimitive) &&
+                 d.ImplementationType == typeof(NativeTagStateProjectionPrimitive));
+        Assert.Contains(
+            services,
+            d => d.ServiceType == typeof(NativeMultiProjectionProjectionPrimitive) &&
+                 d.ImplementationType == typeof(NativeMultiProjectionProjectionPrimitive));
+        Assert.Contains(
+            services,
+            d => d.ServiceType == typeof(IMultiProjectionProjectionPrimitive) &&
+                 d.ImplementationFactory is not null);
+        Assert.Contains(services, d => d.ServiceType == typeof(ITagProjectorTypes));
+        Assert.Contains(services, d => d.ServiceType == typeof(ITagTypes));
+        Assert.Contains(services, d => d.ServiceType == typeof(IEventTypes));
+        Assert.Contains(services, d => d.ServiceType == typeof(ITagStatePayloadTypes));
+        Assert.Contains(services, d => d.ServiceType == typeof(SnapshotTempFileOptions));
+        Assert.Contains(services, d => d.ServiceType == typeof(TempFileSnapshotManager));
     }
 
     [Fact]

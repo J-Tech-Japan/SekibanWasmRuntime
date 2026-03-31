@@ -87,7 +87,7 @@ RuntimeHostStorageConfigurationResolver.ConfigureServices(
     builder.Configuration,
     storageConfiguration,
     builder.Environment.ContentRootPath);
-builder.Services.AddSekibanDcbNativeRuntime();
+builder.Services.AddSekibanDcbSharedRuntime();
 builder.Services.AddSingleton<IEventSubscriptionResolver>(_ =>
     new DefaultOrleansEventSubscriptionResolver(
         "EventStreamProvider",
@@ -96,7 +96,7 @@ builder.Services.AddSingleton<IEventSubscriptionResolver>(_ =>
 builder.Services.AddSingleton<IMultiProjectionEventStatistics, NoOpMultiProjectionEventStatistics>();
 builder.Services.AddSingleton(new GeneralMultiProjectionActorOptions());
 builder.Services.AddSingleton<IActorObjectAccessor, OrleansActorObjectAccessor>();
-builder.Services.Replace(ServiceDescriptor.Singleton<IProjectionActorHostFactory, WasmProjectionActorHostFactory>());
+builder.Services.AddSingleton<IProjectionActorHostFactory, WasmProjectionActorHostFactory>();
 builder.Services.AddTransient<OrleansDcbExecutor>();
 builder.Services.AddTransient<ISekibanExecutor>(sp =>
     sp.GetRequiredService<OrleansDcbExecutor>());

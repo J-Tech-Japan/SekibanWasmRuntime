@@ -61,7 +61,7 @@ builder.Services.AddSingleton<Sekiban.Dcb.Domains.IEventTypes>(_ => domainTypes.
 builder.Services.AddSingleton<Sekiban.Dcb.ServiceId.IServiceIdProvider, Sekiban.Dcb.ServiceId.DefaultServiceIdProvider>();
 builder.Services.AddSekibanDcbPostgresWithAspire("SekibanCsDb");
 
-builder.Services.AddSekibanDcbNativeRuntime();
+builder.Services.AddSekibanDcbSharedRuntime();
 builder.Services.AddSingleton<Sekiban.Dcb.Actors.IEventSubscriptionResolver>(_ =>
     new Sekiban.Dcb.Orleans.Streams.DefaultOrleansEventSubscriptionResolver(
         "EventStreamProvider",

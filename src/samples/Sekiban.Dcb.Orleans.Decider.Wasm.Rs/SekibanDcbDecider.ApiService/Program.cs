@@ -148,8 +148,8 @@ var domainTypes = DomainType.GetDomainTypes();
 builder.Services.AddSingleton(domainTypes);
 builder.Services.AddSingleton<JsonSerializerOptions>(_ => new JsonSerializerOptions(JsonSerializerDefaults.Web));
 
-// Register native runtime abstraction interfaces
-builder.Services.AddSekibanDcbNativeRuntime();
+// Register native runtime (projections run in-process)
+builder.Services.AddSekibanDcbFullNativeRuntime();
 builder.Services.AddSekibanDcbColdEventDefaults();
 
 builder.Services.AddSingleton<SseTopicHub>();

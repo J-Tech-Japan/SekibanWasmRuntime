@@ -88,7 +88,7 @@ The reference implementation lives at `submodules/Sekiban/dcb/internalUsages/Dcb
 
 The core architectural difference is how projections execute:
 
-- **DcbOrleans (Reference)**: Projections run natively in the C# process via `AddSekibanDcbNativeRuntime()`. The Orleans grains directly invoke C# projector classes.
+- **DcbOrleans (Reference)**: Projections run natively in the C# process via `AddSekibanDcbFullNativeRuntime()`. The Orleans grains directly invoke C# projector classes.
 - **CS/Rust (This Repo)**: Projections run inside a Wasmtime sandbox via `WasmProjectionRuntime`. A `WasmProjectorRegistry` maps projector names to `.wasm` module files. This enables language-agnostic projection logic (C# or Rust compiled to WASM).
 
 ## Running
