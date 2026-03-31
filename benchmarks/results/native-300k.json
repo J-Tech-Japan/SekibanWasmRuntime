@@ -1,27 +1,27 @@
 {
   "ModeLabel": "native",
-  "BaseUrl": "http://localhost:57465",
+  "BaseUrl": "http://localhost:64101",
   "TargetEvents": 300000,
   "Concurrency": 8,
-  "StartedAtUtc": "2026-03-31T10:04:37.0998Z",
-  "CompletedAtUtc": "2026-03-31T10:15:39.191253Z",
-  "TotalDurationSeconds": 662.088534,
+  "StartedAtUtc": "2026-03-31T17:51:57.443275Z",
+  "CompletedAtUtc": "2026-03-31T18:02:55.065647Z",
+  "TotalDurationSeconds": 657.617666,
   "Phases": [
     {
       "Name": "Setup",
       "TotalOperations": 20,
       "TotalEventsCreated": 20,
       "ErrorCount": 0,
-      "DurationSeconds": 0.091439,
-      "OperationsPerSecond": 218.72505167379344,
-      "EventsPerSecond": 218.72505167379344,
+      "DurationSeconds": 0.0955092,
+      "OperationsPerSecond": 209.4039108274386,
+      "EventsPerSecond": 209.4039108274386,
       "CommandLatency": {
-        "MinMs": 3.187,
-        "MaxMs": 12.1746,
-        "MeanMs": 4.43621,
-        "P50Ms": 3.6851,
-        "P95Ms": 5.7782,
-        "P99Ms": 12.1746
+        "MinMs": 3.5885,
+        "MaxMs": 10.9961,
+        "MeanMs": 4.64157,
+        "P50Ms": 4.0891,
+        "P95Ms": 5.6277,
+        "P99Ms": 10.9961
       },
       "QueryLatency": null,
       "StatusCodeDistribution": {
@@ -33,16 +33,16 @@
       "TotalOperations": 180000,
       "TotalEventsCreated": 180000,
       "ErrorCount": 0,
-      "DurationSeconds": 99.1387403,
-      "OperationsPerSecond": 1815.6373528179681,
-      "EventsPerSecond": 1815.6373528179681,
+      "DurationSeconds": 97.6648504,
+      "OperationsPerSecond": 1843.0376871800338,
+      "EventsPerSecond": 1843.0376871800338,
       "CommandLatency": {
-        "MinMs": 2.3532,
-        "MaxMs": 273.4482,
-        "MeanMs": 4.396719257777787,
-        "P50Ms": 4.1609,
-        "P95Ms": 5.8218,
-        "P99Ms": 9.93
+        "MinMs": 2.2849,
+        "MaxMs": 149.6601,
+        "MeanMs": 4.3358347466666105,
+        "P50Ms": 4.1033,
+        "P95Ms": 5.7658,
+        "P99Ms": 10.1473
       },
       "QueryLatency": null,
       "StatusCodeDistribution": {
@@ -52,24 +52,24 @@
     {
       "Name": "ReservationLifecycle",
       "TotalOperations": 80000,
-      "TotalEventsCreated": 6831,
-      "ErrorCount": 73179,
-      "DurationSeconds": 562.1188536,
-      "OperationsPerSecond": 142.3186564329818,
-      "EventsPerSecond": 12.152234276171235,
+      "TotalEventsCreated": 6854,
+      "ErrorCount": 73156,
+      "DurationSeconds": 559.3315795,
+      "OperationsPerSecond": 143.02786206263187,
+      "EventsPerSecond": 12.253912082215985,
       "CommandLatency": {
-        "MinMs": 0.702,
-        "MaxMs": 917.6492,
-        "MeanMs": 48.25638161749989,
-        "P50Ms": 1.5027,
-        "P95Ms": 355.7607,
-        "P99Ms": 561.3717
+        "MinMs": 0.6597,
+        "MaxMs": 958.7844,
+        "MeanMs": 48.09520684875024,
+        "P50Ms": 1.4693,
+        "P95Ms": 351.9596,
+        "P99Ms": 556.2794
       },
       "QueryLatency": null,
       "StatusCodeDistribution": {
         "400": 66653,
-        "200": 6821,
-        "500": 6526
+        "200": 6844,
+        "500": 6503
       }
     },
     {
@@ -77,16 +77,16 @@
       "TotalOperations": 250,
       "TotalEventsCreated": 0,
       "ErrorCount": 0,
-      "DurationSeconds": 0.4018989,
-      "OperationsPerSecond": 622.0469874388808,
+      "DurationSeconds": 0.1868606,
+      "OperationsPerSecond": 1337.8957361798048,
       "EventsPerSecond": 0,
       "CommandLatency": {
-        "MinMs": 0.1929,
-        "MaxMs": 266.6336,
-        "MeanMs": 1.6035968000000003,
-        "P50Ms": 0.2618,
-        "P95Ms": 0.4517,
-        "P99Ms": 23.7662
+        "MinMs": 0.1893,
+        "MaxMs": 50.6051,
+        "MeanMs": 0.7432904000000001,
+        "P50Ms": 0.2498,
+        "P95Ms": 0.5361,
+        "P99Ms": 22.1482
       },
       "QueryLatency": null,
       "StatusCodeDistribution": {
