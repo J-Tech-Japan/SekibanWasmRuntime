@@ -3,6 +3,8 @@ import { router, publicProcedure } from "../api/trpc";
 import { createAuthHeaders } from "../lib/auth-helpers";
 import { extractErrorMessage } from "../lib/api-error-helpers";
 
+const eventApiBaseUrl = process.env.CLIENT_API_BASE_URL ?? process.env.API_BASE_URL;
+
 const approvalDecisionSchema = z.enum(["Approved", "Rejected"]);
 
 const approvalInboxItemSchema = z.object({
@@ -44,7 +46,7 @@ export const approvalsRouter = router({
       }
 
       const headers = await createAuthHeaders();
-      const res = await fetch(`${process.env.API_BASE_URL}/api/approvals?${params.toString()}`, { headers });
+      const res = await fetch(`${eventApiBaseUrl}/api/approvals?${params.toString()}`, { headers });
       if (!res.ok) {
         if (res.status === 401) {
           throw new Error("Authentication required");
@@ -71,7 +73,7 @@ export const approvalsRouter = router({
     .mutation(async ({ input }) => {
       const headers = await createAuthHeaders();
       const res = await fetch(
-        `${process.env.API_BASE_URL}/api/approvals/${input.approvalRequestId}/decision`,
+        `${eventApiBaseUrl}/api/approvals/${input.approvalRequestId}/decision`,
         {
           method: "POST",
           headers,

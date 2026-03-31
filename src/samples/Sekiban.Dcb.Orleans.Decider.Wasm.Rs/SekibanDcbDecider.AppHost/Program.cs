@@ -1,5 +1,7 @@
 using Projects;
 using SekibanWasm.AppHostShared;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
@@ -35,12 +37,14 @@ builder.AddDbGateForPostgres(
     hostPort: dbGatePort);
 
 var rustWasmModulePath = ResolveRustWasmModulePath();
+var rustManifestPath = ResolveRustManifestPath(rustWasmModulePath);
 var apiServicePort = AppHostInfrastructure.ResolveConfiguredPort(6197, "E2E_API_SERVICE_PORT", "API_SERVICE_PORT");
 
 var wasmServerBuilder = builder
     .AddProject<Sekiban_Dcb_WasmRuntime_Host>("wasmserver")
     .WithEnvironment("SEKIBAN_STORAGE_PROVIDER", "postgres")
     .WithEnvironment("WASM_MODULE_PATH", rustWasmModulePath)
+    .WithEnvironment("SEKIBAN_MANIFEST_PATH", rustManifestPath)
     .WithReference(postgres, "SekibanDcb")
     .WaitFor(postgres)
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
@@ -107,7 +111,9 @@ var clientApi = clientApiBuilder
 var webFrontend = builder
     .AddProject<SekibanDcbDecider_Web>("webfrontend")
     .WithReference(clientApi.GetEndpoint("http"))
+    .WithReference(apiService.GetEndpoint("http"))
     .WithEnvironment("CLIENT_API_URL", "http://127.0.0.1:" + clientApiPort)
+    .WithEnvironment("AUTH_API_URL", "http://127.0.0.1:" + apiServicePort)
     .WaitFor(clientApi);
 
 var webPort = AppHostInfrastructure.ResolveConfiguredPort(6180, "E2E_WEB_PORT");
@@ -159,13 +165,6 @@ static string ResolveRustWasmModulePath()
             "target",
             "wasm32-wasip1",
             "release",
-            "sekiban-dcb-decider-rust-wasm.wasm")),
-        Path.GetFullPath(Path.Combine(
-            Directory.GetCurrentDirectory(),
-            "..",
-            "target",
-            "wasm32-wasip1",
-            "release",
             "sekiban_dcb_decider_rust_wasm.wasm")),
         Path.GetFullPath(Path.Combine(
             Directory.GetCurrentDirectory(),
@@ -192,4 +191,51 @@ static string ResolveRustWasmModulePath()
 
     throw new InvalidOperationException(
         "Rust WASM module not found. Set RUST_WASM_MODULE_PATH or build SekibanDcbDecider.Rust.Wasm first.");
+}
+
+static string ResolveRustManifestPath(string wasmModulePath)
+{
+    string? envPath = Environment.GetEnvironmentVariable("RUST_WASM_MANIFEST_PATH")
+        ?? Environment.GetEnvironmentVariable("SEKIBAN_MANIFEST_PATH");
+    if (!string.IsNullOrWhiteSpace(envPath))
+    {
+        string resolved = Path.IsPathRooted(envPath)
+            ? envPath
+            : Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), envPath));
+        if (File.Exists(resolved))
+        {
+            return resolved;
+        }
+    }
+
+    string candidate = Path.GetFullPath(Path.Combine(
+        Directory.GetCurrentDirectory(),
+        "..",
+        "modules",
+        "sekiban-runtime-manifest.json"));
+    if (!File.Exists(candidate))
+    {
+        throw new InvalidOperationException(
+            "Rust WASM manifest not found. Set RUST_WASM_MANIFEST_PATH or provide modules/sekiban-runtime-manifest.json.");
+    }
+
+    JsonNode root = JsonNode.Parse(File.ReadAllText(candidate))
+        ?? throw new InvalidOperationException($"Failed to parse manifest template at '{candidate}'.");
+    root["defaultModulePath"] = wasmModulePath;
+    if (root["projectors"] is JsonArray projectors)
+    {
+        foreach (JsonNode? projector in projectors)
+        {
+            if (projector is JsonObject projectorObject)
+            {
+                projectorObject["modulePath"] = wasmModulePath;
+            }
+        }
+    }
+
+    string generatedDirectory = Path.Combine(Directory.GetCurrentDirectory(), ".generated");
+    Directory.CreateDirectory(generatedDirectory);
+    string generatedPath = Path.Combine(generatedDirectory, "sekiban-runtime-manifest.generated.json");
+    File.WriteAllText(generatedPath, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+    return generatedPath;
 }

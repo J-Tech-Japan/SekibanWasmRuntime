@@ -3,6 +3,8 @@ import { router, publicProcedure } from "../api/trpc";
 import { createAuthHeaders } from "../lib/auth-helpers";
 import { extractErrorMessage } from "../lib/api-error-helpers";
 
+const eventApiBaseUrl = process.env.CLIENT_API_BASE_URL ?? process.env.API_BASE_URL;
+
 const roomSchema = z.object({
   roomId: z.string().uuid(),
   name: z.string(),
@@ -50,7 +52,7 @@ export const roomsRouter = router({
 
       const headers = await createAuthHeaders();
       const res = await fetch(
-        `${process.env.API_BASE_URL}/api/rooms?${params.toString()}`,
+        `${eventApiBaseUrl}/api/rooms?${params.toString()}`,
         { headers }
       );
       if (!res.ok) {
@@ -67,7 +69,7 @@ export const roomsRouter = router({
     .input(createRoomSchema)
     .mutation(async ({ input }) => {
       const headers = await createAuthHeaders();
-      const res = await fetch(`${process.env.API_BASE_URL}/api/rooms`, {
+      const res = await fetch(`${eventApiBaseUrl}/api/rooms`, {
         method: "POST",
         headers,
         body: JSON.stringify({
@@ -94,7 +96,7 @@ export const roomsRouter = router({
     .mutation(async ({ input }) => {
       const headers = await createAuthHeaders();
       const res = await fetch(
-        `${process.env.API_BASE_URL}/api/rooms/${input.roomId}`,
+        `${eventApiBaseUrl}/api/rooms/${input.roomId}`,
         {
           method: "PUT",
           headers,

@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { router, publicProcedure } from "../api/trpc";
 
+const eventApiBaseUrl = process.env.CLIENT_API_BASE_URL ?? process.env.API_BASE_URL;
+
 const classroomSchema = z.object({
   classRoomId: z.string().uuid(),
   name: z.string(),
@@ -33,7 +35,7 @@ export const classroomsRouter = router({
       }
 
       const res = await fetch(
-        `${process.env.API_BASE_URL}/api/classrooms?${params.toString()}`
+        `${eventApiBaseUrl}/api/classrooms?${params.toString()}`
       );
       if (!res.ok) {
         throw new Error("Failed to fetch classrooms");
@@ -46,7 +48,7 @@ export const classroomsRouter = router({
     .input(createClassroomSchema)
     .mutation(async ({ input }) => {
       const classRoomId = crypto.randomUUID();
-      const res = await fetch(`${process.env.API_BASE_URL}/api/classrooms`, {
+      const res = await fetch(`${eventApiBaseUrl}/api/classrooms`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

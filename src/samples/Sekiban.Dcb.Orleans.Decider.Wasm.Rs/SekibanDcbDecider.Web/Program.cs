@@ -4,7 +4,8 @@ using SekibanDcbDecider.Web.Components;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
-var apiBaseUrl = ResolveClientApiBase(builder.Configuration);
+var clientApiBase = ResolveBaseUrl(builder.Configuration, "CLIENT_API_URL", "clientapi", "http://127.0.0.1:5000");
+var authApiBase = ResolveBaseUrl(builder.Configuration, "AUTH_API_URL", "apiservice", "http://127.0.0.1:5001");
 
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 
@@ -12,32 +13,32 @@ builder.Services.AddHttpClient(
     "ApiService",
     client =>
     {
-        client.BaseAddress = new Uri(apiBaseUrl);
+        client.BaseAddress = new Uri(clientApiBase);
     });
 
 builder.Services.AddHttpClient<WeatherApiClient>(client =>
 {
-    client.BaseAddress = new Uri(apiBaseUrl);
+    client.BaseAddress = new Uri(clientApiBase);
 });
 
 builder.Services.AddHttpClient<StudentApiClient>(client =>
 {
-    client.BaseAddress = new Uri(apiBaseUrl);
+    client.BaseAddress = new Uri(clientApiBase);
 });
 
 builder.Services.AddHttpClient<ClassRoomApiClient>(client =>
 {
-    client.BaseAddress = new Uri(apiBaseUrl);
+    client.BaseAddress = new Uri(clientApiBase);
 });
 
 builder.Services.AddHttpClient<EnrollmentApiClient>(client =>
 {
-    client.BaseAddress = new Uri(apiBaseUrl);
+    client.BaseAddress = new Uri(clientApiBase);
 });
 
 builder.Services.AddHttpClient<AuthApiClient>(client =>
 {
-    client.BaseAddress = new Uri(apiBaseUrl);
+    client.BaseAddress = new Uri(authApiBase);
 });
 
 var app = builder.Build();
@@ -61,16 +62,20 @@ app.MapDefaultEndpoints();
 
 app.Run();
 
-static string ResolveClientApiBase(IConfiguration configuration)
+static string ResolveBaseUrl(
+    IConfiguration configuration,
+    string explicitEnvName,
+    string serviceName,
+    string fallback)
 {
     string[] candidates =
     [
-        Environment.GetEnvironmentVariable("CLIENT_API_URL") ?? string.Empty,
-        Environment.GetEnvironmentVariable("services__clientapi__http__0") ?? string.Empty,
-        Environment.GetEnvironmentVariable("services__clientapi__https__0") ?? string.Empty,
-        configuration["services:clientapi:http:0"] ?? string.Empty,
-        configuration["services:clientapi:https:0"] ?? string.Empty,
-        "http://127.0.0.1:5000"
+        Environment.GetEnvironmentVariable(explicitEnvName) ?? string.Empty,
+        Environment.GetEnvironmentVariable($"services__{serviceName}__http__0") ?? string.Empty,
+        Environment.GetEnvironmentVariable($"services__{serviceName}__https__0") ?? string.Empty,
+        configuration[$"services:{serviceName}:http:0"] ?? string.Empty,
+        configuration[$"services:{serviceName}:https:0"] ?? string.Empty,
+        fallback
     ];
 
     foreach (var candidate in candidates)
@@ -81,5 +86,5 @@ static string ResolveClientApiBase(IConfiguration configuration)
         }
     }
 
-    return "http://127.0.0.1:5000";
+    return fallback;
 }

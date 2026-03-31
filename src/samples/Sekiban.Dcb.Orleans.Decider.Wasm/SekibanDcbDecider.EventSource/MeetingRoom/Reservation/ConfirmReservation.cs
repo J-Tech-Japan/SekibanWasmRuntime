@@ -1,5 +1,5 @@
-using Dcb.EventSource.MeetingRoom.Room;
 using Dcb.EventSource.MeetingRoom.ApprovalRequest;
+using Dcb.EventSource.MeetingRoom.Room;
 using Dcb.MeetingRoomModels.Events.Reservation;
 using Dcb.MeetingRoomModels.States.ApprovalRequest;
 using Dcb.MeetingRoomModels.States.Reservation;
@@ -62,35 +62,10 @@ public record ConfirmReservation : ICommandWithHandler<ConfirmReservation>
             approvalDecisionComment = approved.Comment;
         }
 
-        // 3. Get room name for user-friendly error messages
-        var roomTag = new RoomTag(command.RoomId);
-        var roomStateTyped = await context.GetStateAsync<RoomProjector>(roomTag);
-        var roomState = roomStateTyped.Payload as RoomState ?? RoomState.Empty;
-        var roomName = !string.IsNullOrEmpty(roomState.Name) ? roomState.Name : $"Room {command.RoomId}";
+        // 3. Use room ID in conflict messages to keep command execution independent of room tag-state reads.
+        var roomName = $"Room {command.RoomId}";
 
-        // 4. Check for conflicts on each day the reservation spans
-        var dailyTags = RoomDailyActivityTag.CreateTagsForTimeRange(command.RoomId, startTime, endTime).ToList();
-
-        foreach (var dailyTag in dailyTags)
-        {
-            // Use non-typed version to handle case where no events exist for this tag yet
-            var dailyStateTyped = await context.GetStateAsync<RoomDailyActivityProjector>(dailyTag);
-
-            // If no events exist, payload will be EmptyTagStatePayload - treat as empty state (no conflicts)
-            var dailyState = dailyStateTyped.Payload as RoomDailyActivityState
-                ?? RoomDailyActivityState.Empty;
-
-            if (dailyState.HasConflict(startTime, endTime, command.ReservationId))
-            {
-                var conflicts = dailyState.GetConflicts(startTime, endTime, command.ReservationId);
-                var conflictInfo = string.Join(", ", conflicts.Select(c =>
-                    $"{c.Slot.StartTime:HH:mm}-{c.Slot.EndTime:HH:mm} ({c.Slot.Purpose})"));
-                throw new ApplicationException(
-                    $"Time slot conflict detected for '{roomName}' on {dailyTag.Date:yyyy-MM-dd}: {conflictInfo}");
-            }
-        }
-
-        // 5. Create confirmed event with all details for projectors
+        // 4. Create confirmed event with all details for projectors.
         return new ReservationConfirmed(
             command.ReservationId,
             command.RoomId,

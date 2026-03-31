@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { router, publicProcedure } from "../api/trpc";
 
+const eventApiBaseUrl = process.env.CLIENT_API_BASE_URL ?? process.env.API_BASE_URL;
+
 const enrollmentSchema = z.object({
   studentId: z.string().uuid(),
   studentName: z.string(),
@@ -34,8 +36,8 @@ export const enrollmentsRouter = router({
       }
 
       const [studentsRes, classroomsRes] = await Promise.all([
-        fetch(`${process.env.API_BASE_URL}/api/students?${params.toString()}`),
-        fetch(`${process.env.API_BASE_URL}/api/classrooms?${params.toString()}`),
+        fetch(`${eventApiBaseUrl}/api/students?${params.toString()}`),
+        fetch(`${eventApiBaseUrl}/api/classrooms?${params.toString()}`),
       ]);
 
       if (!studentsRes.ok || !classroomsRes.ok) {
@@ -70,7 +72,7 @@ export const enrollmentsRouter = router({
   enroll: publicProcedure
     .input(enrollStudentSchema)
     .mutation(async ({ input }) => {
-      const res = await fetch(`${process.env.API_BASE_URL}/api/enrollments/add`, {
+      const res = await fetch(`${eventApiBaseUrl}/api/enrollments/add`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -87,7 +89,7 @@ export const enrollmentsRouter = router({
 
   drop: publicProcedure.input(dropStudentSchema).mutation(async ({ input }) => {
     const res = await fetch(
-      `${process.env.API_BASE_URL}/api/enrollments/drop`,
+      `${eventApiBaseUrl}/api/enrollments/drop`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
