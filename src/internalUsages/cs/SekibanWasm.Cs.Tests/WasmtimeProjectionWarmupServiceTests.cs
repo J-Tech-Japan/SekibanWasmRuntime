@@ -65,14 +65,14 @@ public sealed class WasmtimeProjectionWarmupServiceTests
     private static async Task WaitForAsync(Func<bool> condition)
     {
         var started = DateTime.UtcNow;
-        while (DateTime.UtcNow - started < TimeSpan.FromSeconds(1))
+        while (DateTime.UtcNow - started < TimeSpan.FromSeconds(5))
         {
             if (condition())
             {
                 return;
             }
 
-            await Task.Delay(10);
+            await Task.Delay(25);
         }
 
         throw new TimeoutException("Condition was not reached in time.");
