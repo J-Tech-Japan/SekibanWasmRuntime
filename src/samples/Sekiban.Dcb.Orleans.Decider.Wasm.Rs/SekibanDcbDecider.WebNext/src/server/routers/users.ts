@@ -3,6 +3,8 @@ import { router, publicProcedure } from "../api/trpc";
 import { createAuthHeaders } from "../lib/auth-helpers";
 import { extractErrorMessage } from "../lib/api-error-helpers";
 
+const eventApiBaseUrl = process.env.CLIENT_API_BASE_URL ?? process.env.API_BASE_URL;
+
 const userDirectoryItemSchema = z.object({
   userId: z.string().uuid(),
   displayName: z.string(),
@@ -37,7 +39,7 @@ export const usersRouter = router({
       }
 
       const headers = await createAuthHeaders();
-      const res = await fetch(`${process.env.API_BASE_URL}/api/users?${params.toString()}`, { headers });
+      const res = await fetch(`${eventApiBaseUrl}/api/users?${params.toString()}`, { headers });
       if (!res.ok) {
         if (res.status === 401) {
           throw new Error("Authentication required");
@@ -60,7 +62,7 @@ export const usersRouter = router({
     )
     .mutation(async ({ input }) => {
       const headers = await createAuthHeaders();
-      const res = await fetch(`${process.env.API_BASE_URL}/api/users/${input.userId}/monthly-limit`, {
+      const res = await fetch(`${eventApiBaseUrl}/api/users/${input.userId}/monthly-limit`, {
         method: "POST",
         headers,
         body: JSON.stringify({

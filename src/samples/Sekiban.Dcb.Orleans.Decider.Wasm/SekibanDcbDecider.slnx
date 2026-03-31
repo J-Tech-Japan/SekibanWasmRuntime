@@ -2,6 +2,7 @@
   <Project Path="SekibanDcbDecider.ApiService\SekibanDcbDecider.ApiService.csproj" />
   <Project Path="SekibanDcbDecider.AppHost\SekibanDcbDecider.AppHost.csproj" />
   <Project Path="SekibanDcbDecider.Cli\SekibanDcbDecider.Cli.csproj" />
+  <Project Path="SekibanDcbDecider.ClientApi\SekibanDcbDecider.ClientApi.csproj" />
   <Project Path="SekibanDcbDecider.Interactions.Unit\SekibanDcbDecider.Interactions.Unit.csproj" />
   <Project Path="SekibanDcbDecider.Interactions\SekibanDcbDecider.Interactions.csproj" />
   <Project Path="SekibanDcbDecider.EventSource\SekibanDcbDecider.EventSource.csproj" />

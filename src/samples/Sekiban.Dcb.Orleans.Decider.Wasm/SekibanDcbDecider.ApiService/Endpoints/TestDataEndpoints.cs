@@ -1,3 +1,4 @@
+using Dcb.EventSource.MeetingRoom.Queries;
 using Dcb.EventSource.MeetingRoom.Room;
 using Dcb.EventSource.MeetingRoom.User;
 using Dcb.Interactions.Workflows.Reservation;
@@ -39,22 +40,30 @@ public static class TestDataEndpoints
 
         // Generate rooms
         var rooms = await GenerateRoomsInternalAsync(executor, logger);
-        result.RoomsCreated = rooms.Count;
-        result.RoomIds = rooms;
+        result.RoomsCreated = rooms.RoomIds.Count;
+        result.RoomIds = rooms.RoomIds;
+        result.SortableUniqueId = rooms.LastSortableUniqueId;
+        await WaitForRoomsVisibleAsync(executor, rooms.RoomIds, rooms.LastSortableUniqueId, logger);
 
         // Generate reservations using the created rooms and user
-        if (rooms.Count > 0)
+        if (rooms.RoomIds.Count > 0)
         {
-            var (reservations, errors) = await GenerateReservationsInternalAsync(
+            var reservations = await GenerateReservationsInternalAsync(
                 executor,
-                rooms,
+                rooms.RoomIds,
                 user.UserId,
                 user.DisplayName,
                 timeZoneOffsetMinutes,
                 logger);
-            result.ReservationsCreated = reservations.Count;
-            result.ReservationIds = reservations;
-            result.Errors = errors;
+            result.ReservationsCreated = reservations.ReservationIds.Count;
+            result.ReservationIds = reservations.ReservationIds;
+            result.Errors = reservations.Errors;
+            result.SortableUniqueId = reservations.LastSortableUniqueId ?? result.SortableUniqueId;
+            await WaitForReservationsVisibleAsync(
+                executor,
+                reservations.ReservationIds,
+                reservations.LastSortableUniqueId,
+                logger);
         }
 
         return Results.Ok(result);
@@ -66,7 +75,13 @@ public static class TestDataEndpoints
     {
         var logger = loggerFactory.CreateLogger("TestDataEndpoints");
         var rooms = await GenerateRoomsInternalAsync(executor, logger);
-        return Results.Ok(new { roomsCreated = rooms.Count, roomIds = rooms });
+        await WaitForRoomsVisibleAsync(executor, rooms.RoomIds, rooms.LastSortableUniqueId, logger);
+        return Results.Ok(new
+        {
+            roomsCreated = rooms.RoomIds.Count,
+            roomIds = rooms.RoomIds,
+            sortableUniqueId = rooms.LastSortableUniqueId
+        });
     }
 
     private static async Task<IResult> GenerateReservationsAsync(
@@ -89,21 +104,34 @@ public static class TestDataEndpoints
         else
         {
             // Try to create rooms first
-            roomIds = await GenerateRoomsInternalAsync(executor, logger);
+            var rooms = await GenerateRoomsInternalAsync(executor, logger);
+            await WaitForRoomsVisibleAsync(executor, rooms.RoomIds, rooms.LastSortableUniqueId, logger);
+            roomIds = rooms.RoomIds;
             if (roomIds.Count == 0)
             {
                 return Results.BadRequest("No rooms available for reservations");
             }
         }
 
-        var (reservations, errors) = await GenerateReservationsInternalAsync(
+        var reservations = await GenerateReservationsInternalAsync(
             executor,
             roomIds,
             user.UserId,
             user.DisplayName,
             timeZoneOffsetMinutes,
             logger);
-        return Results.Ok(new { reservationsCreated = reservations.Count, reservationIds = reservations, errors });
+        await WaitForReservationsVisibleAsync(
+            executor,
+            reservations.ReservationIds,
+            reservations.LastSortableUniqueId,
+            logger);
+        return Results.Ok(new
+        {
+            reservationsCreated = reservations.ReservationIds.Count,
+            reservationIds = reservations.ReservationIds,
+            errors = reservations.Errors,
+            sortableUniqueId = reservations.LastSortableUniqueId
+        });
     }
 
     private static async Task<(Guid UserId, string DisplayName)> GenerateUserInternalAsync(
@@ -134,11 +162,12 @@ public static class TestDataEndpoints
         return (userId, displayName);
     }
 
-    private static async Task<List<Guid>> GenerateRoomsInternalAsync(
+    private static async Task<GeneratedRoomsResult> GenerateRoomsInternalAsync(
         ISekibanExecutor executor,
         ILogger? logger = null)
     {
         var roomIds = new List<Guid>();
+        string? lastSortableUniqueId = null;
 
         var roomDefinitions = new[]
         {
@@ -166,9 +195,10 @@ public static class TestDataEndpoints
                 };
 
                 logger?.LogDebug("Creating room: {RoomName} ({RoomId})", roomDef.Name, roomId);
-                await executor.ExecuteAsync(command);
+                var result = await executor.ExecuteAsync(command);
                 logger?.LogInformation("Created room: {RoomName} ({RoomId})", roomDef.Name, roomId);
                 roomIds.Add(roomId);
+                lastSortableUniqueId = result.SortableUniqueId ?? lastSortableUniqueId;
             }
             catch (Exception ex)
             {
@@ -176,10 +206,10 @@ public static class TestDataEndpoints
             }
         }
 
-        return roomIds;
+        return new GeneratedRoomsResult(roomIds, lastSortableUniqueId);
     }
 
-    private static async Task<(List<Guid> ReservationIds, List<string> Errors)> GenerateReservationsInternalAsync(
+    private static async Task<GeneratedReservationsResult> GenerateReservationsInternalAsync(
         ISekibanExecutor executor,
         List<Guid> roomIds,
         Guid organizerId,
@@ -189,6 +219,7 @@ public static class TestDataEndpoints
     {
         var reservationIds = new List<Guid>();
         var errors = new List<string>();
+        string? lastSortableUniqueId = null;
 
         var (baseDateLocal, offset) = ResolveLocalBaseDate(timeZoneOffsetMinutes);
         var baseDate = baseDateLocal.AddDays(1);
@@ -238,6 +269,7 @@ public static class TestDataEndpoints
 
                 logger?.LogInformation("Created reservation '{Purpose}' with ID {ReservationId}", resDef.Purpose, result.ReservationId);
                 reservationIds.Add(result.ReservationId);
+                lastSortableUniqueId = result.SortableUniqueId;
             }
             catch (Exception ex)
             {
@@ -253,7 +285,33 @@ public static class TestDataEndpoints
                 errors.Count, string.Join("; ", errors));
         }
 
-        return (reservationIds, errors);
+        return new GeneratedReservationsResult(reservationIds, errors, lastSortableUniqueId);
+    }
+
+    private static async Task WaitForRoomsVisibleAsync(
+        ISekibanExecutor executor,
+        IReadOnlyCollection<Guid> roomIds,
+        string? waitForSortableUniqueId,
+        ILogger? logger = null)
+    {
+        logger?.LogDebug(
+            "Skipping room visibility wait for sample test data generation. RoomCount={RoomCount}, LastSortableUniqueId={WaitForSortableUniqueId}",
+            roomIds.Count,
+            waitForSortableUniqueId);
+        await Task.CompletedTask;
+    }
+
+    private static async Task WaitForReservationsVisibleAsync(
+        ISekibanExecutor executor,
+        IReadOnlyCollection<Guid> reservationIds,
+        string? waitForSortableUniqueId,
+        ILogger? logger = null)
+    {
+        logger?.LogDebug(
+            "Skipping reservation visibility wait for sample test data generation. ReservationCount={ReservationCount}, LastSortableUniqueId={WaitForSortableUniqueId}",
+            reservationIds.Count,
+            waitForSortableUniqueId);
+        await Task.CompletedTask;
     }
 
     private static (DateTime baseDateLocal, TimeSpan offset) ResolveLocalBaseDate(int? timeZoneOffsetMinutes)
@@ -275,4 +333,9 @@ public record TestDataGenerationResult
     public int ReservationsCreated { get; set; }
     public List<Guid> ReservationIds { get; set; } = [];
     public List<string> Errors { get; set; } = [];
+    public string? SortableUniqueId { get; set; }
 }
+
+public record GeneratedRoomsResult(List<Guid> RoomIds, string? LastSortableUniqueId);
+
+public record GeneratedReservationsResult(List<Guid> ReservationIds, List<string> Errors, string? LastSortableUniqueId);

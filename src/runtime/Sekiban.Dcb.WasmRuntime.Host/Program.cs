@@ -9,6 +9,7 @@ using Orleans.Configuration;
 using Orleans.Hosting;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.Common;
 using Sekiban.Dcb.ColdEvents;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.MultiProjections;
@@ -43,6 +44,7 @@ var databaseType = storageConfiguration.Provider.ToString().ToLowerInvariant();
 var sqliteDatabasePath = storageConfiguration.SqlitePath;
 var waitForSortableUniqueIdTimeout = ResolveWaitForSortableUniqueIdTimeout(builder.Configuration);
 var queryResponseTimeout = ResolveQueryResponseTimeout(builder.Configuration);
+var directSnapshotQueryEnabled = ResolveDirectSnapshotQueryEnabled(builder.Configuration);
 var enableProjectionStatusEndpoint = builder.Environment.IsDevelopment()
     || builder.Configuration.GetValue<bool>("KENBAI_WASM_ENABLE_PROJECTION_STATUS_ENDPOINT");
 
@@ -127,6 +129,7 @@ app.MapGet("/", () => Results.Ok(new
     sqliteDatabasePath,
     waitForSortableUniqueIdTimeout,
     queryResponseTimeout,
+    directSnapshotQueryEnabled,
     manifest.DefaultModulePath,
     projectors = manifest.Projectors.Select(static projector => new
     {
@@ -143,6 +146,7 @@ app.MapGet("/health", () => Results.Ok(new
     sqliteDatabasePath,
     waitForSortableUniqueIdTimeout,
     queryResponseTimeout,
+    directSnapshotQueryEnabled,
     manifest.DefaultModulePath
 }));
 
@@ -184,6 +188,15 @@ app.MapPost("/api/sekiban/serialized/tag-state", async (HttpContext http, TagSta
     catch (ArgumentException ex)
     {
         return Results.BadRequest(new { error = ex.Message });
+    }
+
+    if (ResolveDirectSnapshotQueryEnabled(http.RequestServices.GetRequiredService<IConfiguration>()))
+    {
+        var directResult = await TryGetSerializableTagStateDirectAsync(http, tagStateId);
+        if (directResult is not null)
+        {
+            return Results.Ok(directResult);
+        }
     }
 
     var executor = http.RequestServices.GetRequiredService<ISerializedSekibanDcbExecutor>();
@@ -274,6 +287,108 @@ app.MapPost("/api/sekiban/serialized/list-query", async (
 
 app.Run();
 
+static async Task<SerializableTagState?> TryGetSerializableTagStateDirectAsync(
+    HttpContext http,
+    TagStateId tagStateId)
+{
+    var logger = http.RequestServices
+        .GetRequiredService<ILoggerFactory>()
+        .CreateLogger("DirectTagState");
+    var registry = http.RequestServices.GetRequiredService<WasmProjectorRegistry>();
+    var moduleRef = registry.TryGet(tagStateId.TagProjectorName);
+    if (moduleRef is null)
+    {
+        logger.LogDebug(
+            "Direct tag-state skipped: projector {ProjectorName} not in manifest.",
+            tagStateId.TagProjectorName);
+        return null;
+    }
+
+    if (http.RequestServices.GetService<ITagStateProjectionPrimitive>() is not { } primitive ||
+        http.RequestServices.GetService<IEventStore>() is not { } eventStore ||
+        http.RequestServices.GetService<IActorObjectAccessor>() is not { } actorAccessor)
+    {
+        logger.LogWarning(
+            "Direct tag-state unavailable: missing services for {TagStateId}.",
+            tagStateId);
+        return null;
+    }
+
+    logger.LogInformation(
+        "Direct tag-state start: {TagStateId}",
+        tagStateId);
+    string? latestSortableUniqueId = null;
+    var tagActorId = $"{tagStateId.TagGroup}:{tagStateId.TagContent}";
+    var tagActorResult = await actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagActorId);
+    if (tagActorResult.IsSuccess)
+    {
+        var latestResult = await tagActorResult.GetValue().GetLatestSortableUniqueIdAsync();
+        if (latestResult.IsSuccess)
+        {
+            latestSortableUniqueId = latestResult.GetValue();
+        }
+    }
+    logger.LogInformation(
+        "Direct tag-state latest sortable resolved: {TagStateId} => {LatestSortableUniqueId}",
+        tagStateId,
+        latestSortableUniqueId ?? "<none>");
+
+    using var accumulator = primitive.CreateAccumulator(tagStateId);
+    if (!accumulator.ApplyState(null))
+    {
+        logger.LogWarning(
+            "Direct tag-state ApplyState(null) failed: {TagStateId}",
+            tagStateId);
+        return null;
+    }
+
+    var tag = new FallbackTag(tagStateId.TagGroup, tagStateId.TagContent);
+    var eventsResult = await eventStore.ReadSerializableEventsByTagAsync(tag);
+    if (!eventsResult.IsSuccess)
+    {
+        logger.LogWarning(
+            "Direct tag-state event read failed: {TagStateId} => {Error}",
+            tagStateId,
+            eventsResult.GetException().Message);
+        return null;
+    }
+
+    var events = eventsResult.GetValue().ToList();
+    logger.LogInformation(
+        "Direct tag-state events loaded: {TagStateId} => {EventCount}",
+        tagStateId,
+        events.Count);
+    if (!accumulator.ApplyEvents(events, latestSortableUniqueId))
+    {
+        logger.LogWarning(
+            "Direct tag-state ApplyEvents failed: {TagStateId}",
+            tagStateId);
+        return null;
+    }
+    logger.LogInformation(
+        "Direct tag-state events applied: {TagStateId}",
+        tagStateId);
+
+    var state = accumulator.GetSerializedState();
+    logger.LogInformation(
+        "Direct tag-state serialized: {TagStateId} payload={PayloadLength} payloadName={PayloadName}",
+        tagStateId,
+        state.Payload.Length,
+        state.TagPayloadName);
+    bool needsPayloadNameFix =
+        state.Payload.Length > 0 &&
+        string.Equals(state.TagPayloadName, nameof(EmptyTagStatePayload), StringComparison.Ordinal);
+    if (!needsPayloadNameFix && !string.IsNullOrWhiteSpace(state.TagPayloadName))
+    {
+        return state;
+    }
+
+    var inferredPayloadName = InferTagPayloadName(tagStateId.TagProjectorName);
+    return string.IsNullOrWhiteSpace(inferredPayloadName)
+        ? state
+        : state with { TagPayloadName = inferredPayloadName };
+}
+
 static async Task<IResult> ExecuteSerializedQueryAsync(
     HttpContext http,
     SerializedQueryRequest request,
@@ -316,6 +431,19 @@ static async Task<IResult> ExecuteSerializedQueryAsync(
             ct);
     }
 
+    var directReplayResult = await TryExecuteDirectReplayQueryAsync(
+        http,
+        manifest,
+        projectorName,
+        request,
+        isListQuery,
+        logger,
+        ct);
+    if (directReplayResult is not null)
+    {
+        return directReplayResult;
+    }
+
     var directResult = await TryExecuteDirectSnapshotQueryAsync(
         http,
         manifest,
@@ -353,6 +481,146 @@ static async Task<IResult> ExecuteSerializedQueryAsync(
         PageSize: listResult.PageSize));
 }
 
+static async Task<IResult?> TryExecuteDirectReplayQueryAsync(
+    HttpContext http,
+    SekibanRuntimeManifest manifest,
+    string projectorName,
+    SerializedQueryRequest request,
+    bool isListQuery,
+    ILogger logger,
+    CancellationToken ct)
+{
+    if (!ResolveDirectSnapshotQueryEnabled(http.RequestServices.GetRequiredService<IConfiguration>()))
+    {
+        return null;
+    }
+
+    var storageProvider = RuntimeHostStorageConfigurationResolver.ResolveProvider(
+        http.RequestServices.GetRequiredService<IConfiguration>());
+    if (storageProvider is not RuntimeHostStorageProvider.Sqlite
+        and not RuntimeHostStorageProvider.Postgres)
+    {
+        return null;
+    }
+
+    if (http.RequestServices.GetService<IEventStore>() is not { } eventStore)
+    {
+        return null;
+    }
+
+    var projector = manifest.Projectors.FirstOrDefault(x =>
+        string.Equals(x.ProjectorName, projectorName, StringComparison.Ordinal));
+    if (projector is null)
+    {
+        return null;
+    }
+
+    var cache = http.RequestServices.GetRequiredService<DirectSnapshotQueryCache>();
+    var cacheEntry = cache.GetOrAdd(projectorName);
+    var hostFactory = http.RequestServices.GetRequiredService<IProjectionActorHostFactory>();
+
+    await cacheEntry.Gate.WaitAsync(ct);
+    try
+    {
+        if (!cacheEntry.HasProjectorVersion(projector.ProjectorVersion))
+        {
+            cacheEntry.Replace(
+                hostFactory.Create(projectorName),
+                metadata: null,
+                projector.ProjectorVersion,
+                lastSortableUniqueId: null,
+                eventsProcessed: 0);
+        }
+
+        string? sinceSortableUniqueId = cacheEntry.Metadata?.UnsafeLastSortableUniqueId;
+        SortableUniqueId? since = string.IsNullOrWhiteSpace(sinceSortableUniqueId)
+            ? null
+            : new SortableUniqueId(sinceSortableUniqueId);
+        var eventsResult = await eventStore.ReadAllSerializableEventsAsync(since);
+        if (!eventsResult.IsSuccess)
+        {
+            return Results.BadRequest(new { error = eventsResult.GetException().Message });
+        }
+
+        var newEvents = eventsResult.GetValue().ToList();
+        logger.LogInformation(
+            "Direct replay query sync: QueryType={QueryType}, Projector={ProjectorName}, NewEvents={NewEvents}, Since={SinceSortableUniqueId}",
+            request.QueryType,
+            projectorName,
+            newEvents.Count,
+            sinceSortableUniqueId ?? "<beginning>");
+
+        if (newEvents.Count > 0)
+        {
+            await cacheEntry.Host!.AddSerializableEventsAsync(newEvents, finishedCatchUp: true);
+        }
+
+        var metadataResult = await cacheEntry.Host!.GetStateMetadataAsync(includeUnsafe: true);
+        if (!metadataResult.IsSuccess)
+        {
+            return Results.BadRequest(new { error = metadataResult.GetException().Message });
+        }
+
+        var metadata = metadataResult.GetValue();
+        cacheEntry.UpdateMetadata(
+            metadata,
+            metadata.UnsafeLastSortableUniqueId,
+            metadata.UnsafeVersion);
+
+        var parameter = new SerializableQueryParameter
+        {
+            QueryTypeName = request.QueryType,
+            QueryAssemblyVersion = manifest.QueryAssemblyVersion,
+            CompressedQueryJson = await CompressStringAsync(request.QueryParamsJson)
+        };
+
+        if (!isListQuery)
+        {
+            var result = await cacheEntry.Host.ExecuteQueryAsync(
+                parameter,
+                metadata.SafeVersion,
+                metadata.SafeLastSortableUniqueId,
+                string.IsNullOrWhiteSpace(metadata.SafeLastSortableUniqueId)
+                    ? null
+                    : new SortableUniqueId(metadata.SafeLastSortableUniqueId).GetDateTime(),
+                metadata.UnsafeVersion);
+            if (!result.IsSuccess)
+            {
+                return Results.BadRequest(new { error = result.GetException().Message });
+            }
+
+            var resultJson = await DecompressToStringAsync(result.GetValue().CompressedResultJson);
+            return Results.Ok(new SerializedQueryResponse(resultJson));
+        }
+
+        var listResult = await cacheEntry.Host.ExecuteListQueryAsync(
+            parameter,
+            metadata.SafeVersion,
+            metadata.SafeLastSortableUniqueId,
+            string.IsNullOrWhiteSpace(metadata.SafeLastSortableUniqueId)
+                ? null
+                : new SortableUniqueId(metadata.SafeLastSortableUniqueId).GetDateTime(),
+            metadata.UnsafeVersion);
+        if (!listResult.IsSuccess)
+        {
+            return Results.BadRequest(new { error = listResult.GetException().Message });
+        }
+
+        var value = listResult.GetValue();
+        var itemsJson = await DecompressToStringAsync(value.CompressedItemsJson);
+        return Results.Ok(new SerializedListQueryResponse(
+            ItemsJson: itemsJson,
+            TotalCount: value.TotalCount,
+            TotalPages: value.TotalPages,
+            CurrentPage: value.CurrentPage,
+            PageSize: value.PageSize));
+    }
+    finally
+    {
+        cacheEntry.Gate.Release();
+    }
+}
+
 static async Task<IResult?> TryExecuteDirectSnapshotQueryAsync(
     HttpContext http,
     SekibanRuntimeManifest manifest,
@@ -362,6 +630,11 @@ static async Task<IResult?> TryExecuteDirectSnapshotQueryAsync(
     ILogger logger,
     CancellationToken ct)
 {
+    if (!ResolveDirectSnapshotQueryEnabled(http.RequestServices.GetRequiredService<IConfiguration>()))
+    {
+        return null;
+    }
+
     var storageProvider = RuntimeHostStorageConfigurationResolver.ResolveProvider(
         http.RequestServices.GetRequiredService<IConfiguration>());
     if (storageProvider is not RuntimeHostStorageProvider.Sqlite
@@ -396,13 +669,14 @@ static async Task<IResult?> TryExecuteDirectSnapshotQueryAsync(
     }
 
     var record = recordOptional.Value;
+    var recordLastSortableUniqueId = record.LastSortableUniqueId ?? string.Empty;
     if (!string.IsNullOrWhiteSpace(request.WaitForSortableUniqueId) &&
-        string.Compare(record.LastSortableUniqueId, request.WaitForSortableUniqueId, StringComparison.Ordinal) < 0)
+        string.Compare(recordLastSortableUniqueId, request.WaitForSortableUniqueId, StringComparison.Ordinal) < 0)
     {
         logger.LogInformation(
             "Direct snapshot query skipped for {ProjectorName}: persisted state {PersistedSortableUniqueId} is older than requested {RequestedSortableUniqueId}",
             projectorName,
-            record.LastSortableUniqueId,
+            recordLastSortableUniqueId,
             request.WaitForSortableUniqueId);
         return null;
     }
@@ -420,9 +694,9 @@ static async Task<IResult?> TryExecuteDirectSnapshotQueryAsync(
             projectorName,
             isListQuery,
             record.EventsProcessed,
-            record.LastSortableUniqueId);
+            recordLastSortableUniqueId);
 
-        if (!cacheEntry.Matches(projector.ProjectorVersion, record.LastSortableUniqueId, record.EventsProcessed))
+        if (!cacheEntry.Matches(projector.ProjectorVersion, recordLastSortableUniqueId, record.EventsProcessed))
         {
             var streamResult = await store.OpenStateDataReadStreamAsync(record, ct);
             if (!streamResult.IsSuccess)
@@ -533,6 +807,30 @@ static async Task<IResult?> TryExecuteDirectSnapshotQueryAsync(
     }
 }
 
+static bool ResolveDirectSnapshotQueryEnabled(IConfiguration configuration)
+{
+    string? raw = configuration["SEKIBAN_DIRECT_SNAPSHOT_QUERY_ENABLED"];
+    if (string.IsNullOrWhiteSpace(raw))
+    {
+        return true;
+    }
+
+    return raw.Trim().ToLowerInvariant() switch
+    {
+        "0" or "false" or "no" or "off" => false,
+        _ => true
+    };
+}
+
+static string? InferTagPayloadName(string projectorName) =>
+    projectorName switch
+    {
+        "ClassRoomProjector" => null,
+        _ when projectorName.EndsWith("Projector", StringComparison.Ordinal) =>
+            projectorName[..^"Projector".Length] + "State",
+        _ => null
+    };
+
 static async Task WaitForSortableUniqueIdAsync(
     IMultiProjectionGrain grain,
     IMultiProjectionStateStore? stateStore,
@@ -587,7 +885,7 @@ static async Task WaitForSortableUniqueIdAsync(
                 var recordOptional = recordResult.GetValue();
                 if (recordOptional.HasValue &&
                     string.Compare(
-                        recordOptional.Value.LastSortableUniqueId,
+                        recordOptional.Value.LastSortableUniqueId ?? string.Empty,
                         sortableUniqueId,
                         StringComparison.Ordinal) >= 0)
                 {
@@ -733,6 +1031,10 @@ sealed class DirectSnapshotQueryCacheEntry : IDisposable
         && string.Equals(LastSortableUniqueId, lastSortableUniqueId, StringComparison.Ordinal)
         && EventsProcessed == eventsProcessed;
 
+    public bool HasProjectorVersion(string projectorVersion) =>
+        Host is not null &&
+        string.Equals(ProjectorVersion, projectorVersion, StringComparison.Ordinal);
+
     public void Replace(
         IProjectionActorHost host,
         ProjectionStateMetadata? metadata,
@@ -744,6 +1046,16 @@ sealed class DirectSnapshotQueryCacheEntry : IDisposable
         Host = host;
         Metadata = metadata;
         ProjectorVersion = projectorVersion;
+        LastSortableUniqueId = lastSortableUniqueId;
+        EventsProcessed = eventsProcessed;
+    }
+
+    public void UpdateMetadata(
+        ProjectionStateMetadata metadata,
+        string? lastSortableUniqueId,
+        long eventsProcessed)
+    {
+        Metadata = metadata;
         LastSortableUniqueId = lastSortableUniqueId;
         EventsProcessed = eventsProcessed;
     }

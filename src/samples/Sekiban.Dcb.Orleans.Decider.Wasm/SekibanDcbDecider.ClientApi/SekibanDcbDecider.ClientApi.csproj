@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>SekibanDcbDecider.ClientApi</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.3" />
+    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SekibanDcbDecider.ServiceDefaults\SekibanDcbDecider.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\..\..\lib\Sekiban.Dcb.WasmRuntime.Remote\Sekiban.Dcb.WasmRuntime.Remote.csproj" />
+    <ProjectReference Include="..\SekibanDcbDecider.EventSource\SekibanDcbDecider.EventSource.csproj" />
+    <ProjectReference Include="..\SekibanDcbDecider.ApiService\SekibanDcbDecider.ApiService.csproj" />
+  </ItemGroup>
+
+</Project>

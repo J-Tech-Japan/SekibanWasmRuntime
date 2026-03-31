@@ -3,6 +3,8 @@ import { router, publicProcedure } from "../api/trpc";
 import { createAuthHeaders } from "../lib/auth-helpers";
 import { extractErrorMessage } from "../lib/api-error-helpers";
 
+const eventApiBaseUrl = process.env.CLIENT_API_BASE_URL ?? process.env.API_BASE_URL;
+
 // Reservation status types matching the backend discriminated union
 const reservationStatusSchema = z.enum([
   "Draft",
@@ -70,8 +72,8 @@ export const reservationsRouter = router({
       }
 
       const url = input.roomId
-        ? `${process.env.API_BASE_URL}/api/reservations/by-room/${input.roomId}?${params.toString()}`
-        : `${process.env.API_BASE_URL}/api/reservations?${params.toString()}`;
+        ? `${eventApiBaseUrl}/api/reservations/by-room/${input.roomId}?${params.toString()}`
+        : `${eventApiBaseUrl}/api/reservations?${params.toString()}`;
 
       const headers = await createAuthHeaders();
       const res = await fetch(url, { headers });
@@ -90,7 +92,7 @@ export const reservationsRouter = router({
     .input(quickReservationSchema)
     .mutation(async ({ input }) => {
       const headers = await createAuthHeaders();
-      const res = await fetch(`${process.env.API_BASE_URL}/api/reservations/quick`, {
+      const res = await fetch(`${eventApiBaseUrl}/api/reservations/quick`, {
         method: "POST",
         headers,
         body: JSON.stringify({
@@ -117,7 +119,7 @@ export const reservationsRouter = router({
     .input(createDraftSchema)
     .mutation(async ({ input }) => {
       const headers = await createAuthHeaders();
-      const res = await fetch(`${process.env.API_BASE_URL}/api/reservations/draft`, {
+      const res = await fetch(`${eventApiBaseUrl}/api/reservations/draft`, {
         method: "POST",
         headers,
         body: JSON.stringify({
@@ -154,7 +156,7 @@ export const reservationsRouter = router({
     .mutation(async ({ input }) => {
       const headers = await createAuthHeaders();
       const res = await fetch(
-        `${process.env.API_BASE_URL}/api/reservations/${input.reservationId}/hold`,
+        `${eventApiBaseUrl}/api/reservations/${input.reservationId}/hold`,
         {
           method: "POST",
           headers,
@@ -187,7 +189,7 @@ export const reservationsRouter = router({
     .mutation(async ({ input }) => {
       const headers = await createAuthHeaders();
       const res = await fetch(
-        `${process.env.API_BASE_URL}/api/reservations/${input.reservationId}/confirm`,
+        `${eventApiBaseUrl}/api/reservations/${input.reservationId}/confirm`,
         {
           method: "POST",
           headers,
@@ -221,7 +223,7 @@ export const reservationsRouter = router({
     .mutation(async ({ input }) => {
       const headers = await createAuthHeaders();
       const res = await fetch(
-        `${process.env.API_BASE_URL}/api/reservations/${input.reservationId}/cancel`,
+        `${eventApiBaseUrl}/api/reservations/${input.reservationId}/cancel`,
         {
           method: "POST",
           headers,

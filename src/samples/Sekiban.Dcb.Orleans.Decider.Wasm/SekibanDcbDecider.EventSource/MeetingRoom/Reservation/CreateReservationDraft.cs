@@ -1,10 +1,6 @@
 using Dcb.MeetingRoomModels.Events.Reservation;
 using Dcb.MeetingRoomModels.States.Room;
-using Dcb.MeetingRoomModels.States.UserAccess;
-using Dcb.MeetingRoomModels.States.UserDirectory;
-using Dcb.MeetingRoomModels.States.UserMonthlyReservation;
 using Dcb.MeetingRoomModels.Tags;
-using Dcb.EventSource.MeetingRoom.User;
 using Dcb.EventSource.MeetingRoom.Room;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Events;
@@ -42,7 +38,7 @@ public record CreateReservationDraft : ICommandWithHandler<CreateReservationDraf
     {
         var reservationId = command.ReservationId != Guid.Empty ? command.ReservationId : Guid.CreateVersion7();
 
-        // Verify the room exists and get its equipment catalog
+        // Verify the room exists.
         var roomTag = new RoomTag(command.RoomId);
         var roomExists = await context.TagExistsAsync(roomTag);
 
@@ -51,8 +47,11 @@ public record CreateReservationDraft : ICommandWithHandler<CreateReservationDraf
             throw new ApplicationException($"Room {command.RoomId} not found");
         }
 
-        var roomStateTyped = await context.GetStateAsync<RoomProjector>(roomTag);
-        var roomState = roomStateTyped.Payload as RoomState ?? RoomState.Empty;
+        var roomStateTyped = await context.GetStateAsync<RoomState, RoomProjector>(roomTag);
+        if (roomStateTyped.Payload is not RoomState roomState || roomState.RoomId == Guid.Empty)
+        {
+            throw new ApplicationException($"Room {command.RoomId} not found");
+        }
 
         // Verify the reservation doesn't already exist
         var reservationTag = new ReservationTag(reservationId);
@@ -73,20 +72,7 @@ public record CreateReservationDraft : ICommandWithHandler<CreateReservationDraf
             throw new ApplicationException("Cannot create reservation in the past");
         }
 
-        var isAdmin = await IsAdminAsync(context, command.OrganizerId);
-        if (!isAdmin)
-        {
-            ValidateReservationMonth(command.StartTime, DateTime.UtcNow);
-
-            var monthlyLimit = await GetMonthlyReservationLimitAsync(context, command.OrganizerId);
-            var monthTag = UserMonthlyReservationTag.FromStartTime(command.OrganizerId, command.StartTime);
-            var monthlyStateTyped = await context.GetStateAsync<UserMonthlyReservationProjector>(monthTag);
-            var monthlyState = monthlyStateTyped.Payload as UserMonthlyReservationState ?? UserMonthlyReservationState.Empty;
-            if (monthlyState.ActiveRequestCount >= monthlyLimit)
-            {
-                throw new ApplicationException($"Monthly reservation limit exceeded ({monthlyLimit}).");
-            }
-        }
+        ValidateReservationMonth(command.StartTime, DateTime.UtcNow);
 
         var selectedEquipment = NormalizeSelectedEquipment(command.SelectedEquipment, roomState.Equipment);
 
@@ -102,31 +88,7 @@ public record CreateReservationDraft : ICommandWithHandler<CreateReservationDraf
             .GetEventWithTags();
     }
 
-    private static async Task<bool> IsAdminAsync(ICommandContext context, Guid userId)
-    {
-        var accessState = await context.GetStateAsync<UserAccessProjector>(new UserAccessTag(userId));
-        return accessState.Payload is UserAccessState.UserAccessActive active && active.HasRole("Admin");
-    }
-
-    private static async Task<int> GetMonthlyReservationLimitAsync(ICommandContext context, Guid userId)
-    {
-        var directoryState = await context.GetStateAsync<UserDirectoryProjector>(new UserTag(userId));
-        var limit = directoryState.Payload switch
-        {
-            UserDirectoryState.UserDirectoryActive active => active.MonthlyReservationLimit,
-            UserDirectoryState.UserDirectoryDeactivated => throw new ApplicationException("User is deactivated."),
-            _ => UserDirectoryState.DefaultMonthlyReservationLimit
-        };
-
-        if (limit <= 0)
-        {
-            throw new ApplicationException("Monthly reservation limit is not configured for this user.");
-        }
-
-        return limit;
-    }
-
-    private static void ValidateReservationMonth(DateTime startTime, DateTime nowUtc)
+    public static void ValidateReservationMonth(DateTime startTime, DateTime nowUtc)
     {
         var startMonth = new DateOnly(startTime.Year, startTime.Month, 1);
         var currentMonth = new DateOnly(nowUtc.Year, nowUtc.Month, 1);
@@ -138,7 +100,9 @@ public record CreateReservationDraft : ICommandWithHandler<CreateReservationDraf
         }
     }
 
-    private static List<string> NormalizeSelectedEquipment(List<string> selectedEquipment, List<string> roomEquipment)
+    public static List<string> NormalizeSelectedEquipment(
+        List<string> selectedEquipment,
+        IReadOnlyCollection<string> roomEquipment)
     {
         if (selectedEquipment.Count == 0)
         {
@@ -155,18 +119,24 @@ public record CreateReservationDraft : ICommandWithHandler<CreateReservationDraf
             return [];
         }
 
-        var roomEquipmentSet = new HashSet<string>(roomEquipment, StringComparer.OrdinalIgnoreCase);
+        var availableEquipment = roomEquipment
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .Select(item => item.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         var invalidSelections = trimmedSelections
-            .Where(item => !roomEquipmentSet.Contains(item))
+            .Where(item => !availableEquipment.Contains(item))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         if (invalidSelections.Count > 0)
         {
-            throw new ApplicationException($"Selected equipment is not available in this room: {string.Join(", ", invalidSelections)}");
+            throw new ApplicationException(
+                $"Selected equipment is not available for this room: {string.Join(", ", invalidSelections)}");
         }
 
-        var selectionSet = new HashSet<string>(trimmedSelections, StringComparer.OrdinalIgnoreCase);
-        return roomEquipment.Where(item => selectionSet.Contains(item)).ToList();
+        return trimmedSelections
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 }

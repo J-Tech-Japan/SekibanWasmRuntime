@@ -34,7 +34,7 @@ public class EventTests
     }
 
     [Fact]
-    public void ReservationDraftCreated_Should_Have_ReservationTag_And_RoomTag()
+    public void ReservationDraftCreated_Should_Have_ReservationTag_RoomTag_And_UserMonthlyReservationTag()
     {
         var reservationId = Guid.NewGuid();
         var roomId = Guid.NewGuid();
@@ -53,7 +53,11 @@ public class EventTests
         Assert.Equal(3, eventWithTags.Tags.Count);
         Assert.Contains(eventWithTags.Tags, t => t is ReservationTag rt && rt.ReservationId == reservationId);
         Assert.Contains(eventWithTags.Tags, t => t is RoomTag rt && rt.RoomId == roomId);
-        Assert.Contains(eventWithTags.Tags, t => t is UserMonthlyReservationTag);
+        Assert.Contains(
+            eventWithTags.Tags,
+            t => t is UserMonthlyReservationTag ut &&
+                 ut.UserId == organizerId &&
+                 ut.Month == new DateOnly(ev.StartTime.Year, ev.StartTime.Month, 1));
     }
 
     [Fact]

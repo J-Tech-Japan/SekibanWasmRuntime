@@ -60,12 +60,18 @@ public static class WeatherEndpoints
 
         commandGroup.MapPost("/inputweatherforecast", CreateWeatherForecastAsync)
             .WithName("InputWeatherForecast");
+        commandGroup.MapPost("/weatherforecast", CreateWeatherForecastAsync)
+            .WithName("CreateWeatherForecast");
 
         commandGroup.MapPost("/updateweatherforecastlocation", UpdateWeatherForecastLocationAsync)
             .WithName("UpdateWeatherForecastLocation");
+        commandGroup.MapPost("/weatherforecast/update-location", UpdateWeatherForecastLocationClientAsync)
+            .WithName("UpdateWeatherForecastLocationClient");
 
         commandGroup.MapPost("/removeweatherforecast", RemoveWeatherForecastAsync)
             .WithName("RemoveWeatherForecast");
+        commandGroup.MapPost("/weatherforecast/delete", RemoveWeatherForecastAsync)
+            .WithName("DeleteWeatherForecast");
     }
 
     private static async Task<IResult> GetWeatherForecastListAsync(
@@ -252,6 +258,17 @@ public static class WeatherEndpoints
         });
     }
 
+    private static Task<IResult> UpdateWeatherForecastLocationClientAsync(
+        [FromBody] UpdateWeatherForecastLocationClientRequest request,
+        [FromServices] ISekibanExecutor executor) =>
+        UpdateWeatherForecastLocationAsync(
+            new ChangeLocationName
+            {
+                ForecastId = request.ForecastId,
+                NewLocationName = request.NewLocation
+            },
+            executor);
+
     private static async Task<IResult> RemoveWeatherForecastAsync(
         [FromBody] DeleteWeatherForecast command,
         [FromServices] ISekibanExecutor executor)
@@ -266,3 +283,7 @@ public static class WeatherEndpoints
         });
     }
 }
+
+public sealed record UpdateWeatherForecastLocationClientRequest(
+    Guid ForecastId,
+    string NewLocation);

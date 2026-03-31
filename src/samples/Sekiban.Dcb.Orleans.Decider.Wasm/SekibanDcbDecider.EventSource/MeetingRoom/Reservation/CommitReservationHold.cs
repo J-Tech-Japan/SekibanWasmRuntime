@@ -40,9 +40,11 @@ public record CommitReservationHold : ICommandWithHandler<CommitReservationHold>
             throw new ApplicationException($"Reservation {command.ReservationId} is not in draft state");
         }
 
-        var roomTag = new RoomTag(command.RoomId);
-        var roomStateTyped = await context.GetStateAsync<RoomProjector>(roomTag);
-        var roomState = roomStateTyped.Payload as RoomState ?? RoomState.Empty;
+        var roomStateTyped = await context.GetStateAsync<RoomState, RoomProjector>(new RoomTag(command.RoomId));
+        if (roomStateTyped.Payload is not RoomState roomState || roomState.RoomId == Guid.Empty)
+        {
+            throw new ApplicationException($"Room {command.RoomId} not found");
+        }
 
         var requiresApproval = roomState.RequiresApproval;
         var approvalRequestId = requiresApproval ? command.ApprovalRequestId : null;
@@ -51,15 +53,6 @@ public record CommitReservationHold : ICommandWithHandler<CommitReservationHold>
         if (requiresApproval && approvalRequestId == null)
         {
             throw new ApplicationException("Approval request is required for this room");
-        }
-
-        var roomReservationsStateTyped = await context.GetStateAsync<RoomReservationsProjector>(roomTag);
-        var roomReservationsState = roomReservationsStateTyped.Payload as RoomReservationsState
-            ?? RoomReservationsState.Empty;
-
-        if (roomReservationsState.HasConflict(draft.StartTime, draft.EndTime, draft.ReservationId))
-        {
-            throw new ApplicationException("Reservation time conflicts with another held or confirmed reservation");
         }
 
         return new ReservationHoldCommitted(

@@ -112,6 +112,14 @@ public sealed class RemoteSekibanExecutor(
             JsonSerializer.Deserialize<List<TResult>>(body.ItemsJson, _domainTypes.JsonSerializerOptions)
             ?? throw new InvalidOperationException($"Failed to deserialize list-query result for {request.QueryType}.");
 
+        _logger.LogInformation(
+            "WASM host list-query response {QueryType}: total={TotalCount}, page={CurrentPage}, size={PageSize}, itemCount={ItemCount}",
+            request.QueryType,
+            body.TotalCount,
+            body.CurrentPage,
+            body.PageSize,
+            items.Count);
+
         return new ListQueryResult<TResult>(
             body.TotalCount,
             body.TotalPages,

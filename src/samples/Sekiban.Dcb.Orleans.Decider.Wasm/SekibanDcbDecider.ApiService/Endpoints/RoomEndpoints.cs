@@ -30,7 +30,8 @@ public static class RoomEndpoints
         [FromQuery] string? waitForSortableUniqueId,
         [FromQuery] int? pageNumber,
         [FromQuery] int? pageSize,
-        [FromServices] ISekibanExecutor executor)
+        [FromServices] ISekibanExecutor executor,
+        [FromServices] ILoggerFactory loggerFactory)
     {
         pageNumber ??= 1;
         pageSize ??= 100;
@@ -41,6 +42,13 @@ public static class RoomEndpoints
             PageSize = pageSize
         };
         var result = await executor.QueryAsync(query);
+        loggerFactory.CreateLogger("RoomEndpoints").LogInformation(
+            "Room list query completed: wait={WaitForSortableUniqueId}, total={TotalCount}, page={CurrentPage}, size={PageSize}, itemCount={ItemCount}",
+            waitForSortableUniqueId ?? "<none>",
+            result.TotalCount,
+            result.CurrentPage,
+            result.PageSize,
+            result.Items.Count());
         return Results.Ok(result.Items);
     }
 
