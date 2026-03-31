@@ -190,10 +190,13 @@ app.MapPost("/api/sekiban/serialized/tag-state", async (HttpContext http, TagSta
         return Results.BadRequest(new { error = ex.Message });
     }
 
-    var directResult = await TryGetSerializableTagStateDirectAsync(http, tagStateId);
-    if (directResult is not null)
+    if (ResolveDirectSnapshotQueryEnabled(http.RequestServices.GetRequiredService<IConfiguration>()))
     {
-        return Results.Ok(directResult);
+        var directResult = await TryGetSerializableTagStateDirectAsync(http, tagStateId);
+        if (directResult is not null)
+        {
+            return Results.Ok(directResult);
+        }
     }
 
     var executor = http.RequestServices.GetRequiredService<ISerializedSekibanDcbExecutor>();

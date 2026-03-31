@@ -1,5 +1,7 @@
 using Dcb.MeetingRoomModels.Events.Reservation;
+using Dcb.MeetingRoomModels.States.Room;
 using Dcb.MeetingRoomModels.Tags;
+using Dcb.EventSource.MeetingRoom.Room;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Events;
 using System.ComponentModel.DataAnnotations;
@@ -45,6 +47,12 @@ public record CreateReservationDraft : ICommandWithHandler<CreateReservationDraf
             throw new ApplicationException($"Room {command.RoomId} not found");
         }
 
+        var roomStateTyped = await context.GetStateAsync<RoomState, RoomProjector>(roomTag);
+        if (roomStateTyped.Payload is not RoomState roomState || roomState.RoomId == Guid.Empty)
+        {
+            throw new ApplicationException($"Room {command.RoomId} not found");
+        }
+
         // Verify the reservation doesn't already exist
         var reservationTag = new ReservationTag(reservationId);
         var exists = await context.TagExistsAsync(reservationTag);
@@ -66,7 +74,7 @@ public record CreateReservationDraft : ICommandWithHandler<CreateReservationDraf
 
         ValidateReservationMonth(command.StartTime, DateTime.UtcNow);
 
-        var selectedEquipment = NormalizeSelectedEquipment(command.SelectedEquipment);
+        var selectedEquipment = NormalizeSelectedEquipment(command.SelectedEquipment, roomState.Equipment);
 
         return new ReservationDraftCreated(
             reservationId,
@@ -80,7 +88,7 @@ public record CreateReservationDraft : ICommandWithHandler<CreateReservationDraf
             .GetEventWithTags();
     }
 
-    private static void ValidateReservationMonth(DateTime startTime, DateTime nowUtc)
+    public static void ValidateReservationMonth(DateTime startTime, DateTime nowUtc)
     {
         var startMonth = new DateOnly(startTime.Year, startTime.Month, 1);
         var currentMonth = new DateOnly(nowUtc.Year, nowUtc.Month, 1);
@@ -92,7 +100,9 @@ public record CreateReservationDraft : ICommandWithHandler<CreateReservationDraf
         }
     }
 
-    private static List<string> NormalizeSelectedEquipment(List<string> selectedEquipment)
+    public static List<string> NormalizeSelectedEquipment(
+        List<string> selectedEquipment,
+        IReadOnlyCollection<string> roomEquipment)
     {
         if (selectedEquipment.Count == 0)
         {
@@ -107,6 +117,22 @@ public record CreateReservationDraft : ICommandWithHandler<CreateReservationDraf
         if (trimmedSelections.Count == 0)
         {
             return [];
+        }
+
+        var availableEquipment = roomEquipment
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .Select(item => item.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var invalidSelections = trimmedSelections
+            .Where(item => !availableEquipment.Contains(item))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (invalidSelections.Count > 0)
+        {
+            throw new ApplicationException(
+                $"Selected equipment is not available for this room: {string.Join(", ", invalidSelections)}");
         }
 
         return trimmedSelections

@@ -1,4 +1,5 @@
 using Dcb.EventSource.MeetingRoom.ApprovalRequest;
+using Dcb.EventSource.MeetingRoom.Queries;
 using Dcb.EventSource.MeetingRoom.Reservation;
 using Sekiban.Dcb;
 
@@ -40,7 +41,14 @@ public class QuickReservationWorkflow(ISekibanExecutor executor)
         IReadOnlyList<string>? selectedEquipment = null,
         string? approvalRequestComment = null)
     {
+        var room = (await executor.QueryAsync(new GetRoomListQuery()))
+            .Items
+            .FirstOrDefault(item => item.RoomId == roomId)
+            ?? throw new ApplicationException($"Room {roomId} not found");
+
         var reservationId = Guid.CreateVersion7();
+        var requiresApproval = room.RequiresApproval;
+        Guid? approvalRequestId = requiresApproval ? Guid.CreateVersion7() : null;
 
         var executionResult = await executor.ExecuteAsync(new CreateQuickReservation
         {
@@ -52,13 +60,13 @@ public class QuickReservationWorkflow(ISekibanExecutor executor)
             EndTime = endTime,
             Purpose = purpose,
             SelectedEquipment = selectedEquipment?.ToList() ?? [],
-            RequiresApproval = false,
-            ApprovalRequestId = null,
-            ApprovalRequestComment = null
+            RequiresApproval = requiresApproval,
+            ApprovalRequestId = approvalRequestId,
+            ApprovalRequestComment = approvalRequestComment
         });
 
         var sortableUniqueId = executionResult.SortableUniqueId ?? string.Empty;
 
-        return new QuickReservationResult(reservationId, sortableUniqueId, false, null);
+        return new QuickReservationResult(reservationId, sortableUniqueId, requiresApproval, approvalRequestId);
     }
 }

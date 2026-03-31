@@ -6,8 +6,6 @@ using Dcb.EventSource.MeetingRoom.Reservation;
 using Dcb.EventSource.MeetingRoom.Room;
 using Dcb.MeetingRoomModels.Events.ApprovalRequest;
 using Dcb.MeetingRoomModels.States.ApprovalRequest;
-using Dcb.MeetingRoomModels.States.Reservation;
-using Dcb.MeetingRoomModels.States.Room;
 using Dcb.MeetingRoomModels.Tags;
 using Microsoft.AspNetCore.Mvc;
 using Sekiban.Dcb;
@@ -46,6 +44,16 @@ public static class ApprovalEndpoints
             PendingOnly = pendingOnlyValue
         };
         var result = await executor.QueryAsync(query);
+        var reservations = (await executor.QueryAsync(new GetReservationListQuery
+        {
+            PageNumber = 1,
+            PageSize = 500
+        })).Items.ToDictionary(item => item.ReservationId);
+        var rooms = (await executor.QueryAsync(new GetRoomListQuery
+        {
+            PageNumber = 1,
+            PageSize = 500
+        })).Items.ToDictionary(item => item.RoomId);
         var items = new List<ApprovalInboxViewItem>();
 
         foreach (var item in result.Items)
@@ -60,61 +68,16 @@ public static class ApprovalEndpoints
             var status = item.Status;
             var reservationClosed = false;
 
-            if (item.ReservationId != Guid.Empty)
+            if (item.ReservationId != Guid.Empty &&
+                reservations.TryGetValue(item.ReservationId, out var reservation))
             {
-                var reservationTag = new ReservationTag(item.ReservationId);
-                var reservationState = await executor.GetTagStateAsync(
-                    new TagStateId(reservationTag, nameof(ReservationProjector)));
-
-                switch (reservationState.Payload)
-                {
-                    case ReservationState.ReservationDraft draft:
-                        roomId = draft.RoomId;
-                        organizerId = draft.OrganizerId;
-                        organizerName = draft.OrganizerName;
-                        purpose = draft.Purpose;
-                        startTime = draft.StartTime;
-                        endTime = draft.EndTime;
-                        break;
-                    case ReservationState.ReservationHeld held:
-                        roomId = held.RoomId;
-                        organizerId = held.OrganizerId;
-                        organizerName = held.OrganizerName;
-                        purpose = held.Purpose;
-                        startTime = held.StartTime;
-                        endTime = held.EndTime;
-                        break;
-                    case ReservationState.ReservationConfirmed confirmed:
-                        roomId = confirmed.RoomId;
-                        organizerId = confirmed.OrganizerId;
-                        organizerName = confirmed.OrganizerName;
-                        purpose = confirmed.Purpose;
-                        startTime = confirmed.StartTime;
-                        endTime = confirmed.EndTime;
-                        break;
-                    case ReservationState.ReservationRejected rejected:
-                        roomId = rejected.RoomId;
-                        organizerId = rejected.OrganizerId;
-                        organizerName = rejected.OrganizerName;
-                        purpose = rejected.Purpose;
-                        startTime = rejected.StartTime;
-                        endTime = rejected.EndTime;
-                        reservationClosed = true;
-                        break;
-                    case ReservationState.ReservationCancelled cancelled:
-                        roomId = cancelled.RoomId;
-                        organizerId = cancelled.OrganizerId;
-                        organizerName = cancelled.OrganizerName;
-                        purpose = cancelled.Purpose;
-                        startTime = cancelled.StartTime;
-                        endTime = cancelled.EndTime;
-                        reservationClosed = true;
-                        break;
-                    case ReservationState.ReservationExpired expired:
-                        roomId = expired.RoomId;
-                        reservationClosed = true;
-                        break;
-                }
+                roomId = reservation.RoomId;
+                organizerId = reservation.OrganizerId;
+                organizerName = reservation.OrganizerName;
+                purpose = reservation.Purpose;
+                startTime = reservation.StartTime;
+                endTime = reservation.EndTime;
+                reservationClosed = reservation.Status is "Rejected" or "Cancelled";
             }
 
             if (reservationClosed && status == "Pending")
@@ -127,15 +90,9 @@ public static class ApprovalEndpoints
                 continue;
             }
 
-            if (roomId != Guid.Empty)
+            if (roomId != Guid.Empty && rooms.TryGetValue(roomId, out var room))
             {
-                var roomTag = new RoomTag(roomId);
-                var roomState = await executor.GetTagStateAsync(
-                    new TagStateId(roomTag, nameof(RoomProjector)));
-                if (roomState.Payload is RoomState room)
-                {
-                    roomName = room.Name;
-                }
+                roomName = room.Name;
             }
 
             items.Add(new ApprovalInboxViewItem(

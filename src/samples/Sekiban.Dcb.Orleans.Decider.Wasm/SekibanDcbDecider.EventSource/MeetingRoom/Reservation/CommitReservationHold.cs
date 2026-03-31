@@ -40,7 +40,13 @@ public record CommitReservationHold : ICommandWithHandler<CommitReservationHold>
             throw new ApplicationException($"Reservation {command.ReservationId} is not in draft state");
         }
 
-        var requiresApproval = command.RequiresApproval;
+        var roomStateTyped = await context.GetStateAsync<RoomState, RoomProjector>(new RoomTag(command.RoomId));
+        if (roomStateTyped.Payload is not RoomState roomState || roomState.RoomId == Guid.Empty)
+        {
+            throw new ApplicationException($"Room {command.RoomId} not found");
+        }
+
+        var requiresApproval = roomState.RequiresApproval;
         var approvalRequestId = requiresApproval ? command.ApprovalRequestId : null;
         var approvalRequestComment = requiresApproval ? command.ApprovalRequestComment : null;
 

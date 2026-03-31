@@ -1,5 +1,8 @@
+using Dcb.MeetingRoomModels.Events.ApprovalRequest;
 using Dcb.MeetingRoomModels.Events.Reservation;
+using Dcb.MeetingRoomModels.States.Room;
 using Dcb.MeetingRoomModels.Tags;
+using Dcb.EventSource.MeetingRoom.Room;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Events;
 using System.ComponentModel.DataAnnotations;
@@ -51,11 +54,29 @@ public record CreateQuickReservation : ICommandWithHandler<CreateQuickReservatio
             throw new ApplicationException("Cannot create reservation in the past");
         }
 
-        var selectedEquipment = command.SelectedEquipment
-            .Where(item => !string.IsNullOrWhiteSpace(item))
-            .Select(item => item.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        var roomTag = new RoomTag(command.RoomId);
+        if (!await context.TagExistsAsync(roomTag))
+        {
+            throw new ApplicationException($"Room {command.RoomId} not found");
+        }
+
+        var roomStateTyped = await context.GetStateAsync<RoomState, RoomProjector>(roomTag);
+        if (roomStateTyped.Payload is not RoomState roomState || roomState.RoomId == Guid.Empty)
+        {
+            throw new ApplicationException($"Room {command.RoomId} not found");
+        }
+
+        var reservationTag = new ReservationTag(command.ReservationId);
+        if (await context.TagExistsAsync(reservationTag))
+        {
+            throw new ApplicationException($"Reservation {command.ReservationId} already exists");
+        }
+
+        CreateReservationDraft.ValidateReservationMonth(command.StartTime, DateTime.UtcNow);
+        var selectedEquipment = CreateReservationDraft.NormalizeSelectedEquipment(
+            command.SelectedEquipment,
+            roomState.Equipment);
+        var requiresApproval = roomState.RequiresApproval;
 
         await context.AppendEvent(new ReservationDraftCreated(
             command.ReservationId,
@@ -67,6 +88,25 @@ public record CreateQuickReservation : ICommandWithHandler<CreateQuickReservatio
             command.Purpose,
             selectedEquipment).GetEventWithTags());
 
+        Guid? approvalRequestId = null;
+        if (requiresApproval)
+        {
+            approvalRequestId = command.ApprovalRequestId;
+            if (approvalRequestId is null)
+            {
+                throw new ApplicationException("Approval request is required for this room");
+            }
+
+            await context.AppendEvent(new ApprovalFlowStarted(
+                approvalRequestId.Value,
+                command.ReservationId,
+                command.RoomId,
+                command.OrganizerId,
+                [],
+                DateTime.UtcNow,
+                command.ApprovalRequestComment).GetEventWithTags());
+        }
+
         var holdEvent = new ReservationHoldCommitted(
             command.ReservationId,
             command.RoomId,
@@ -75,18 +115,13 @@ public record CreateQuickReservation : ICommandWithHandler<CreateQuickReservatio
             command.StartTime,
             command.EndTime,
             command.Purpose,
-            command.RequiresApproval,
-            command.RequiresApproval ? command.ApprovalRequestId : null,
-            command.RequiresApproval ? command.ApprovalRequestComment : null,
+            requiresApproval,
+            approvalRequestId,
+            requiresApproval ? command.ApprovalRequestComment : null,
             selectedEquipment).GetEventWithTags();
 
-        if (command.RequiresApproval)
+        if (requiresApproval)
         {
-            if (command.ApprovalRequestId is null)
-            {
-                throw new ApplicationException("Approval request is required for this room");
-            }
-
             return await context.AppendEvent(holdEvent);
         }
 
