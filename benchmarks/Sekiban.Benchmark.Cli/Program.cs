@@ -23,10 +23,22 @@ static BenchmarkConfig? ParseArgs(string[] args)
                 config.ModeLabel = args[++i];
                 break;
             case "--total-events" when i + 1 < args.Length:
-                config.TotalEvents = int.Parse(args[++i]);
+                if (!int.TryParse(args[++i], out var totalEvents) || totalEvents <= 0)
+                {
+                    Console.Error.WriteLine("Error: --total-events must be a positive integer.");
+                    PrintUsage();
+                    return null;
+                }
+                config.TotalEvents = totalEvents;
                 break;
             case "--concurrency" when i + 1 < args.Length:
-                config.Concurrency = int.Parse(args[++i]);
+                if (!int.TryParse(args[++i], out var concurrency) || concurrency <= 0)
+                {
+                    Console.Error.WriteLine("Error: --concurrency must be a positive integer.");
+                    PrintUsage();
+                    return null;
+                }
+                config.Concurrency = concurrency;
                 break;
             case "--output" when i + 1 < args.Length:
                 config.Output = args[++i];
@@ -35,6 +47,10 @@ static BenchmarkConfig? ParseArgs(string[] args)
                 config.SkipSetup = true;
                 break;
             case "--help" or "-h":
+                PrintUsage();
+                return null;
+            default:
+                Console.Error.WriteLine($"Error: unknown or incomplete argument '{args[i]}'.");
                 PrintUsage();
                 return null;
         }

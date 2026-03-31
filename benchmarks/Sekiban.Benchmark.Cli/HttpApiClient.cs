@@ -1,8 +1,7 @@
 using System.Diagnostics;
-using System.Net.Http.Json;
+using System.Net;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace Sekiban.Benchmark.Cli;
 
@@ -33,15 +32,14 @@ public sealed class HttpApiClient : IDisposable
 
         // Register
         var regPayload = new { email, password, displayName = "BenchmarkAdmin" };
-        var (regResp, _) = await PostMeasured("/auth/register", regPayload);
+        _ = await PostMeasured("/auth/register", regPayload);
 
         // Login with JWT
         var loginPayload = new { email, password, useCookies = false };
-        var (loginResp, _) = await PostMeasured("/auth/login", loginPayload);
-        if (!loginResp.IsSuccessStatusCode) return false;
+        var loginResp = await PostMeasured("/auth/login", loginPayload, includeBodyOnSuccess: true);
+        if (!loginResp.IsSuccessStatusCode || string.IsNullOrWhiteSpace(loginResp.Body)) return false;
 
-        var loginJson = await loginResp.Content.ReadAsStringAsync();
-        using var doc = JsonDocument.Parse(loginJson);
+        using var doc = JsonDocument.Parse(loginResp.Body);
         if (!doc.RootElement.TryGetProperty("accessToken", out var tokenProp)) return false;
         var token = tokenProp.GetString();
         if (string.IsNullOrEmpty(token)) return false;
@@ -60,10 +58,10 @@ public sealed class HttpApiClient : IDisposable
 
     // ---------- Commands ----------
 
-    public Task<(HttpResponseMessage Resp, double Ms)> CreateRoom(object payload) =>
+    public Task<MeasuredResponse> CreateRoom(object payload) =>
         PostMeasured("/api/rooms", payload);
 
-    public Task<(HttpResponseMessage Resp, double Ms)> CreateWeatherForecast(object payload) =>
+    public Task<MeasuredResponse> CreateWeatherForecast(object payload) =>
         PostMeasured(_weatherPostPath, payload);
 
     /// <summary>
@@ -74,14 +72,14 @@ public sealed class HttpApiClient : IDisposable
     {
         // Try WASM-style first
         var testPayload = new { forecastId = Guid.NewGuid(), location = "probe", date = DateTime.UtcNow.ToString("yyyy-MM-dd"), temperatureC = 0, summary = "probe" };
-        var (resp, _) = await PostMeasured("/api/weatherforecast", testPayload);
+        var resp = await PostMeasured("/api/weatherforecast", testPayload);
         if (resp.IsSuccessStatusCode)
         {
             _weatherPostPath = "/api/weatherforecast";
             return;
         }
         // Try Native-style
-        var (resp2, _) = await PostMeasured("/api/inputweatherforecast", testPayload);
+        var resp2 = await PostMeasured("/api/inputweatherforecast", testPayload);
         if (resp2.IsSuccessStatusCode)
         {
             _weatherPostPath = "/api/inputweatherforecast";
@@ -91,64 +89,91 @@ public sealed class HttpApiClient : IDisposable
         _weatherPostPath = "/api/weatherforecast";
     }
 
-    public Task<(HttpResponseMessage Resp, double Ms)> CreateReservationDraft(object payload) =>
+    public Task<MeasuredResponse> CreateReservationDraft(object payload) =>
         PostMeasured("/api/reservations/draft", payload);
 
-    public Task<(HttpResponseMessage Resp, double Ms)> CommitHold(Guid reservationId, object payload) =>
+    public Task<MeasuredResponse> CommitHold(Guid reservationId, object payload) =>
         PostMeasured($"/api/reservations/{reservationId}/hold", payload);
 
-    public Task<(HttpResponseMessage Resp, double Ms)> ConfirmReservation(Guid reservationId, object payload) =>
+    public Task<MeasuredResponse> ConfirmReservation(Guid reservationId, object payload) =>
         PostMeasured($"/api/reservations/{reservationId}/confirm", payload);
 
-    public Task<(HttpResponseMessage Resp, double Ms)> CancelReservation(Guid reservationId, object payload) =>
+    public Task<MeasuredResponse> CancelReservation(Guid reservationId, object payload) =>
         PostMeasured($"/api/reservations/{reservationId}/cancel", payload);
 
-    public Task<(HttpResponseMessage Resp, double Ms)> QuickReservation(object payload) =>
+    public Task<MeasuredResponse> QuickReservation(object payload) =>
         PostMeasuredWithUniqueUser("/api/reservations/quick", payload);
 
-    public Task<(HttpResponseMessage Resp, double Ms)> CreateReservationDraftUniqueUser(object payload) =>
+    public Task<MeasuredResponse> CreateReservationDraftUniqueUser(object payload) =>
         PostMeasuredWithUniqueUser("/api/reservations/draft", payload);
 
     // ---------- Queries ----------
 
-    public Task<(HttpResponseMessage Resp, double Ms)> GetRooms(int pageSize = 100) =>
-        GetMeasured($"/api/rooms?pageSize={pageSize}");
+    public Task<MeasuredResponse> GetRooms(int pageSize = 100, bool includeBodyOnSuccess = false) =>
+        GetMeasured($"/api/rooms?pageSize={pageSize}", includeBodyOnSuccess);
 
-    public Task<(HttpResponseMessage Resp, double Ms)> GetReservations(int pageNumber = 1, int pageSize = 100) =>
+    public Task<MeasuredResponse> GetReservations(int pageNumber = 1, int pageSize = 100) =>
         GetMeasured($"/api/reservations?pageNumber={pageNumber}&pageSize={pageSize}");
 
-    public Task<(HttpResponseMessage Resp, double Ms)> GetReservationsByRoom(Guid roomId, int pageSize = 100) =>
+    public Task<MeasuredResponse> GetReservationsByRoom(Guid roomId, int pageSize = 100) =>
         GetMeasured($"/api/reservations/by-room/{roomId}?pageSize={pageSize}");
 
-    public Task<(HttpResponseMessage Resp, double Ms)> GetWeatherCount() =>
+    public Task<MeasuredResponse> GetWeatherCount() =>
         GetMeasured("/api/weatherforecast/count");
 
-    public Task<(HttpResponseMessage Resp, double Ms)> GetWeatherList(int pageSize = 100) =>
+    public Task<MeasuredResponse> GetWeatherList(int pageSize = 100) =>
         GetMeasured($"/api/weatherforecast?pageSize={pageSize}");
+
+    public async Task<List<Guid>> GetExistingRoomIdsAsync(int pageSize = 100)
+    {
+        var response = await GetRooms(pageSize, includeBodyOnSuccess: true);
+        if (!response.IsSuccessStatusCode || string.IsNullOrWhiteSpace(response.Body))
+        {
+            return [];
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(response.Body);
+            var roomIds = new List<Guid>();
+            foreach (var item in document.RootElement.EnumerateArray())
+            {
+                if (item.TryGetProperty("roomId", out var roomIdProp) &&
+                    roomIdProp.TryGetGuid(out var roomId))
+                {
+                    roomIds.Add(roomId);
+                }
+            }
+            return roomIds;
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
 
     // ---------- Helpers ----------
 
-    private async Task<(HttpResponseMessage Resp, double Ms)> PostMeasured(string path, object payload)
+    private async Task<MeasuredResponse> PostMeasured(string path, object payload, bool includeBodyOnSuccess = false)
     {
         var json = JsonSerializer.Serialize(payload, JsonOpts);
         var content = new StringContent(json, Encoding.UTF8, "application/json");
         var sw = Stopwatch.StartNew();
-        var resp = await _http.PostAsync(path, content);
+        using var resp = await _http.PostAsync(path, content);
         sw.Stop();
-        return (resp, sw.Elapsed.TotalMilliseconds);
+        var body = await ReadBodyIfNeededAsync(resp, includeBodyOnSuccess);
+        return new MeasuredResponse(resp.StatusCode, sw.Elapsed.TotalMilliseconds, body);
     }
 
     /// <summary>
     /// POST with a unique X-Debug-User-Id per request to avoid UserMonthlyReservation tag contention.
     /// Each request appears as a different user.
     /// </summary>
-    private async Task<(HttpResponseMessage Resp, double Ms)> PostMeasuredWithUniqueUser(string path, object payload)
+    private async Task<MeasuredResponse> PostMeasuredWithUniqueUser(string path, object payload)
     {
         var json = JsonSerializer.Serialize(payload, JsonOpts);
-        var request = new HttpRequestMessage(HttpMethod.Post, path)
-        {
-            Content = new StringContent(json, Encoding.UTF8, "application/json")
-        };
+        using var request = new HttpRequestMessage(HttpMethod.Post, path)
+            { Content = new StringContent(json, Encoding.UTF8, "application/json") };
         // Copy Bearer token if set (for Native template auth)
         if (_http.DefaultRequestHeaders.Authorization != null)
         {
@@ -157,22 +182,36 @@ public sealed class HttpApiClient : IDisposable
         request.Headers.Add("X-Debug-User-Id", Guid.NewGuid().ToString());
         request.Headers.Add("X-Debug-Display-Name", "BenchUser");
         var sw = Stopwatch.StartNew();
-        var resp = await _http.SendAsync(request);
+        using var resp = await _http.SendAsync(request);
         sw.Stop();
-        return (resp, sw.Elapsed.TotalMilliseconds);
+        var body = await ReadBodyIfNeededAsync(resp, includeBodyOnSuccess: false);
+        return new MeasuredResponse(resp.StatusCode, sw.Elapsed.TotalMilliseconds, body);
     }
 
-    private async Task<(HttpResponseMessage Resp, double Ms)> GetMeasured(string path)
+    private async Task<MeasuredResponse> GetMeasured(string path, bool includeBodyOnSuccess = false)
     {
         var sw = Stopwatch.StartNew();
-        var resp = await _http.GetAsync(path);
+        using var resp = await _http.GetAsync(path);
         sw.Stop();
-        return (resp, sw.Elapsed.TotalMilliseconds);
+        var body = await ReadBodyIfNeededAsync(resp, includeBodyOnSuccess);
+        return new MeasuredResponse(resp.StatusCode, sw.Elapsed.TotalMilliseconds, body);
     }
 
-    public async Task<T?> ReadJson<T>(HttpResponseMessage resp) =>
-        await resp.Content.ReadFromJsonAsync<T>(JsonOpts);
+    private static async Task<string?> ReadBodyIfNeededAsync(HttpResponseMessage response, bool includeBodyOnSuccess)
+    {
+        if (!response.IsSuccessStatusCode || includeBodyOnSuccess)
+        {
+            return await response.Content.ReadAsStringAsync();
+        }
+
+        return null;
+    }
 }
+
+public sealed record MeasuredResponse(HttpStatusCode StatusCode, double Ms, string? Body = null)
+{
+    public bool IsSuccessStatusCode => (int)StatusCode is >= 200 and < 300;
+};
 
 // Response models
 public record CommandResponse(

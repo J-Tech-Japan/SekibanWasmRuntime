@@ -30,7 +30,6 @@ public static class ReservationLifecycleScenario
         var opsCount = 0;
         var latencies = new List<double>();
         var statusCounts = new Dictionary<int, int>();
-        var lockObj = new object();
 
         var semaphore = new SemaphoreSlim(effectiveConcurrency);
         var tasks = new List<Task>();
@@ -75,8 +74,8 @@ public static class ReservationLifecycleScenario
                             selectedEquipment = Array.Empty<string>()
                         };
 
-                        var (resp, ms) = await client.QuickReservation(payload);
-                        RecordOp(resp, ms);
+                        var resp = await client.QuickReservation(payload);
+                        RecordOp(resp);
                         if (resp.IsSuccessStatusCode)
                             Interlocked.Add(ref eventsCreated, 3); // draft + hold + confirm
                     }
@@ -94,8 +93,8 @@ public static class ReservationLifecycleScenario
                             selectedEquipment = Array.Empty<string>()
                         };
 
-                        var (resp, ms) = await client.CreateReservationDraftUniqueUser(payload);
-                        RecordOp(resp, ms);
+                        var resp = await client.CreateReservationDraftUniqueUser(payload);
+                        RecordOp(resp);
                         if (resp.IsSuccessStatusCode)
                             Interlocked.Increment(ref eventsCreated);
                     }
@@ -145,14 +144,13 @@ public static class ReservationLifecycleScenario
         Console.WriteLine($"  Latency: p50={phase.CommandLatency.P50Ms:F1}ms p95={phase.CommandLatency.P95Ms:F1}ms p99={phase.CommandLatency.P99Ms:F1}ms max={phase.CommandLatency.MaxMs:F1}ms");
         return phase;
 
-        void RecordOp(HttpResponseMessage resp, double ms)
+        void RecordOp(MeasuredResponse resp)
         {
             var code = (int)resp.StatusCode;
-            lock (lockObj)
-            {
-                latencies.Add(ms);
+            lock (latencies)
+                latencies.Add(resp.Ms);
+            lock (statusCounts)
                 statusCounts[code] = statusCounts.GetValueOrDefault(code) + 1;
-            }
             Interlocked.Increment(ref opsCount);
             if (!resp.IsSuccessStatusCode)
                 Interlocked.Increment(ref errorCount);

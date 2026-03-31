@@ -17,25 +17,20 @@ public static class QueryPerformanceScenario
         for (var i = 0; i < iterations; i++)
         {
             // Query 1: Room list
-            var (r1, ms1) = await client.GetRooms();
-            RecordQuery(r1, ms1);
+            RecordQuery(await client.GetRooms());
 
             // Query 2: Reservation list page 1
-            var (r2, ms2) = await client.GetReservations(1, 100);
-            RecordQuery(r2, ms2);
+            RecordQuery(await client.GetReservations(1, 100));
 
             // Query 3: Reservations by room (pick a random room)
             var roomId = roomIds[i % roomIds.Count];
-            var (r3, ms3) = await client.GetReservationsByRoom(roomId);
-            RecordQuery(r3, ms3);
+            RecordQuery(await client.GetReservationsByRoom(roomId));
 
             // Query 4: Weather count
-            var (r4, ms4) = await client.GetWeatherCount();
-            RecordQuery(r4, ms4);
+            RecordQuery(await client.GetWeatherCount());
 
             // Query 5: Weather list
-            var (r5, ms5) = await client.GetWeatherList();
-            RecordQuery(r5, ms5);
+            RecordQuery(await client.GetWeatherList());
 
             if ((i + 1) % 10 == 0)
                 Console.WriteLine($"  Query iteration {i + 1}/{iterations}");
@@ -54,9 +49,9 @@ public static class QueryPerformanceScenario
         Console.WriteLine($"  Latency: p50={queryLatency.P50Ms:F1}ms p95={queryLatency.P95Ms:F1}ms p99={queryLatency.P99Ms:F1}ms max={queryLatency.MaxMs:F1}ms");
         return phase;
 
-        void RecordQuery(HttpResponseMessage resp, double ms)
+        void RecordQuery(MeasuredResponse resp)
         {
-            queryLatency.Record(ms);
+            queryLatency.Record(resp.Ms);
             var code = (int)resp.StatusCode;
             statusCounts[code] = statusCounts.GetValueOrDefault(code) + 1;
             ops++;

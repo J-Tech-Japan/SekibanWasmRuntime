@@ -25,8 +25,8 @@ public static class SetupScenario
                 requiresApproval = false // All rooms no-approval for benchmark throughput
             };
 
-            var (resp, ms) = await client.CreateRoom(payload);
-            phase.CommandLatency.Record(ms);
+            var resp = await client.CreateRoom(payload);
+            phase.CommandLatency.Record(resp.Ms);
             var code = (int)resp.StatusCode;
             phase.StatusCodeDistribution[code] = phase.StatusCodeDistribution.GetValueOrDefault(code) + 1;
 
@@ -38,7 +38,7 @@ public static class SetupScenario
             else
             {
                 phase.ErrorCount++;
-                Console.WriteLine($"  [WARN] Room creation failed: {resp.StatusCode} - {await resp.Content.ReadAsStringAsync()}");
+                Console.WriteLine($"  [WARN] Room creation failed: {resp.StatusCode} - {resp.Body}");
             }
             phase.TotalOperations++;
         }

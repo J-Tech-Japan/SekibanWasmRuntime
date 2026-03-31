@@ -60,8 +60,14 @@ public sealed class BenchmarkRunner
         List<Guid> roomIds;
         if (_skipSetup)
         {
-            Console.WriteLine("\n=== Phase 1: Setup (SKIPPED) ===");
-            roomIds = Enumerable.Range(0, 20).Select(_ => Guid.NewGuid()).ToList();
+            Console.WriteLine("\n=== Phase 1: Setup (SKIPPED - loading existing rooms) ===");
+            roomIds = await client.GetExistingRoomIdsAsync();
+            Console.WriteLine($"  Found {roomIds.Count} existing rooms");
+            if (roomIds.Count == 0)
+            {
+                Console.WriteLine("\nERROR: --skip-setup was specified, but no existing rooms were found. Aborting benchmark.");
+                return await FinalizeAsync();
+            }
         }
         else
         {
@@ -78,30 +84,32 @@ public sealed class BenchmarkRunner
         var weatherResult = await WeatherBulkScenario.RunAsync(client, weatherEvents, _concurrency);
         result.Phases.Add(weatherResult);
 
+        if (roomIds.Count == 0)
+        {
+            Console.WriteLine("\nERROR: Setup phase did not produce any rooms. Aborting benchmark before reservation/query phases.");
+            return await FinalizeAsync();
+        }
+
         // Phase 3: Reservation Lifecycle
-        if (roomIds.Count > 0)
-        {
-            var reservationResult = await ReservationLifecycleScenario.RunAsync(
-                client, roomIds, reservationEvents, _concurrency);
-            result.Phases.Add(reservationResult);
-        }
-        else
-        {
-            Console.WriteLine("\n=== Phase 3: Reservation Lifecycle (SKIPPED - no rooms created) ===");
-        }
+        var reservationResult = await ReservationLifecycleScenario.RunAsync(
+            client, roomIds, reservationEvents, _concurrency);
+        result.Phases.Add(reservationResult);
 
         // Phase 4/5: Query Performance
         var queryResult = await QueryPerformanceScenario.RunAsync(client, roomIds, 50);
         result.Phases.Add(queryResult);
 
-        totalSw.Stop();
-        result.CompletedAtUtc = DateTime.UtcNow;
-        result.TotalDurationSeconds = totalSw.Elapsed.TotalSeconds;
+        return await FinalizeAsync();
 
-        PrintSummary(result);
-        await SaveResultsAsync(result);
-
-        return result;
+        async Task<BenchmarkResult> FinalizeAsync()
+        {
+            totalSw.Stop();
+            result.CompletedAtUtc = DateTime.UtcNow;
+            result.TotalDurationSeconds = totalSw.Elapsed.TotalSeconds;
+            PrintSummary(result);
+            await SaveResultsAsync(result);
+            return result;
+        }
     }
 
     private void PrintSummary(BenchmarkResult result)
