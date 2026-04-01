@@ -264,51 +264,52 @@ Memory usage (RSS) measured at different lifecycle stages.
 
 | Process | C# Native | C# WASM | Rust WASM |
 |---------|-----------|---------|-----------|
-| **ApiService (Orleans)** | 313 MB | 297 MB | 305 MB |
-| **WasmServer** | N/A | 2,417 MB | 277 MB |
-| **ClientApi** | N/A | 153 MB | 9 MB |
-| **Total (main processes)** | **313 MB** | **2,867 MB** | **591 MB** |
+| **ApiService (Orleans)** | 313 MB | 297 MB | 302 MB |
+| **WasmServer** | N/A | 2,417 MB | 256 MB |
+| **ClientApi** | N/A | 153 MB | 7 MB |
+| **Total (main processes)** | **313 MB** | **2,867 MB** | **565 MB** |
 
 ### After 300K Events
 
-| Process | C# Native | C# WASM | Rust WASM |
-|---------|-----------|---------|-----------|
-| **ApiService (Orleans)** | 1,685 MB | 440 MB | 441 MB |
-| **WasmServer** | N/A | **10,201 MB** | **1,488 MB** |
-| **ClientApi** | N/A | 360 MB | 12 MB |
-| **Total (main processes)** | **1,685 MB** | **11,001 MB** | **1,941 MB** |
+| Process | C# Native | CS WASM (with GC opt) | Rust WASM |
+|---------|-----------|----------------------|-----------|
+| **ApiService (Orleans)** | 1,685 MB | 439 MB | 440 MB |
+| **WasmServer** | N/A | **7,988 MB** | **2,022 MB** |
+| **ClientApi** | N/A | 363 MB | 14 MB |
+| **Total (main processes)** | **1,685 MB** | **8,790 MB** | **2,476 MB** |
 
 ### Memory Growth (startup → 300K)
 
-| Process | C# Native | C# WASM | Rust WASM |
-|---------|-----------|---------|-----------|
-| **ApiService** | +1,372 MB | +143 MB | +136 MB |
-| **WasmServer** | N/A | **+7,784 MB** | **+1,211 MB** |
-| **ClientApi** | N/A | +207 MB | +3 MB |
-| **Total growth** | **+1,372 MB** | **+8,134 MB** | **+1,350 MB** |
+| Process | C# Native | CS WASM (with GC opt) | Rust WASM |
+|---------|-----------|----------------------|-----------|
+| **ApiService** | +1,372 MB | +142 MB | +138 MB |
+| **WasmServer** | N/A | **+5,571 MB** | **+1,766 MB** |
+| **ClientApi** | N/A | +210 MB | +7 MB |
+| **Total growth** | **+1,372 MB** | **+5,923 MB** | **+1,911 MB** |
 
 ### Memory Comparison Summary
 
-| Metric | C# Native | C# WASM | Rust WASM |
-|--------|-----------|---------|-----------|
-| **Total at 300K** | **1,685 MB** | 11,001 MB | **1,941 MB** |
-| **WasmServer growth** | N/A | 7,784 MB | 1,211 MB |
-| **Rust vs CS WASM** | - | baseline | **-84% WasmServer growth** |
+| Metric | C# Native | CS WASM (with GC opt) | Rust WASM |
+|--------|-----------|----------------------|-----------|
+| **Total at 300K** | **1,685 MB** | 8,790 MB | **2,476 MB** |
+| **WasmServer peak** | N/A | 7,819 MB | 2,099 MB |
+| **Rust vs CS WASM** | - | baseline | **-72% total memory** |
 
 ### Memory Analysis
 
 - **Native** is the most memory-efficient: a single ApiService process handles everything. The 1.7 GB after 300K events includes Orleans grain state (in-memory projections for all aggregates).
 
-- **Rust WASM** at **1.9 GB total** is close to Native. WasmServer grows moderately (+1.2 GB) due to Wasmtime module instances and tag-state WASM accumulators. The Rust ClientApi stays at just 12 MB.
+- **Rust WASM** at **2.5 GB total** is close to Native. WasmServer grows moderately (+1.8 GB) due to Wasmtime module instances and tag-state WASM accumulators, but stays well-bounded. The Rust WASM module (0.7 MB) creates tiny per-instance overhead, and Rust's memory management returns freed memory to the OS efficiently. The Rust ClientApi stays at just 14 MB.
 
-- **CS WASM** at **11.0 GB total** is the most memory-intensive. The WasmServer grows to 10.2 GB primarily from `TryGetSerializableTagStateDirectAsync` which creates WASM accumulators and reads all events for each tag on every cache-miss. Under sustained reservation write load, tag-state cache is frequently invalidated, forcing re-computation.
+- **CS WASM** at **8.8 GB total** (with GC optimization) is the most memory-intensive. The WasmServer grows to ~8 GB primarily from `TryGetSerializableTagStateDirectAsync` which creates WASM accumulators and reads all events for each tag on every cache-miss. The C# WASM module (36.6 MB) creates 52x larger per-instance overhead than Rust. LOH compaction GC reduces the peak from 11+ GB to ~8 GB but adds throughput overhead.
 
 ### Why WasmServer Memory Differs Between CS WASM and Rust WASM
 
-Both CS WASM and Rust WASM share the same WasmServer process. The memory difference comes from the WASM module size and runtime overhead:
-- **C# WASM module**: 36.6 MB — each accumulator instance uses more memory for .NET's WASM runtime
-- **Rust WASM module**: 0.7 MB — much smaller per-instance memory footprint
-- Under high concurrency, many concurrent accumulators exist; the per-instance difference compounds
+Both CS WASM and Rust WASM use the same WasmServer process (shared codebase). The memory difference comes from:
+- **C# WASM module**: 36.6 MB → each accumulator instance uses significantly more memory (Wasmtime linear memory, .NET IL runtime overhead)
+- **Rust WASM module**: 0.7 MB → 52x smaller per-instance footprint, faster allocation/deallocation
+- **Memory release**: Rust WASM frees memory back to OS promptly; C# WASM accumulates on LOH which requires explicit compaction GC
+- Under sustained writes with 8 concurrent clients, the per-instance overhead difference compounds dramatically: RS WASM peaks at 2.1 GB while CS WASM peaks at 7.8 GB
 
 ### Optimizations Applied
 
