@@ -557,6 +557,9 @@ fn build_default_http_client(options: &HttpSekibanExecutorOptions) -> Client {
     Client::builder()
         .timeout(options.request_timeout)
         .connect_timeout(options.connect_timeout)
+        .pool_max_idle_per_host(16)
+        .pool_idle_timeout(Duration::from_secs(300))
+        .tcp_nodelay(true)
         .build()
         .expect("default HTTP client configuration should be valid")
 }

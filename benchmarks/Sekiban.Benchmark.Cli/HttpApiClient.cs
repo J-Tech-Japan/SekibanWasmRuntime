@@ -11,6 +11,9 @@ public sealed class HttpApiClient : IDisposable
 
     private readonly HttpClient _http;
     private string _weatherPostPath = "/api/weatherforecast";
+    private string? _authEmail;
+    private string? _authPassword;
+    private DateTimeOffset _tokenExpiresAt = DateTimeOffset.MaxValue;
 
     public HttpApiClient(string baseUrl)
     {
@@ -24,18 +27,28 @@ public sealed class HttpApiClient : IDisposable
     /// <summary>
     /// Authenticate with the Native template's Identity+JWT auth system.
     /// Registers a user (if needed) then logs in to get a JWT token.
+    /// Token is automatically refreshed before expiry.
     /// </summary>
     public async Task<bool> AuthenticateAsync()
     {
-        var email = $"benchmark-{Guid.NewGuid():N}@test.local";
-        var password = "Bench!Mark123$";
+        _authEmail = $"benchmark-{Guid.NewGuid():N}@test.local";
+        _authPassword = "Bench!Mark123$";
 
         // Register
-        var regPayload = new { email, password, displayName = "BenchmarkAdmin" };
+        var regPayload = new { email = _authEmail, password = _authPassword, displayName = "BenchmarkAdmin" };
         _ = await PostMeasured("/auth/register", regPayload);
 
-        // Login with JWT
-        var loginPayload = new { email, password, useCookies = false };
+        return await RefreshTokenAsync();
+    }
+
+    /// <summary>
+    /// Re-login to get a fresh JWT token. Called automatically when the token is near expiry.
+    /// </summary>
+    private async Task<bool> RefreshTokenAsync()
+    {
+        if (_authEmail is null || _authPassword is null) return false;
+
+        var loginPayload = new { email = _authEmail, password = _authPassword, useCookies = false };
         var loginResp = await PostMeasured("/auth/login", loginPayload, includeBodyOnSuccess: true);
         if (!loginResp.IsSuccessStatusCode || string.IsNullOrWhiteSpace(loginResp.Body)) return false;
 
@@ -47,13 +60,47 @@ public sealed class HttpApiClient : IDisposable
         _http.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
-        // Promote to Admin role: Native template needs Admin role for rooms/reservations.
-        // The template registers with "User" role. We need Admin.
-        // Check if there's a way... Actually, for benchmark purposes, we need the test-data
-        // and room/reservation endpoints which require authorization.
-        // Let's check if basic auth is enough (RequireAuthorization without AdminOnly)
-        Console.WriteLine($"  Authenticated as: {email}");
+        // Parse token expiry from JWT payload (second base64 segment)
+        _tokenExpiresAt = ParseJwtExpiry(token) ?? DateTimeOffset.UtcNow.AddMinutes(10);
+
+        Console.WriteLine($"  Authenticated as: {_authEmail} (expires {_tokenExpiresAt:HH:mm:ss})");
         return true;
+    }
+
+    /// <summary>
+    /// Ensure the JWT token is still valid. Refreshes if within 60 seconds of expiry.
+    /// </summary>
+    public async Task EnsureAuthenticatedAsync()
+    {
+        if (_authEmail is null) return; // Not using auth
+        if (DateTimeOffset.UtcNow.AddSeconds(60) < _tokenExpiresAt) return; // Still valid
+        Console.WriteLine("  Token near expiry, refreshing...");
+        await RefreshTokenAsync();
+    }
+
+    private static DateTimeOffset? ParseJwtExpiry(string token)
+    {
+        try
+        {
+            var parts = token.Split('.');
+            if (parts.Length < 2) return null;
+            var payload = parts[1];
+            // Pad base64
+            payload = payload.Replace('-', '+').Replace('_', '/');
+            switch (payload.Length % 4)
+            {
+                case 2: payload += "=="; break;
+                case 3: payload += "="; break;
+            }
+            var json = Encoding.UTF8.GetString(Convert.FromBase64String(payload));
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.TryGetProperty("exp", out var expProp))
+            {
+                return DateTimeOffset.FromUnixTimeSeconds(expProp.GetInt64());
+            }
+        }
+        catch { /* ignore parse errors */ }
+        return null;
     }
 
     // ---------- Commands ----------

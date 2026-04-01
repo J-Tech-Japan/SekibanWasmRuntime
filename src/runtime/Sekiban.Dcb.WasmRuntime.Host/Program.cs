@@ -72,6 +72,8 @@ builder.Services.AddSingleton<JsonSerializerOptions>(jsonOptions);
 builder.Services.AddSingleton(registry);
 builder.Services.AddSingleton<ProjectionInstanceStore>();
 builder.Services.AddSingleton<DirectSnapshotQueryCache>();
+builder.Services.AddSingleton<KnownTagTracker>();
+builder.Services.AddSingleton<TagStateResponseCache>();
 builder.Services.AddSingleton<DirectTagStateCache>();
 builder.Services.AddSingleton(new WaitForSortableUniqueIdTimeoutOptions
 {
@@ -191,11 +193,40 @@ app.MapPost("/api/sekiban/serialized/tag-state", async (HttpContext http, TagSta
         return Results.BadRequest(new { error = ex.Message });
     }
 
+    // Fast path: if this tag has never had events committed, return empty state immediately.
+    // This avoids Orleans grain activation and WASM instance creation for brand-new tags.
+    var tagTracker = http.RequestServices.GetRequiredService<KnownTagTracker>();
+    var tagGroupContent = $"{tagStateId.TagGroup}:{tagStateId.TagContent}";
+    if (!tagTracker.HasKnownEvents(tagGroupContent))
+    {
+        var projectorVersionResult = domainTypes.TagProjectorTypes.GetProjectorVersion(tagStateId.TagProjectorName);
+        var projectorVersion = projectorVersionResult.IsSuccess ? projectorVersionResult.GetValue() : string.Empty;
+        return Results.Ok(new SerializableTagState(
+            Array.Empty<byte>(),
+            0,
+            string.Empty,
+            tagStateId.TagGroup,
+            tagStateId.TagContent,
+            tagStateId.TagProjectorName,
+            nameof(EmptyTagStatePayload),
+            projectorVersion));
+    }
+
+    // Check if we have a cached response for this tag-state (avoids Orleans grain activation)
+    var responseCache = http.RequestServices.GetRequiredService<TagStateResponseCache>();
+    var tagStateKey = request.TagStateId;
+    if (responseCache.TryGet(tagStateKey, out var cachedState))
+    {
+        return Results.Ok(cachedState);
+    }
+
+    SerializableTagState tagState;
     if (ResolveDirectSnapshotQueryEnabled(http.RequestServices.GetRequiredService<IConfiguration>()))
     {
         var directResult = await TryGetSerializableTagStateDirectAsync(http, tagStateId);
         if (directResult is not null)
         {
+            responseCache.Set(tagStateKey, directResult);
             return Results.Ok(directResult);
         }
     }
@@ -207,13 +238,22 @@ app.MapPost("/api/sekiban/serialized/tag-state", async (HttpContext http, TagSta
         return Results.BadRequest(new { error = result.GetException().Message });
     }
 
-    return Results.Ok(result.GetValue());
+    tagState = result.GetValue();
+    responseCache.Set(tagStateKey, tagState);
+    return Results.Ok(tagState);
 });
 
 app.MapPost("/api/sekiban/serialized/tag-latest-sortable", async (
     HttpContext http,
     TagLatestSortableRequest request) =>
 {
+    // Fast path: if the tag has never had events committed, it doesn't exist.
+    var tagTracker = http.RequestServices.GetRequiredService<KnownTagTracker>();
+    if (!tagTracker.HasKnownEvents(request.Tag))
+    {
+        return Results.Ok(new TagLatestSortableResponse(false, string.Empty));
+    }
+
     var actorAccessor = http.RequestServices.GetRequiredService<IActorObjectAccessor>();
     var actorResult = await actorAccessor.GetActorAsync<ITagConsistentActorCommon>(request.Tag);
     if (!actorResult.IsSuccess)
@@ -244,6 +284,16 @@ app.MapPost("/api/sekiban/serialized/commit", async (
     {
         return Results.BadRequest(new { error = result.GetException().Message });
     }
+
+    // Track committed tags so the tag-state fast-path knows which tags have events.
+    var committedTags = request.EventCandidates.SelectMany(static e => e.Tags).Distinct().ToList();
+    var tagTracker = http.RequestServices.GetRequiredService<KnownTagTracker>();
+    tagTracker.MarkTagsAsWritten(committedTags);
+
+    // Invalidate cached tag-state responses for affected tags so the next request
+    // re-fetches the updated state from Orleans.
+    var responseCache = http.RequestServices.GetRequiredService<TagStateResponseCache>();
+    responseCache.InvalidateForTags(committedTags);
 
     return Results.Ok(result.GetValue());
 });
@@ -1101,3 +1151,71 @@ sealed class DirectTagStateCache
 }
 
 sealed record DirectTagStateCacheEntry(SerializableTagState CachedState, string LastSortableUniqueId);
+
+/// <summary>
+/// Caches SerializableTagState responses by tagStateId (format: "tagGroup:tagContent:projectorName").
+/// After a tag-state is computed via Orleans, the result is cached here so subsequent requests
+/// for the same tag-state return immediately without grain activation.
+/// When a commit writes events for tags, all cache entries matching those tags are invalidated.
+/// This dramatically helps reservation scenarios where the same Room/User tags are accessed repeatedly.
+/// </summary>
+sealed class TagStateResponseCache
+{
+    private readonly ConcurrentDictionary<string, SerializableTagState> _entries = new(StringComparer.Ordinal);
+
+    public bool TryGet(string tagStateKey, out SerializableTagState value) =>
+        _entries.TryGetValue(tagStateKey, out value!);
+
+    public void Set(string tagStateKey, SerializableTagState value) =>
+        _entries[tagStateKey] = value;
+
+    /// <summary>
+    /// Invalidates all cached entries whose tagStateId starts with "tagGroup:tagContent:".
+    /// Called after commit to ensure subsequent tag-state requests get fresh data.
+    /// </summary>
+    public void InvalidateForTags(IEnumerable<string> tags)
+    {
+        foreach (var tag in tags)
+        {
+            // tag format: "tagGroup:tagContent"
+            // tagStateKey format: "tagGroup:tagContent:projectorName"
+            var prefix = tag + ":";
+            foreach (var key in _entries.Keys)
+            {
+                if (key.StartsWith(prefix, StringComparison.Ordinal))
+                {
+                    _entries.TryRemove(key, out _);
+                }
+            }
+        }
+    }
+}
+
+/// <summary>
+/// Tracks tags that have had events committed through this WasmServer instance.
+/// Used as a fast-path in the tag-state endpoint: if a tag is NOT in this tracker,
+/// it has never had events written (within this server's lifetime), so we can return
+/// an empty state immediately without activating Orleans grains or creating WASM instances.
+/// This eliminates ~180k unnecessary grain activations during weather bulk benchmarks.
+/// </summary>
+sealed class KnownTagTracker
+{
+    private readonly ConcurrentDictionary<string, byte> _knownTags = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Returns true if the given tag (format: "tagGroup:tagContent") has had events committed.
+    /// </summary>
+    public bool HasKnownEvents(string tagGroupContent) => _knownTags.ContainsKey(tagGroupContent);
+
+    /// <summary>
+    /// Marks the given tags as having had events committed.
+    /// Called after successful commit to track which tags have events.
+    /// </summary>
+    public void MarkTagsAsWritten(IEnumerable<string> tags)
+    {
+        foreach (var tag in tags)
+        {
+            _knownTags.TryAdd(tag, 0);
+        }
+    }
+}
