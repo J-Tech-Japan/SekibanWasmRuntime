@@ -117,6 +117,11 @@ builder.Services.AddTransient<ISerializedSekibanDcbExecutor>(sp =>
 builder.Services.AddWasmtimeProjectionHost(options =>
 {
     options.DefaultModulePath = manifest.DefaultModulePath;
+    // Reduce pooled WASM instances from 4 to 1 per projector.
+    // Each C# WASM instance holds ~36.6MB of linear memory.
+    // With 6+ projectors, 4 pooled × 6 = 24 instances = ~878MB idle memory.
+    // Reducing to 1 saves ~660MB while still allowing instance reuse.
+    options.MaxPooledInstancesPerProjector = 1;
 });
 builder.Services.AddWasmTagStateRuntime(options =>
 {
@@ -240,7 +245,24 @@ app.MapPost("/api/sekiban/serialized/tag-state", async (HttpContext http, TagSta
         return Results.BadRequest(new { error = result.GetException().Message });
     }
 
-    return Results.Ok(result.GetValue());
+    var tagState = result.GetValue();
+
+    // Fix EmptyTagStatePayload name: Orleans grain may return state with a placeholder
+    // payload name that the ClientApi/WASM executor doesn't recognize.
+    // Infer the correct payload name from the projector name convention.
+    bool needsPayloadNameFix =
+        tagState.Payload.Length > 0 &&
+        string.Equals(tagState.TagPayloadName, nameof(EmptyTagStatePayload), StringComparison.Ordinal);
+    if (needsPayloadNameFix)
+    {
+        var inferredPayloadName = InferTagPayloadName(tagStateId.TagProjectorName);
+        if (!string.IsNullOrWhiteSpace(inferredPayloadName))
+        {
+            tagState = tagState with { TagPayloadName = inferredPayloadName };
+        }
+    }
+
+    return Results.Ok(tagState);
     }
     catch (TimeoutException ex)
     {
