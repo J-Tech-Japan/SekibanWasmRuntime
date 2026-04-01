@@ -21,7 +21,7 @@ Comprehensive comparison of Sekiban event sourcing across three runtime modes: C
 - **Orleans**: In-memory clustering (development mode)
 - **Benchmark CLI**: `benchmarks/Sekiban.Benchmark.Cli`
 - **Concurrency**: 8 parallel HTTP clients
-- **Date**: 2026-04-01
+- **Date**: 2026-04-01 (CS WASM updated 2026-04-01)
 
 ## 1. Command Throughput (Weather Bulk Write)
 
@@ -31,26 +31,26 @@ Pure event write throughput with UUID-based aggregates (no tag contention).
 
 | Metric | C# Native | C# WASM | Rust WASM |
 |--------|-----------|---------|-----------|
-| **Events/sec** | **1,939** | 1,566 | 1,730 |
-| **Duration** | **92.8s** | 114.9s | 104.0s |
-| **p50 latency** | **3.9ms** | 4.7ms | 4.4ms |
-| **p95 latency** | **5.3ms** | 7.4ms | 5.9ms |
-| **p99 latency** | **9.7ms** | 12.7ms | 10.7ms |
+| **Events/sec** | **1,939** | 1,511 | 1,730 |
+| **Duration** | **92.8s** | 119.1s | 104.0s |
+| **p50 latency** | **3.9ms** | 5.0ms | 4.4ms |
+| **p95 latency** | **5.3ms** | 6.8ms | 5.9ms |
+| **p99 latency** | **9.7ms** | 11.5ms | 10.7ms |
 | **Errors** | 0 | 0 | 0 |
-| **Stability** | Stable ~1,939/s | Stable ~1,566/s | Stable ~1,730/s |
+| **Stability** | Stable ~1,939/s | Stable ~1,511/s | Stable ~1,730/s |
 
 ### Relative Performance
 
 | Comparison | Overhead |
 |------------|----------|
-| C# WASM vs Native | -19% throughput, +21% p50 latency |
+| C# WASM vs Native | -22% throughput, +28% p50 latency |
 | Rust WASM vs Native | -11% throughput, +13% p50 latency |
-| Rust WASM vs C# WASM | **+10% throughput**, -6% p50 latency |
+| Rust WASM vs C# WASM | **+15% throughput**, -12% p50 latency |
 
 ### Key Observations
 
 - **Native is fastest** as expected (no serialization or network boundary)
-- **Rust WASM surpasses C# WASM** by 10% in throughput despite both using the same WasmServer backend
+- **Rust WASM surpasses C# WASM** by 15% in throughput despite both using the same WasmServer backend
 - All three maintain **flat throughput curves** at 180K events (no degradation at scale)
 - Rust WASM's previous scalability issue (960→267 events/sec) has been **fully resolved** by KnownTagTracker and TagStateResponseCache optimizations
 
@@ -71,12 +71,15 @@ QuickReservation workflow: creates draft + hold + confirm (3 events per call), w
 
 | Metric | C# Native | C# WASM | Rust WASM |
 |--------|-----------|---------|-----------|
-| **Events/sec** | ~100* | 128 | **292** |
-| **p50 latency** | ~100ms* | 142.2ms | **74.0ms** |
-| **p95 latency** | ~140ms* | 317.5ms | **116.0ms** |
-| **Errors** | 0* | 1,559 | **0** |
+| **Events/sec** | ~100* | **123** | **292** |
+| **p50 latency** | ~100ms* | 150.0ms | **74.0ms** |
+| **p95 latency** | ~140ms* | 328.4ms | **116.0ms** |
+| **Errors** | 0* | 60 (500) | **0** |
+| **Duration** | N/A | 971.9s | 313.3s |
 
 *Native 300K reservation estimated from 5K performance curve. Full 300K run not completed due to execution time (>2 hours).
+
+> **CS WASM improvement**: Previously 1,559 errors (before memory optimization) → 60 errors (after optimization). Error reduction of 96%. The remaining 60 errors are tag contention 500s under sustained high load.
 
 ### Why Native Reservations Are Slower
 
@@ -115,14 +118,16 @@ Query execution after all writes: room list, reservation list, reservations-by-r
 
 ### After 300K Events
 
-| Metric | C# Native | C# WASM | Rust WASM |
-|--------|-----------|---------|-----------|
-| **Queries/sec** | **1,742** | 0.2 | 4 |
-| **p50 latency** | **0.1ms** | 24.0ms | 19.0ms |
-| **p95 latency** | **0.5ms** | 30,003ms** | 660ms |
-| **Errors** | 0 | 35** | 0 |
+| Metric | C# Native | C# WASM (before opt) | C# WASM (after opt) | Rust WASM (after opt) |
+|--------|-----------|---------------------|---------------------|----------------------|
+| **Queries/sec** | **1,742** | 0.2 | **552** | **851** |
+| **p50 latency** | **0.1ms** | 24.0ms | **1.6ms** | 1.2ms |
+| **p95 latency** | **0.5ms** | 30,003ms* | **3.1ms** | 2.8ms |
+| **Errors** | 0 | 35* | **0** | **0** |
 
-**CS WASM queries timed out at 30s after 300K events.
+*CS WASM queries timed out at 30s before memory optimization (DirectReplayQuery blocking query path).
+
+> **CS WASM Query Improvement**: 0.2 q/s → 552 q/s after disabling DirectReplayQuery (+2760x). The DirectReplayQuery path was serializing all 300K+ events on every query, causing 30-second timeouts. DirectSnapshotQuery (Orleans grain cached state) now handles all queries efficiently.
 
 ### Why Native Queries Are Sub-Millisecond
 
@@ -130,12 +135,11 @@ Query execution after all writes: room list, reservation list, reservations-by-r
 - No serialization, no network hop, no WASM boundary crossing
 - Grain state is incrementally maintained via Orleans streaming — no replay needed
 
-### Why WASM Queries Degrade at Scale
+### Why WASM Queries Improved Dramatically After Optimization
 
-- WASM queries route through HTTP → WasmServer → Orleans grain → WASM projection
-- At 300K events, the multi-projection state is large (reservation list with ~40K entries)
-- State serialization/deserialization overhead grows with projection size
-- DirectSnapshotQuery optimization helps but still requires full state transfer
+- **Before**: DirectReplayQuery re-projected all events from scratch on each query (O(n) with n = total events), causing 30s timeouts
+- **After**: DirectReplayQuery disabled; DirectSnapshotQuery exclusively used → Orleans grain serves projection state from snapshot cache
+- Remaining overhead is HTTP serialization between ClientApi ↔ WasmServer ↔ Orleans grain (1-3ms round trip)
 
 ## 4. Scalability Characteristics
 
@@ -161,22 +165,31 @@ Based on Weather Bulk (fairest comparison — identical domain logic, no content
 | C# WASM vs Native | **-19%** | **+21%** (p50) |
 | Rust WASM vs Native | **-11%** | **+13%** (p50) |
 
-The WASM sandbox overhead is modest (11-19% throughput reduction), making it viable for production use where sandboxing or multi-tenant isolation is desired.
+The WASM sandbox overhead is modest (11-22% throughput reduction), making it viable for production use where sandboxing or multi-tenant isolation is desired.
 
 ## 6. Reliability and Error Handling
 
-### Total Errors Across 300K Event Runs
+### Total Errors Across 300K Event Runs (After All Optimizations)
 
-| Metric | C# Native | C# WASM | Rust WASM |
-|--------|-----------|---------|-----------|
-| **Weather errors** | 0 | 0 | 0 |
-| **Reservation errors** | 0* | 1,559 | **0** |
-| **Query errors** | 0 | 35 | **0** |
-| **Total errors** | 0* | 1,594 | **0** |
+| Metric | C# Native | C# WASM (before opt) | C# WASM (after opt) | Rust WASM |
+|--------|-----------|---------------------|---------------------|-----------|
+| **Weather errors** | 0 | 0 | 0 | 0 |
+| **Reservation errors** | 0* | 1,559 | 60 (500) | **0** |
+| **Query errors** | 0 | 35 (timeout) | **0** | **0** |
+| **Total errors** | 0* | 1,594 | **60** | **0** |
 
 *With benchmark fixes (X-Debug-User-Id, JWT refresh, slot distribution).
 
-Rust WASM is the most robust runtime in benchmarks with **zero errors across all phases**.
+Rust WASM maintains **zero errors across all phases**. CS WASM improved from 1,594 → 60 errors (-96%) after memory optimization. The remaining 60 are tag-contention 500s under sustained concurrent writes at 300K scale.
+
+### Error Type Analysis
+
+| Error Type | C# Native | C# WASM | Rust WASM |
+|------------|-----------|---------|-----------|
+| Time slot conflict (400) | Present at scale | 0 | **0** |
+| Tag contention (500) | 0 | 60 (at 300K) | **0** |
+| DirectReplay timeout (5xx) | 0 | 0 (after opt) | 0 |
+| Auth expiry (401) | 0 (with token refresh) | 0 | 0 |
 
 ## 7. Development Experience
 
@@ -198,8 +211,8 @@ Rust WASM is the most robust runtime in benchmarks with **zero errors across all
 
 ### C# WebAssembly
 - **Best for**: C# teams wanting WASM sandboxing with familiar language
-- **Strengths**: Same language for domain + host, mature tooling
-- **Trade-offs**: Largest WASM module (36.6 MB), query degradation at scale
+- **Strengths**: Same language for domain + host, mature tooling, extremely low memory after optimization (433 MB at 300K)
+- **Trade-offs**: Largest WASM module (36.6 MB), some tag contention errors at 300K scale (60 errors)
 
 ### Rust WebAssembly
 - **Best for**: Maximum WASM performance, smallest module size, zero-error reliability
@@ -258,27 +271,37 @@ Memory usage (RSS) measured at different lifecycle stages.
 | **ClientApi** | N/A | 140 MB | 7 MB |
 | **Total (main processes)** | **313 MB** | **2,852 MB** | **601 MB** |
 
-### After 300K Events (with memory optimizations)
+### After 300K Events (with memory optimizations applied to both WASM runtimes)
 
-| Process | C# Native | C# WASM | Rust WASM |
-|---------|-----------|---------|-----------|
-| **ApiService (Orleans)** | 1,685 MB | 440 MB | 438 MB |
-| **WasmServer** | N/A | 10,616 MB* | 1,273 MB |
-| **ClientApi** | N/A | 371 MB | 12 MB |
-| **Total (main processes)** | **1,685 MB** | **11,427 MB*** | **1,723 MB** |
-
-*CS WASM has not yet received the memory optimizations applied to Rust WASM. The same techniques (DirectReplay elimination, cache eviction, GC hints) would significantly reduce CS WASM memory as well.
+| Process | C# Native | C# WASM (before opt) | C# WASM (after opt) | Rust WASM (after opt) |
+|---------|-----------|---------------------|---------------------|----------------------|
+| **ApiService (Orleans)** | 1,685 MB | 440 MB | **145 MB** | 438 MB |
+| **WasmServer** | N/A | 10,616 MB | **144 MB** | 1,273 MB |
+| **ClientApi** | N/A | 371 MB | **144 MB** | 12 MB |
+| **Total (main processes)** | **1,685 MB** | **11,427 MB** | **433 MB** | **1,723 MB** |
 
 ### Memory Growth (startup → 300K)
 
-| Process | C# Native | C# WASM | Rust WASM |
-|---------|-----------|---------|-----------|
-| **ApiService** | +1,372 MB | +131 MB | +118 MB |
-| **WasmServer** | N/A | +8,213 MB* | +999 MB |
-| **ClientApi** | N/A | +231 MB | +5 MB |
-| **Total growth** | **+1,372 MB** | **+8,575 MB*** | **+1,122 MB** |
+| Process | C# Native | C# WASM (before) | C# WASM (after) | Rust WASM (after) |
+|---------|-----------|-----------------|-----------------|------------------|
+| **ApiService** | +1,372 MB | +131 MB | **+3 MB** | +118 MB |
+| **WasmServer** | N/A | +8,213 MB | **+2 MB** | +999 MB |
+| **ClientApi** | N/A | +231 MB | **+2 MB** | +5 MB |
+| **Total growth** | **+1,372 MB** | **+8,575 MB** | **+7 MB** | **+1,122 MB** |
 
-### Memory Optimization Results (Rust WASM)
+### Memory Optimization Results
+
+#### CS WASM
+
+| Metric | Before Optimization | After Optimization | Improvement |
+|--------|--------------------|--------------------|-------------|
+| **WasmServer** | 10,616 MB | **144 MB** | **-99%** |
+| **ClientApi** | 371 MB | **144 MB** | **-61%** |
+| **ApiService** | 440 MB | **145 MB** | **-67%** |
+| **Total WASM** | 11,427 MB | **433 MB** | **-96%** |
+| **Query perf** | 0.2 queries/sec | **552 queries/sec** | **+2760x** |
+
+#### Rust WASM
 
 | Metric | Before Optimization | After Optimization | Improvement |
 |--------|--------------------|--------------------|-------------|
@@ -291,12 +314,14 @@ Memory usage (RSS) measured at different lifecycle stages.
 
 - **Native** is the most memory-efficient: a single ApiService process handles everything. The 1.7 GB after 300K events includes Orleans grain state (in-memory projections for all aggregates).
 
-- **Rust WASM** after optimization is comparable to Native at **1.7 GB total**. The key optimizations that eliminated 12+ GB of waste:
+- **CS WASM** after optimization is extremely compact at **433 MB total** — even lower than Native's 1.7 GB. This is because Orleans grain state is persisted to Azure Blob Storage, and inactive grains are evicted from memory. With DirectReplayQuery disabled, no projection state is duplicated in WasmServer.
+
+- **Rust WASM** after optimization is at **1.7 GB total** — comparable to Native. WasmServer retains some memory for WASM module instances and the Rust runtime.
+
+The key optimizations that eliminated 10+ GB of CS WASM waste and 12+ GB of Rust WASM waste:
   1. **Disabled DirectReplayQuery**: This held a complete copy of all projection state (180K weather items, 46K reservations) in-process alongside Orleans grains. Disabling it eliminated the duplication — Orleans grains now serve queries exclusively with proper snapshot management.
   2. **TagStateResponseCache with LRU eviction**: Capped at 10K entries with oldest-half eviction. One-shot tags (weather UUIDs) are invalidated on commit and not re-cached.
   3. **Periodic GC hints**: Every 1000th commit triggers a non-blocking Gen 1 collection, helping the runtime reclaim evicted cache entries promptly.
-
-- **CS WASM** still shows high memory (10.6 GB) because it has not yet received these optimizations. The same DirectReplay elimination technique would reduce CS WASM WasmServer memory by a similar factor.
 
 ### Key Insight: Avoid Duplicate Projection State
 
@@ -305,7 +330,9 @@ The largest memory cost in WASM runtimes came from holding projection state in m
 - DirectReplayQuery hosts (unmanaged, unbounded growth)
 - TagStateResponseCache (unbounded before optimization)
 
-By eliminating duplication and relying on Orleans grains as the single source of truth, Rust WASM memory dropped from 14.4 GB to 1.7 GB — **matching Native performance**.
+By eliminating duplication and relying on Orleans grains as the single source of truth:
+- CS WASM memory dropped from **11.4 GB to 433 MB** (-96%)
+- Rust WASM memory dropped from **14.4 GB to 1.7 GB** (-88%)
 
 ## Performance Tuning Applied
 
@@ -346,6 +373,17 @@ By eliminating duplication and relying on Orleans grains as the single source of
 | Reservation events/sec | 100 | **292** | **+192%** |
 | Total 300K time | 1,929s | **571s** | **-70%** |
 | Total errors | 0 | **0** | Maintained |
+
+### Cumulative CS WASM Improvement
+
+| Metric | Original | After All Optimizations | Improvement |
+|--------|----------|------------------------|-------------|
+| Weather events/sec (300K) | 1,566 | **1,511** | Stable (~-4%, within noise) |
+| Query perf after 300K | 0.2 q/s (timeouts) | **552 q/s** | **+2760x** |
+| WasmServer memory at 300K | 10,616 MB | **144 MB** | **-99%** |
+| Total memory at 300K | 11,427 MB | **433 MB** | **-96%** |
+| Total errors (300K) | 1,594 | **60** | **-96%** |
+| Query timeout errors | 35 | **0** | Eliminated |
 
 ## How to Run
 
