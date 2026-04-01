@@ -315,14 +315,25 @@ Both CS WASM and Rust WASM share the same WasmServer process. The memory differe
 1. **Disabled DirectReplayQuery** (`return null;` in `TryExecuteDirectReplayQueryAsync`): Prevents query-time full event replay. Impact: queries no longer cause unbounded memory growth from duplicate projection state.
 2. **KnownTagTracker**: Returns empty state for never-committed tags, avoiding unnecessary WASM accumulator creation (especially for weather UUID tags).
 3. **TagStateResponseCache with LRU eviction**: Capped at 10K entries. Reduces repeated tag-state WASM re-computation for frequently accessed tags.
-4. **Periodic GC hints**: Every 1000th commit triggers `GC.Collect(1, Optimized, non-blocking)`.
+4. **Periodic GC with LOH compaction**: Every 100th commit triggers `GC.Collect(2, Optimized)`, and every 50th tag-state replay triggers a blocking Gen 2 GC with LOH compaction. This is critical because tag-state replays allocate large byte arrays on the Large Object Heap (LOH), which is only compacted during blocking full GC.
+5. **Tag-state replay concurrency limiter**: SemaphoreSlim(2) limits concurrent tag-state WASM accumulator replays, reducing peak memory from parallel allocations.
+
+### Memory Reduction Results (CS WASM WasmServer at 300K)
+
+| Metric | No GC tuning | With LOH compaction GC | Improvement |
+|--------|-------------|----------------------|-------------|
+| **WasmServer peak** | 11,432 MB | **7,819 MB** | **-32%** |
+| **WasmServer final** | 10,552 MB | **7,988 MB** | **-24%** |
+| **Memory variability** | Monotonic growth | Oscillating (5.5-7.8 GB) | GC reclaiming |
+| Reservation throughput | 48 ops/s | 27 ops/s | -44% (GC pause overhead) |
 
 ### Remaining Memory Issue: Tag-State Direct Path
 
 The `TryGetSerializableTagStateDirectAsync` function creates a fresh WASM accumulator and replays all events for a tag on every cache miss. During sustained reservation writes:
 - Each QuickReservation (3 events) invalidates multiple tag caches
 - Subsequent requests must re-compute tag state via WASM
-- .NET's GC does not release pages back to the OS, causing RSS to remain high
+- Large byte arrays from event loading go to the LOH, requiring blocking GC to compact
+- C# WASM module (36.6 MB) creates larger per-instance overhead than Rust WASM (0.7 MB)
 
 **Potential further optimizations**:
 - Incremental tag-state accumulation (persist accumulator state between requests)

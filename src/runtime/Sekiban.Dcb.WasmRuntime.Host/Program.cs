@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Collections.Concurrent;
+using System.Runtime;
 using System.Runtime.CompilerServices;
 using System.Diagnostics;
 using System.Text;
@@ -182,6 +183,11 @@ if (enableProjectionStatusEndpoint)
 
 InstanceEndpoints.Map(app);
 
+// Limit concurrent tag-state replays to prevent memory spikes from multiple
+// simultaneous WASM accumulator + event-list allocations.
+var tagStateReplaySemaphore = new SemaphoreSlim(2, 2);
+var tagStateReplayCounter = new StrongBox<int>(0);
+
 app.MapPost("/api/sekiban/serialized/tag-state", async (HttpContext http, TagStateRequest request) =>
 {
     TagStateId tagStateId;
@@ -224,7 +230,7 @@ app.MapPost("/api/sekiban/serialized/tag-state", async (HttpContext http, TagSta
     SerializableTagState tagState;
     if (ResolveDirectSnapshotQueryEnabled(http.RequestServices.GetRequiredService<IConfiguration>()))
     {
-        var directResult = await TryGetSerializableTagStateDirectAsync(http, tagStateId);
+        var directResult = await TryGetSerializableTagStateDirectAsync(http, tagStateId, tagStateReplaySemaphore, tagStateReplayCounter);
         if (directResult is not null)
         {
             responseCache.Set(tagStateKey, directResult);
@@ -298,11 +304,14 @@ app.MapPost("/api/sekiban/serialized/commit", async (
     var responseCache = http.RequestServices.GetRequiredService<TagStateResponseCache>();
     responseCache.InvalidateForTags(committedTags);
 
-    // Periodically hint the GC to collect evicted cache entries and short-lived tag-state objects.
-    // Only trigger on every ~1000th commit to avoid overhead.
-    if (Interlocked.Increment(ref commitCounter.Value) % 1000 == 0)
+    // Periodically hint the GC to collect tag-state accumulators and event arrays.
+    // Reservation workflows invalidate ~5 tag caches per commit, causing frequent WASM
+    // accumulator allocations that land on the Large Object Heap.
+    // Collect Gen 2 every ~100 commits to reclaim LOH memory promptly.
+    var count = Interlocked.Increment(ref commitCounter.Value);
+    if (count % 100 == 0)
     {
-        GC.Collect(1, GCCollectionMode.Optimized, blocking: false);
+        GC.Collect(2, GCCollectionMode.Optimized, blocking: false);
     }
 
     return Results.Ok(result.GetValue());
@@ -350,7 +359,9 @@ app.Run();
 
 static async Task<SerializableTagState?> TryGetSerializableTagStateDirectAsync(
     HttpContext http,
-    TagStateId tagStateId)
+    TagStateId tagStateId,
+    SemaphoreSlim replaySemaphore,
+    StrongBox<int> replayCounter)
 {
     var logger = http.RequestServices
         .GetRequiredService<ILoggerFactory>()
@@ -394,40 +405,60 @@ static async Task<SerializableTagState?> TryGetSerializableTagStateDirectAsync(
         tagStateId,
         latestSortableUniqueId ?? "<none>");
 
-    using var accumulator = primitive.CreateAccumulator(tagStateId);
-    if (!accumulator.ApplyState(null))
+    // Limit concurrent replays to reduce peak memory from parallel WASM accumulators.
+    await replaySemaphore.WaitAsync();
+    SerializableTagState state;
+    try
     {
-        logger.LogWarning(
-            "Direct tag-state ApplyState(null) failed: {TagStateId}",
-            tagStateId);
-        return null;
-    }
+        using var accumulator = primitive.CreateAccumulator(tagStateId);
+        if (!accumulator.ApplyState(null))
+        {
+            logger.LogWarning(
+                "Direct tag-state ApplyState(null) failed: {TagStateId}",
+                tagStateId);
+            return null;
+        }
 
-    var tag = new FallbackTag(tagStateId.TagGroup, tagStateId.TagContent);
-    var eventsResult = await eventStore.ReadSerializableEventsByTagAsync(tag);
-    if (!eventsResult.IsSuccess)
-    {
-        logger.LogWarning(
-            "Direct tag-state event read failed: {TagStateId} => {Error}",
+        var tag = new FallbackTag(tagStateId.TagGroup, tagStateId.TagContent);
+        var eventsResult = await eventStore.ReadSerializableEventsByTagAsync(tag);
+        if (!eventsResult.IsSuccess)
+        {
+            logger.LogWarning(
+                "Direct tag-state event read failed: {TagStateId} => {Error}",
+                tagStateId,
+                eventsResult.GetException().Message);
+            return null;
+        }
+
+        var events = eventsResult.GetValue().ToList();
+        logger.LogDebug(
+            "Direct tag-state events loaded: {TagStateId} => {EventCount}",
             tagStateId,
-            eventsResult.GetException().Message);
-        return null;
-    }
+            events.Count);
+        if (events.Count > 0 && !accumulator.ApplyEvents(events, latestSortableUniqueId))
+        {
+            logger.LogWarning(
+                "Direct tag-state ApplyEvents failed: {TagStateId}",
+                tagStateId);
+            return null;
+        }
 
-    var events = eventsResult.GetValue().ToList();
-    logger.LogDebug(
-        "Direct tag-state events loaded: {TagStateId} => {EventCount}",
-        tagStateId,
-        events.Count);
-    if (events.Count > 0 && !accumulator.ApplyEvents(events, latestSortableUniqueId))
+        state = accumulator.GetSerializedState();
+    }
+    finally
     {
-        logger.LogWarning(
-            "Direct tag-state ApplyEvents failed: {TagStateId}",
-            tagStateId);
-        return null;
+        replaySemaphore.Release();
+        // Reclaim WASM accumulator and event-list memory from LOH.
+        // Without LOH compaction, RSS grows to 10+ GB at 300K events.
+        // LOH compaction requires blocking GC; non-blocking GC won't compact the LOH.
+        // Every ~50 replays gives a good balance: ~5GB peak with moderate throughput impact.
+        var count = Interlocked.Increment(ref replayCounter.Value);
+        if (count % 50 == 0)
+        {
+            GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+            GC.Collect(2, GCCollectionMode.Optimized, blocking: true, compacting: true);
+        }
     }
-
-    var state = accumulator.GetSerializedState();
 
     // Note: DirectTagStateCache is available but disabled pending investigation of
     // snapshot restore compatibility with the accumulator's ApplyState method.
