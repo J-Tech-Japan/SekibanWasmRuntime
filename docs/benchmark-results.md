@@ -328,18 +328,43 @@ Both CS WASM and Rust WASM use the same WasmServer process (shared codebase). Th
 | **Memory variability** | Monotonic growth | Oscillating (5.5-7.8 GB) | GC reclaiming |
 | Reservation throughput | 48 ops/s | 27 ops/s | -44% (GC pause overhead) |
 
-### Remaining Memory Issue: Tag-State Direct Path
+### Architecture: Orleans Grain-Based Tag-State (Current)
 
-The `TryGetSerializableTagStateDirectAsync` function creates a fresh WASM accumulator and replays all events for a tag on every cache miss. During sustained reservation writes:
-- Each QuickReservation (3 events) invalidates multiple tag caches
-- Subsequent requests must re-compute tag state via WASM
-- Large byte arrays from event loading go to the LOH, requiring blocking GC to compact
-- C# WASM module (36.6 MB) creates larger per-instance overhead than Rust WASM (0.7 MB)
+Tag-state requests are now delegated exclusively to Orleans `TagStateGrain`, which:
+- Caches projected state in Orleans grain storage (`IPersistentState`)
+- Only replays new events since last cached sortable ID (incremental replay)
+- Reuses WASM accumulator state via `ApplyState(cachedState)`
+- Survives for `GrainCollectionAge` (5 minutes) between requests
 
-**Potential further optimizations**:
-- Incremental tag-state accumulation (persist accumulator state between requests)
-- Skip WASM accumulator for tag-state and use Orleans grain state exclusively
-- Reduce cache invalidation frequency (batch commits)
+This eliminates the WasmServer-side `TryGetSerializableTagStateDirectAsync` and `TagStateResponseCache`, replacing them with Orleans' native grain caching.
+
+### WASM Memory Architecture
+
+Wasmtime separates compiled code from runtime state:
+- **Module** (compiled WASM bytecode): Shared singleton via `WasmtimeModuleCache` (~300KB, 1 per file)
+- **Store + Instance** (linear memory): Created per grain activation (~36.6MB for C# WASM, ~0.7MB for Rust WASM)
+
+The 36.6MB per C# WASM instance is **linear memory**, not module duplication. Memory scales with concurrent grain activations:
+
+| Concurrent Grains | C# WASM Memory | Rust WASM Memory |
+|---|---|---|
+| 10 | ~366 MB | ~7 MB |
+| 50 | ~1,830 MB | ~35 MB |
+| 200 | ~7,320 MB | ~140 MB |
+
+**Pool optimization**: `MaxPooledInstancesPerProjector` reduced from 4 to 1, saving ~660MB of idle pooled instances.
+
+### Remaining Memory Issue: C# WASM Linear Memory Size
+
+The fundamental memory difference between CS WASM (10GB) and Rust WASM (2GB) at 300K events is the per-instance linear memory:
+- C# WASM: 36.6 MB per instance (includes .NET runtime + GC heap in WASM linear memory)
+- Rust WASM: 0.7 MB per instance (minimal runtime, no GC)
+
+**Further optimization paths:**
+- Reduce C# WASM module's initial linear memory allocation
+- Share linear memory across read-only projector instances
+- Limit maximum concurrent Orleans grain activations for tag-state projectors
+- Consider Rust for memory-critical deployments (52x smaller per-instance footprint)
 
 ## Performance Tuning Applied
 
