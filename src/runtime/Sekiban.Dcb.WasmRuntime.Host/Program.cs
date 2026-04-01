@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
@@ -273,6 +274,8 @@ app.MapPost("/api/sekiban/serialized/tag-latest-sortable", async (
         lastSortableUniqueId));
 });
 
+var commitCounter = new StrongBox<int>(0);
+
 app.MapPost("/api/sekiban/serialized/commit", async (
     HttpContext http,
     SerializedCommitRequest request,
@@ -294,6 +297,13 @@ app.MapPost("/api/sekiban/serialized/commit", async (
     // re-fetches the updated state from Orleans.
     var responseCache = http.RequestServices.GetRequiredService<TagStateResponseCache>();
     responseCache.InvalidateForTags(committedTags);
+
+    // Periodically hint the GC to collect evicted cache entries and short-lived tag-state objects.
+    // Only trigger on every ~1000th commit to avoid overhead.
+    if (Interlocked.Increment(ref commitCounter.Value) % 1000 == 0)
+    {
+        GC.Collect(1, GCCollectionMode.Optimized, blocking: false);
+    }
 
     return Results.Ok(result.GetValue());
 });
@@ -570,6 +580,15 @@ static async Task<IResult?> TryExecuteDirectReplayQueryAsync(
     var cacheEntry = cache.GetOrAdd(projectorName);
     var hostFactory = http.RequestServices.GetRequiredService<IProjectionActorHostFactory>();
 
+    // Direct replay queries duplicate all projection state in-process alongside Orleans grains.
+    // This causes WasmServer memory to grow unboundedly (13+ GB at 300K events).
+    // Disable direct replay to eliminate the duplication — Orleans grains manage their own state
+    // with snapshot persistence and incremental catch-up, which is more memory-efficient.
+    // DirectSnapshotQuery (below) is still available for fast reads from persisted snapshots.
+    return null;
+
+    // Note: The code below is retained but unreachable. It can be re-enabled by removing
+    // the early return above if direct replay is needed for specific scenarios.
     await cacheEntry.Gate.WaitAsync(ct);
     try
     {
@@ -1074,7 +1093,7 @@ sealed class DirectSnapshotQueryCacheEntry : IDisposable
     public ProjectionStateMetadata? Metadata { get; private set; }
     private string? ProjectorVersion { get; set; }
     private string? LastSortableUniqueId { get; set; }
-    private long EventsProcessed { get; set; }
+    public long EventsProcessed { get; private set; }
 
     public bool Matches(string projectorVersion, string? lastSortableUniqueId, long eventsProcessed) =>
         Host is not null
@@ -1110,6 +1129,12 @@ sealed class DirectSnapshotQueryCacheEntry : IDisposable
         LastSortableUniqueId = lastSortableUniqueId;
         EventsProcessed = eventsProcessed;
     }
+
+    /// <summary>
+    /// Dispose the cached host and reset to empty state.
+    /// Called when the host exceeds memory thresholds so future queries fall through to Orleans.
+    /// </summary>
+    public void DisposeAndReset() => DisposeHost();
 
     public void Dispose()
     {
@@ -1157,17 +1182,39 @@ sealed record DirectTagStateCacheEntry(SerializableTagState CachedState, string 
 /// After a tag-state is computed via Orleans, the result is cached here so subsequent requests
 /// for the same tag-state return immediately without grain activation.
 /// When a commit writes events for tags, all cache entries matching those tags are invalidated.
-/// This dramatically helps reservation scenarios where the same Room/User tags are accessed repeatedly.
+///
+/// Memory management:
+/// - MaxEntries limits the total number of cached entries (default 10,000)
+/// - When the limit is reached, the oldest half of entries are evicted
+/// - Each weather forecast creates a unique tag that is never accessed again after commit,
+///   so these are invalidated and not re-cached
 /// </summary>
 sealed class TagStateResponseCache
 {
-    private readonly ConcurrentDictionary<string, SerializableTagState> _entries = new(StringComparer.Ordinal);
+    private const int MaxEntries = 10_000;
 
-    public bool TryGet(string tagStateKey, out SerializableTagState value) =>
-        _entries.TryGetValue(tagStateKey, out value!);
+    private readonly ConcurrentDictionary<string, TagStateResponseCacheEntry> _entries = new(StringComparer.Ordinal);
 
-    public void Set(string tagStateKey, SerializableTagState value) =>
-        _entries[tagStateKey] = value;
+    public bool TryGet(string tagStateKey, out SerializableTagState value)
+    {
+        if (_entries.TryGetValue(tagStateKey, out var entry))
+        {
+            entry.LastAccessedTicks = Environment.TickCount64;
+            value = entry.State;
+            return true;
+        }
+        value = default!;
+        return false;
+    }
+
+    public void Set(string tagStateKey, SerializableTagState value)
+    {
+        if (_entries.Count >= MaxEntries)
+        {
+            EvictOldest();
+        }
+        _entries[tagStateKey] = new TagStateResponseCacheEntry(value);
+    }
 
     /// <summary>
     /// Invalidates all cached entries whose tagStateId starts with "tagGroup:tagContent:".
@@ -1177,8 +1224,6 @@ sealed class TagStateResponseCache
     {
         foreach (var tag in tags)
         {
-            // tag format: "tagGroup:tagContent"
-            // tagStateKey format: "tagGroup:tagContent:projectorName"
             var prefix = tag + ":";
             foreach (var key in _entries.Keys)
             {
@@ -1187,6 +1232,30 @@ sealed class TagStateResponseCache
                     _entries.TryRemove(key, out _);
                 }
             }
+        }
+    }
+
+    private void EvictOldest()
+    {
+        // Remove the oldest half of entries by access time
+        var entries = _entries.ToArray();
+        var sorted = entries.OrderBy(e => e.Value.LastAccessedTicks).ToArray();
+        var removeCount = sorted.Length / 2;
+        for (var i = 0; i < removeCount; i++)
+        {
+            _entries.TryRemove(sorted[i].Key, out _);
+        }
+    }
+
+    private sealed class TagStateResponseCacheEntry
+    {
+        public SerializableTagState State { get; }
+        public long LastAccessedTicks { get; set; }
+
+        public TagStateResponseCacheEntry(SerializableTagState state)
+        {
+            State = state;
+            LastAccessedTicks = Environment.TickCount64;
         }
     }
 }

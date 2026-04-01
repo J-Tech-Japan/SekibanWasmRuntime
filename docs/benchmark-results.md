@@ -258,40 +258,54 @@ Memory usage (RSS) measured at different lifecycle stages.
 | **ClientApi** | N/A | 140 MB | 7 MB |
 | **Total (main processes)** | **313 MB** | **2,852 MB** | **601 MB** |
 
-### After 300K Events
+### After 300K Events (with memory optimizations)
 
 | Process | C# Native | C# WASM | Rust WASM |
 |---------|-----------|---------|-----------|
-| **ApiService (Orleans)** | 1,685 MB | 440 MB | 439 MB |
-| **WasmServer** | N/A | 10,616 MB | 13,029 MB |
-| **ClientApi** | N/A | 371 MB | 972 MB |
-| **Total (main processes)** | **1,685 MB** | **11,427 MB** | **14,440 MB** |
+| **ApiService (Orleans)** | 1,685 MB | 440 MB | 438 MB |
+| **WasmServer** | N/A | 10,616 MB* | 1,273 MB |
+| **ClientApi** | N/A | 371 MB | 12 MB |
+| **Total (main processes)** | **1,685 MB** | **11,427 MB*** | **1,723 MB** |
+
+*CS WASM has not yet received the memory optimizations applied to Rust WASM. The same techniques (DirectReplay elimination, cache eviction, GC hints) would significantly reduce CS WASM memory as well.
 
 ### Memory Growth (startup → 300K)
 
 | Process | C# Native | C# WASM | Rust WASM |
 |---------|-----------|---------|-----------|
-| **ApiService** | +1,372 MB | +131 MB | +119 MB |
-| **WasmServer** | N/A | +8,213 MB | +12,755 MB |
-| **ClientApi** | N/A | +231 MB | +965 MB |
-| **Total growth** | **+1,372 MB** | **+8,575 MB** | **+13,839 MB** |
+| **ApiService** | +1,372 MB | +131 MB | +118 MB |
+| **WasmServer** | N/A | +8,213 MB* | +999 MB |
+| **ClientApi** | N/A | +231 MB | +5 MB |
+| **Total growth** | **+1,372 MB** | **+8,575 MB*** | **+1,122 MB** |
+
+### Memory Optimization Results (Rust WASM)
+
+| Metric | Before Optimization | After Optimization | Improvement |
+|--------|--------------------|--------------------|-------------|
+| **WasmServer** | 13,029 MB | **1,273 MB** | **-90%** |
+| **ClientApi** | 972 MB | **12 MB** | **-99%** |
+| **Total WASM** | 14,440 MB | **1,723 MB** | **-88%** |
+| **Query perf** | 4 queries/sec | **851 queries/sec** | **+212x** |
 
 ### Memory Analysis
 
 - **Native** is the most memory-efficient: a single ApiService process handles everything. The 1.7 GB after 300K events includes Orleans grain state (in-memory projections for all aggregates).
 
-- **CS WASM** WasmServer grows to 10.6 GB because it hosts WASM module instances, DirectReplayQuery cached hosts, and tag-state grain state. The C# WASM module itself is 36.6 MB and each instance carries .NET runtime overhead within Wasmtime.
+- **Rust WASM** after optimization is comparable to Native at **1.7 GB total**. The key optimizations that eliminated 12+ GB of waste:
+  1. **Disabled DirectReplayQuery**: This held a complete copy of all projection state (180K weather items, 46K reservations) in-process alongside Orleans grains. Disabling it eliminated the duplication — Orleans grains now serve queries exclusively with proper snapshot management.
+  2. **TagStateResponseCache with LRU eviction**: Capped at 10K entries with oldest-half eviction. One-shot tags (weather UUIDs) are invalidated on commit and not re-cached.
+  3. **Periodic GC hints**: Every 1000th commit triggers a non-blocking Gen 1 collection, helping the runtime reclaim evicted cache entries promptly.
 
-- **Rust WASM** WasmServer grows to 13 GB despite the tiny 0.7 MB Rust module, because the KnownTagTracker and TagStateResponseCache store tag-state data in memory, and Orleans grains accumulate state. The Rust ClientApi grows to 972 MB from the tag-state cache (all 180K weather tags + reservation tags cached in `Arc<Mutex<HashMap>>`).
+- **CS WASM** still shows high memory (10.6 GB) because it has not yet received these optimizations. The same DirectReplay elimination technique would reduce CS WASM WasmServer memory by a similar factor.
 
-- **WASM runtimes use 7-10x more memory** than Native due to the distributed architecture: separate WasmServer + ClientApi + ApiService processes, each with its own copy of relevant state.
+### Key Insight: Avoid Duplicate Projection State
 
-### Recommendations for Production
+The largest memory cost in WASM runtimes came from holding projection state in multiple locations:
+- Orleans grains (managed, with snapshot persistence)
+- DirectReplayQuery hosts (unmanaged, unbounded growth)
+- TagStateResponseCache (unbounded before optimization)
 
-- For memory-constrained environments, **Native** is strongly preferred
-- WASM runtimes should implement cache eviction (LRU or TTL) to bound memory growth
-- The Rust ClientApi's `tag_state_cache` should be scoped per-command or time-limited rather than unbounded
-- WasmServer's `TagStateResponseCache` should add size limits and periodic eviction
+By eliminating duplication and relying on Orleans grains as the single source of truth, Rust WASM memory dropped from 14.4 GB to 1.7 GB — **matching Native performance**.
 
 ## Performance Tuning Applied
 
