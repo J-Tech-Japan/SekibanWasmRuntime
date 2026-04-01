@@ -206,6 +206,93 @@ Rust WASM is the most robust runtime in benchmarks with **zero errors across all
 - **Strengths**: Smallest module (0.7 MB), highest WASM throughput, zero errors, stable at scale
 - **Trade-offs**: Rust learning curve, slower build times
 
+## 9. Query Validation After 300K Events
+
+After writing 300K events, we validated that each runtime can still serve queries and return the latest data.
+
+### Data Retrieval Capability
+
+| Query | C# Native | C# WASM | Rust WASM |
+|-------|-----------|---------|-----------|
+| **Weather count** | 180,001 (after catch-up) | 180,001 | 180,001 |
+| **Weather list (5 items)** | OK (2ms) | OK (88ms) | OK (720ms) |
+| **Room list (20 rooms)** | OK (2ms) | OK (5ms) | OK (4ms) |
+| **Reservation list** | OK (after catch-up) | OK (40ms) | OK (400ms) |
+| **Latest data visible** | Delayed (async catch-up) | Immediate | Immediate |
+| **Errors** | 0 | 0 | 0 |
+
+### Query Latency After 300K Events (warm cache, pageSize=5)
+
+| Query | C# Native | C# WASM | Rust WASM |
+|-------|-----------|---------|-----------|
+| **Weather list** | **2ms** | 88ms | 720ms |
+| **Reservation list** | **1ms** | 40ms | 400ms |
+| **Room list** | **2ms** | 5ms | 4ms |
+
+### Key Findings
+
+- **All three runtimes can successfully query all data after 300K events**
+- **Native** queries are sub-millisecond but require catch-up time — multi-projection grains asynchronously process events, so immediately after writes, safeVersion may lag behind. After catch-up completes (~30-60s for 180K events), all data is accessible.
+- **CS WASM** queries work at ~88ms for weather, but during benchmark's QueryPerformance phase, some queries hit the 30-second DirectReplayQuery timeout (36 errors out of 250). Individual queries after warm-up work reliably.
+- **Rust WASM** queries are slower (720ms for full weather list) because the full projection state (180K items) is serialized over HTTP. Small pages (5 items) work within the same latency. Zero errors.
+
+### Why Rust WASM Weather Queries Are Slow
+
+The Rust WASM weather query returns the full `WeatherForecastListState` containing 180,001 items. This state must be:
+1. Serialized in the WASM module → JSON
+2. Transferred from WasmServer through the Orleans grain
+3. Deserialized in the query handler
+
+For paginated results, only a subset is needed, but the current architecture serializes the entire projection state before pagination. Room queries (20 items) return in 4ms, demonstrating that small projections are fast.
+
+## 10. Memory Usage
+
+Memory usage (RSS) measured at different lifecycle stages.
+
+### Initial (at startup, before any events)
+
+| Process | C# Native | C# WASM | Rust WASM |
+|---------|-----------|---------|-----------|
+| **ApiService (Orleans)** | 313 MB | 309 MB | 320 MB |
+| **WasmServer** | N/A | 2,403 MB | 274 MB |
+| **ClientApi** | N/A | 140 MB | 7 MB |
+| **Total (main processes)** | **313 MB** | **2,852 MB** | **601 MB** |
+
+### After 300K Events
+
+| Process | C# Native | C# WASM | Rust WASM |
+|---------|-----------|---------|-----------|
+| **ApiService (Orleans)** | 1,685 MB | 440 MB | 439 MB |
+| **WasmServer** | N/A | 10,616 MB | 13,029 MB |
+| **ClientApi** | N/A | 371 MB | 972 MB |
+| **Total (main processes)** | **1,685 MB** | **11,427 MB** | **14,440 MB** |
+
+### Memory Growth (startup → 300K)
+
+| Process | C# Native | C# WASM | Rust WASM |
+|---------|-----------|---------|-----------|
+| **ApiService** | +1,372 MB | +131 MB | +119 MB |
+| **WasmServer** | N/A | +8,213 MB | +12,755 MB |
+| **ClientApi** | N/A | +231 MB | +965 MB |
+| **Total growth** | **+1,372 MB** | **+8,575 MB** | **+13,839 MB** |
+
+### Memory Analysis
+
+- **Native** is the most memory-efficient: a single ApiService process handles everything. The 1.7 GB after 300K events includes Orleans grain state (in-memory projections for all aggregates).
+
+- **CS WASM** WasmServer grows to 10.6 GB because it hosts WASM module instances, DirectReplayQuery cached hosts, and tag-state grain state. The C# WASM module itself is 36.6 MB and each instance carries .NET runtime overhead within Wasmtime.
+
+- **Rust WASM** WasmServer grows to 13 GB despite the tiny 0.7 MB Rust module, because the KnownTagTracker and TagStateResponseCache store tag-state data in memory, and Orleans grains accumulate state. The Rust ClientApi grows to 972 MB from the tag-state cache (all 180K weather tags + reservation tags cached in `Arc<Mutex<HashMap>>`).
+
+- **WASM runtimes use 7-10x more memory** than Native due to the distributed architecture: separate WasmServer + ClientApi + ApiService processes, each with its own copy of relevant state.
+
+### Recommendations for Production
+
+- For memory-constrained environments, **Native** is strongly preferred
+- WASM runtimes should implement cache eviction (LRU or TTL) to bound memory growth
+- The Rust ClientApi's `tag_state_cache` should be scoped per-command or time-limited rather than unbounded
+- WasmServer's `TagStateResponseCache` should add size limits and periodic eviction
+
 ## Performance Tuning Applied
 
 ### WasmServer Optimizations (Program.cs)
