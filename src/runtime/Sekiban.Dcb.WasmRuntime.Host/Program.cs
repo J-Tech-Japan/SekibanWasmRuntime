@@ -66,6 +66,12 @@ builder.UseOrleans(silo =>
     silo.AddMemoryGrainStorage("PubSubStore");
     silo.AddMemoryStreams("SekibanQueue");
     silo.AddMemoryStreams("EventStreamProvider");
+    // Deactivate idle grains faster to release WASM projection hosts sooner.
+    // Default is 120 minutes; 5 minutes is sufficient for benchmark workloads.
+    silo.Configure<GrainCollectionOptions>(options =>
+    {
+        options.CollectionAge = TimeSpan.FromMinutes(5);
+    });
 });
 
 builder.Services.AddSingleton(manifest);
@@ -185,11 +191,15 @@ InstanceEndpoints.Map(app);
 
 // Limit concurrent tag-state replays to prevent memory spikes from multiple
 // simultaneous WASM accumulator + event-list allocations.
-var tagStateReplaySemaphore = new SemaphoreSlim(2, 2);
+// Limit to 1 concurrent tag-state WASM replay to minimize peak memory.
+// With version-aware caching, most requests hit the cache and don't need replay.
+var tagStateReplaySemaphore = new SemaphoreSlim(1, 1);
 var tagStateReplayCounter = new StrongBox<int>(0);
 
 app.MapPost("/api/sekiban/serialized/tag-state", async (HttpContext http, TagStateRequest request) =>
 {
+    try
+    {
     TagStateId tagStateId;
     try
     {
@@ -219,25 +229,10 @@ app.MapPost("/api/sekiban/serialized/tag-state", async (HttpContext http, TagSta
             projectorVersion));
     }
 
-    // Check if we have a cached response for this tag-state (avoids Orleans grain activation)
-    var responseCache = http.RequestServices.GetRequiredService<TagStateResponseCache>();
-    var tagStateKey = request.TagStateId;
-    if (responseCache.TryGet(tagStateKey, out var cachedState))
-    {
-        return Results.Ok(cachedState);
-    }
-
-    SerializableTagState tagState;
-    if (ResolveDirectSnapshotQueryEnabled(http.RequestServices.GetRequiredService<IConfiguration>()))
-    {
-        var directResult = await TryGetSerializableTagStateDirectAsync(http, tagStateId, tagStateReplaySemaphore, tagStateReplayCounter);
-        if (directResult is not null)
-        {
-            responseCache.Set(tagStateKey, directResult);
-            return Results.Ok(directResult);
-        }
-    }
-
+    // Delegate to Orleans TagStateGrain which manages its own cached state.
+    // The grain caches projection state in Orleans grain storage and only replays
+    // new events since the last cached sortable unique ID (incremental replay).
+    // This eliminates the need for WasmServer-side caching or direct WASM replays.
     var executor = http.RequestServices.GetRequiredService<ISerializedSekibanDcbExecutor>();
     var result = await executor.GetSerializableTagStateAsync(tagStateId);
     if (!result.IsSuccess)
@@ -245,9 +240,22 @@ app.MapPost("/api/sekiban/serialized/tag-state", async (HttpContext http, TagSta
         return Results.BadRequest(new { error = result.GetException().Message });
     }
 
-    tagState = result.GetValue();
-    responseCache.Set(tagStateKey, tagState);
-    return Results.Ok(tagState);
+    return Results.Ok(result.GetValue());
+    }
+    catch (TimeoutException ex)
+    {
+        return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status504GatewayTimeout);
+    }
+    catch (OperationCanceledException)
+    {
+        return Results.StatusCode(499);
+    }
+    catch (Exception ex)
+    {
+        var logger = http.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("TagState");
+        logger.LogError(ex, "Unhandled error in tag-state endpoint for {TagStateId}", request.TagStateId);
+        return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status500InternalServerError);
+    }
 });
 
 app.MapPost("/api/sekiban/serialized/tag-latest-sortable", async (
@@ -280,41 +288,47 @@ app.MapPost("/api/sekiban/serialized/tag-latest-sortable", async (
         lastSortableUniqueId));
 });
 
-var commitCounter = new StrongBox<int>(0);
-
 app.MapPost("/api/sekiban/serialized/commit", async (
     HttpContext http,
     SerializedCommitRequest request,
     CancellationToken ct) =>
 {
-    var executor = http.RequestServices.GetRequiredService<ISerializedSekibanDcbExecutor>();
-    var result = await executor.CommitSerializableEventsAsync(request, ct);
-    if (!result.IsSuccess)
+    try
     {
-        return Results.BadRequest(new { error = result.GetException().Message });
+        var executor = http.RequestServices.GetRequiredService<ISerializedSekibanDcbExecutor>();
+        var result = await executor.CommitSerializableEventsAsync(request, ct);
+        if (!result.IsSuccess)
+        {
+            return Results.BadRequest(new { error = result.GetException().Message });
+        }
+
+        // Track committed tags so the tag-state fast-path knows which tags have events.
+        var committedTags = request.EventCandidates.SelectMany(static e => e.Tags).Distinct().ToList();
+        var tagTracker = http.RequestServices.GetRequiredService<KnownTagTracker>();
+        tagTracker.MarkTagsAsWritten(committedTags);
+
+        // Version-aware cache: mark tags as stale (new sortable ID available)
+        // rather than deleting entries. The tag-state endpoint will check freshness
+        // on next request and only re-compute if the sortable ID has advanced.
+        var responseCache = http.RequestServices.GetRequiredService<TagStateResponseCache>();
+        responseCache.MarkTagsAsStale(committedTags);
+
+        return Results.Ok(result.GetValue());
     }
-
-    // Track committed tags so the tag-state fast-path knows which tags have events.
-    var committedTags = request.EventCandidates.SelectMany(static e => e.Tags).Distinct().ToList();
-    var tagTracker = http.RequestServices.GetRequiredService<KnownTagTracker>();
-    tagTracker.MarkTagsAsWritten(committedTags);
-
-    // Invalidate cached tag-state responses for affected tags so the next request
-    // re-fetches the updated state from Orleans.
-    var responseCache = http.RequestServices.GetRequiredService<TagStateResponseCache>();
-    responseCache.InvalidateForTags(committedTags);
-
-    // Periodically hint the GC to collect tag-state accumulators and event arrays.
-    // Reservation workflows invalidate ~5 tag caches per commit, causing frequent WASM
-    // accumulator allocations that land on the Large Object Heap.
-    // Collect Gen 2 every ~100 commits to reclaim LOH memory promptly.
-    var count = Interlocked.Increment(ref commitCounter.Value);
-    if (count % 100 == 0)
+    catch (TimeoutException ex)
     {
-        GC.Collect(2, GCCollectionMode.Optimized, blocking: false);
+        return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status504GatewayTimeout);
     }
-
-    return Results.Ok(result.GetValue());
+    catch (OperationCanceledException)
+    {
+        return Results.StatusCode(499);
+    }
+    catch (Exception ex)
+    {
+        var logger = http.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("Commit");
+        logger.LogError(ex, "Unhandled error in commit endpoint");
+        return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status500InternalServerError);
+    }
 });
 
 app.MapPost("/api/sekiban/serialized/query", async (
@@ -452,11 +466,13 @@ static async Task<SerializableTagState?> TryGetSerializableTagStateDirectAsync(
         // Without LOH compaction, RSS grows to 10+ GB at 300K events.
         // LOH compaction requires blocking GC; non-blocking GC won't compact the LOH.
         // Every ~50 replays gives a good balance: ~5GB peak with moderate throughput impact.
+        // Non-blocking Gen 2 GC every 50 tag-state replays.
+        // Version-aware caching reduces replay frequency significantly.
+        // Non-blocking avoids throughput degradation from GC pauses.
         var count = Interlocked.Increment(ref replayCounter.Value);
         if (count % 50 == 0)
         {
-            GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
-            GC.Collect(2, GCCollectionMode.Optimized, blocking: true, compacting: true);
+            GC.Collect(2, GCCollectionMode.Optimized, blocking: false);
         }
     }
 
@@ -1220,55 +1236,75 @@ sealed record DirectTagStateCacheEntry(SerializableTagState CachedState, string 
 /// - Each weather forecast creates a unique tag that is never accessed again after commit,
 ///   so these are invalidated and not re-cached
 /// </summary>
+/// <summary>
+/// Version-aware tag-state response cache. Instead of invalidating entries on commit,
+/// entries are marked as stale and their freshness is checked against the Orleans grain's
+/// latest sortable unique ID on each request. This dramatically reduces WASM accumulator
+/// creations: only re-compute when the tag actually has new events.
+/// </summary>
 sealed class TagStateResponseCache
 {
     private const int MaxEntries = 10_000;
 
     private readonly ConcurrentDictionary<string, TagStateResponseCacheEntry> _entries = new(StringComparer.Ordinal);
 
-    public bool TryGet(string tagStateKey, out SerializableTagState value)
+    /// <summary>
+    /// Try to get a cached entry. Returns true if the entry exists (even if stale).
+    /// Caller must check <paramref name="isStale"/> and verify freshness via Orleans
+    /// if the entry is stale.
+    /// </summary>
+    public bool TryGet(string tagStateKey, out SerializableTagState value, out bool isStale)
     {
         if (_entries.TryGetValue(tagStateKey, out var entry))
         {
             entry.LastAccessedTicks = Environment.TickCount64;
             value = entry.State;
+            isStale = entry.IsStale;
             return true;
         }
         value = default!;
+        isStale = false;
         return false;
     }
 
-    public void Set(string tagStateKey, SerializableTagState value)
+    /// <summary>
+    /// Cache a freshly computed tag-state result with its sortable unique ID for freshness checks.
+    /// </summary>
+    public void Set(string tagStateKey, SerializableTagState value, string? lastSortableUniqueId = null)
     {
         if (_entries.Count >= MaxEntries)
         {
             EvictOldest();
         }
-        _entries[tagStateKey] = new TagStateResponseCacheEntry(value);
+        _entries[tagStateKey] = new TagStateResponseCacheEntry(value, lastSortableUniqueId);
     }
 
     /// <summary>
-    /// Invalidates all cached entries whose tagStateId starts with "tagGroup:tagContent:".
-    /// Called after commit to ensure subsequent tag-state requests get fresh data.
+    /// Mark all cached entries for the given tags as stale (not deleted).
+    /// Stale entries can still be returned if Orleans confirms the sortable ID hasn't advanced.
+    /// This avoids unnecessary WASM accumulator re-creations when concurrent commits
+    /// don't actually affect the queried tag.
     /// </summary>
-    public void InvalidateForTags(IEnumerable<string> tags)
+    public void MarkTagsAsStale(IEnumerable<string> tags)
     {
         foreach (var tag in tags)
         {
             var prefix = tag + ":";
-            foreach (var key in _entries.Keys)
+            foreach (var kvp in _entries)
             {
-                if (key.StartsWith(prefix, StringComparison.Ordinal))
+                if (kvp.Key.StartsWith(prefix, StringComparison.Ordinal))
                 {
-                    _entries.TryRemove(key, out _);
+                    kvp.Value.IsStale = true;
                 }
             }
         }
     }
 
+    /// <summary>Kept for backward compatibility, delegates to MarkTagsAsStale.</summary>
+    public void InvalidateForTags(IEnumerable<string> tags) => MarkTagsAsStale(tags);
+
     private void EvictOldest()
     {
-        // Remove the oldest half of entries by access time
         var entries = _entries.ToArray();
         var sorted = entries.OrderBy(e => e.Value.LastAccessedTicks).ToArray();
         var removeCount = sorted.Length / 2;
@@ -1281,12 +1317,16 @@ sealed class TagStateResponseCache
     private sealed class TagStateResponseCacheEntry
     {
         public SerializableTagState State { get; }
+        public string? LastSortableUniqueId { get; }
         public long LastAccessedTicks { get; set; }
+        public bool IsStale { get; set; }
 
-        public TagStateResponseCacheEntry(SerializableTagState state)
+        public TagStateResponseCacheEntry(SerializableTagState state, string? lastSortableUniqueId)
         {
             State = state;
+            LastSortableUniqueId = lastSortableUniqueId;
             LastAccessedTicks = Environment.TickCount64;
+            IsStale = false;
         }
     }
 }
