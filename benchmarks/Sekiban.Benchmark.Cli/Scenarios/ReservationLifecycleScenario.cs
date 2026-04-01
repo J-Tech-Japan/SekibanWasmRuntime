@@ -41,20 +41,33 @@ public static class ReservationLifecycleScenario
             + DateTime.DaysInMonth(now.AddMonths(1).Year, now.AddMonths(1).Month)
             - now.Day;
 
+        // Generate enough unique time slots to avoid room reservation conflicts.
+        // Each reservation occupies 1 hour, so we can fit ~14 per day (8:00-22:00).
+        // Total unique slots = rooms * days * slotsPerDay.
+        var slotsPerDay = 14;
+        var totalSlots = roomIds.Count * Math.Max(daysInRange, 1) * slotsPerDay;
+
         var maxCalls = estimatedCalls * 2; // Safety limit
 
         while (Volatile.Read(ref eventsCreated) < targetEvents && Volatile.Read(ref callIndex) < maxCalls)
         {
             await semaphore.WaitAsync();
             var idx = Interlocked.Increment(ref callIndex) - 1;
-            var roomId = roomIds[idx % roomIds.Count];
+
+            // Distribute across rooms, days, and time slots to minimize conflicts.
+            // Each idx maps to a unique (room, day, hour) triple where possible.
+            var slotIndex = idx % Math.Max(totalSlots, 1);
+            var roomIndex = slotIndex % roomIds.Count;
+            var remaining = slotIndex / roomIds.Count;
+            var dayOffset = remaining / slotsPerDay % Math.Max(daysInRange, 1);
+            var hourSlot = remaining % slotsPerDay;
+            var roomId = roomIds[roomIndex];
 
             tasks.Add(Task.Run(async () =>
             {
                 try
                 {
-                    var dayOffset = idx % Math.Max(daysInRange, 1);
-                    var baseTime = now.Date.AddDays(dayOffset).AddHours(8 + (idx % 10));
+                    var baseTime = now.Date.AddDays(dayOffset).AddHours(8 + hourSlot);
 
                     // Use unique organizerId per request to avoid UserMonthlyReservation tag contention
                     var organizerId = Guid.NewGuid();
@@ -119,11 +132,12 @@ public static class ReservationLifecycleScenario
                 }
             }));
 
-            // Prevent unbounded task accumulation
+            // Prevent unbounded task accumulation and refresh auth token periodically
             if (tasks.Count > concurrency * 10)
             {
                 await Task.WhenAll(tasks);
                 tasks.Clear();
+                await client.EnsureAuthenticatedAsync();
             }
         }
 

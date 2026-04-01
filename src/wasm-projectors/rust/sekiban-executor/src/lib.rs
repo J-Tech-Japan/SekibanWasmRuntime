@@ -1,4 +1,4 @@
-use std::{collections::HashMap, collections::HashSet, sync::Arc, time::Duration};
+use std::{collections::HashMap, collections::HashSet, sync::Arc, sync::Mutex, time::Duration};
 
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
@@ -138,6 +138,9 @@ impl HttpSekibanTransport {
 pub struct HttpCommandContext {
     transport: HttpSekibanTransport,
     resolver: Arc<dyn TagStateProjectorResolver>,
+    /// Cache of tag state responses to avoid redundant HTTP calls.
+    /// Matches C#'s RemoteCommandContext._accessedTagStates pattern.
+    tag_state_cache: Arc<Mutex<HashMap<String, SerializableTagStateResponse>>>,
 }
 
 pub type RemoteCommandContext = HttpCommandContext;
@@ -147,6 +150,7 @@ impl HttpCommandContext {
         Self {
             transport,
             resolver,
+            tag_state_cache: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -154,6 +158,11 @@ impl HttpCommandContext {
         &self,
         tag: &str,
     ) -> Result<SerializableTagStateResponse, CommandError> {
+        // Check cache first
+        if let Some(cached) = self.tag_state_cache.lock().unwrap().get(tag) {
+            return Ok(cached.clone());
+        }
+
         let (tag_group, tag_id) = parse_tag(tag)
             .ok_or_else(|| CommandError::Validation(format!("invalid tag format: {tag}")))?;
         let projector_name = self
@@ -187,12 +196,20 @@ impl HttpCommandContext {
             )));
         }
 
-        response
+        let result = response
             .json::<SerializableTagStateResponse>()
             .await
             .map_err(|err| {
                 CommandError::Serialization(format!("invalid tag-state response: {err}"))
-            })
+            })?;
+
+        // Cache the result
+        self.tag_state_cache
+            .lock()
+            .unwrap()
+            .insert(tag.to_string(), result.clone());
+
+        Ok(result)
     }
 
     pub async fn get_tag_latest_sortable_unique_id(
@@ -540,6 +557,9 @@ fn build_default_http_client(options: &HttpSekibanExecutorOptions) -> Client {
     Client::builder()
         .timeout(options.request_timeout)
         .connect_timeout(options.connect_timeout)
+        .pool_max_idle_per_host(16)
+        .pool_idle_timeout(Duration::from_secs(300))
+        .tcp_nodelay(true)
         .build()
         .expect("default HTTP client configuration should be valid")
 }

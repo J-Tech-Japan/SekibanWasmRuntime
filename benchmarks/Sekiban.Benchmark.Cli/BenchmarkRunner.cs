@@ -81,6 +81,7 @@ public sealed class BenchmarkRunner
         var reservationEvents = _totalEvents - weatherEvents;
 
         // Phase 2: Weather Bulk
+        await client.EnsureAuthenticatedAsync();
         var weatherResult = await WeatherBulkScenario.RunAsync(client, weatherEvents, _concurrency);
         result.Phases.Add(weatherResult);
 
@@ -91,11 +92,13 @@ public sealed class BenchmarkRunner
         }
 
         // Phase 3: Reservation Lifecycle
+        await client.EnsureAuthenticatedAsync();
         var reservationResult = await ReservationLifecycleScenario.RunAsync(
             client, roomIds, reservationEvents, _concurrency);
         result.Phases.Add(reservationResult);
 
         // Phase 4/5: Query Performance
+        await client.EnsureAuthenticatedAsync();
         var queryResult = await QueryPerformanceScenario.RunAsync(client, roomIds, 50);
         result.Phases.Add(queryResult);
 
