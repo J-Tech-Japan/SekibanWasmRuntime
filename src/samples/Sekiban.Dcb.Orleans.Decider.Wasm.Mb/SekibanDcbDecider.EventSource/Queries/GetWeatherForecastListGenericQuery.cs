@@ -10,12 +10,9 @@ public record GetWeatherForecastListGenericQuery :
     IWaitForSortableUniqueId,
     IQueryPagingParameter
 {
-    [Id(0)]
-    public bool IncludeDeleted { get; init; } = false;
-
     // Paging parameters
-    [Id(1)] public int? PageNumber { get; init; }
-    [Id(2)] public int? PageSize { get; init; }
+    [Id(0)] public int? PageNumber { get; init; }
+    [Id(1)] public int? PageSize { get; init; }
 
     public static IEnumerable<WeatherForecastItem> HandleFilter(
         WeatherForecastProjection projector,
@@ -32,6 +29,6 @@ public record GetWeatherForecastListGenericQuery :
         filteredList.OrderByDescending(f => f.Date);
 
     // Wait for sortable unique ID
-    [Id(3)]
+    [Id(2)]
     public string? WaitForSortableUniqueId { get; init; }
 }

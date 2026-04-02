@@ -70,7 +70,7 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
                 WeatherForecastCreated created => new WeatherForecastItem(
                     forecastId,
                     created.Location,
-                    created.Date.ToDateTime(TimeOnly.MinValue),
+                    created.Date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
                     created.TemperatureC,
                     created.Summary,
                     GetEventTimestamp(ev)),

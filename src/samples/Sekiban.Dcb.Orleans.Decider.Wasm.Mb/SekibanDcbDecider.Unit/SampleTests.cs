@@ -11,6 +11,8 @@ namespace SekibanDcbOrleans.Unit;
 
 public class SampleTests
 {
+    private static long _eventCounter;
+
     [Test]
     public void ClassRoomProjector_Should_Preserve_MaxStudents_When_Dropping_From_Full_ClassRoom()
     {
@@ -37,12 +39,24 @@ public class SampleTests
         Assert.That(available.GetRemaining(), Is.EqualTo(1));
     }
 
-    private static Event BuildEvent(IEventPayload payload) =>
-        new(
+    private static Guid CreateDeterministicGuid(long seed)
+    {
+        var bytes = new byte[16];
+        BitConverter.GetBytes(seed).CopyTo(bytes, 0);
+        return new Guid(bytes);
+    }
+
+    private static Event BuildEvent(IEventPayload payload)
+    {
+        var sequence = Interlocked.Increment(ref _eventCounter) - 1;
+        var timestamp = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddSeconds(sequence);
+
+        return new(
             payload,
-            SortableUniqueId.Generate(DateTime.UtcNow, Guid.NewGuid()),
+            SortableUniqueId.Generate(timestamp, CreateDeterministicGuid(sequence)),
             payload.GetType().Name,
-            Guid.NewGuid(),
-            new EventMetadata(Guid.NewGuid().ToString("N"), payload.GetType().Name, "test"),
+            CreateDeterministicGuid(sequence + 1),
+            new EventMetadata(CreateDeterministicGuid(sequence + 2).ToString("N"), payload.GetType().Name, "test"),
             []);
+    }
 }
