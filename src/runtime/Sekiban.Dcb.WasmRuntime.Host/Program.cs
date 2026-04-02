@@ -1230,17 +1230,17 @@ static DirectSnapshotQueryCacheOptions ResolveDirectSnapshotQueryCacheOptions(IC
             "Sekiban:DirectSnapshotCache:MaxEntries",
             "SEKIBAN_DIRECT_SNAPSHOT_CACHE_MAX_ENTRIES",
             3),
-        IdleEntryLifetime = TimeSpan.FromSeconds(ResolvePositiveInt(
+        IdleEntryLifetime = TimeSpan.FromSeconds(ResolveNonNegativeInt(
             configuration,
             "Sekiban:DirectSnapshotCache:IdleSeconds",
             "SEKIBAN_DIRECT_SNAPSHOT_CACHE_IDLE_SECONDS",
             45)),
-        EvictRssThresholdBytes = ResolvePositiveLong(
+        EvictRssThresholdBytes = ResolveNonNegativeLong(
             configuration,
             "Sekiban:DirectSnapshotCache:EvictRssThresholdBytes",
             "SEKIBAN_DIRECT_SNAPSHOT_CACHE_EVICT_RSS_BYTES",
             3L * 1024 * 1024 * 1024),
-        ResetActiveEntryRssThresholdBytes = ResolvePositiveLong(
+        ResetActiveEntryRssThresholdBytes = ResolveNonNegativeLong(
             configuration,
             "Sekiban:DirectSnapshotCache:ResetActiveEntryRssThresholdBytes",
             "SEKIBAN_DIRECT_SNAPSHOT_CACHE_RESET_ACTIVE_RSS_BYTES",
@@ -1249,14 +1249,12 @@ static DirectSnapshotQueryCacheOptions ResolveDirectSnapshotQueryCacheOptions(IC
 
 static ulong? ResolveWasmtimeStaticMemoryMaximumSizeBytes(IConfiguration configuration)
 {
-    var configuredMegabytes = ResolvePositiveInt(
-        configuration,
-        "Sekiban:Wasmtime:StaticMemoryMaximumSizeMb",
-        "SEKIBAN_WASMTIME_STATIC_MEMORY_MAX_MB",
-        192);
-    return configuredMegabytes <= 0
-        ? null
-        : (ulong)configuredMegabytes * 1024UL * 1024UL;
+    var candidate = configuration["Sekiban:Wasmtime:StaticMemoryMaximumSizeMb"]
+        ?? Environment.GetEnvironmentVariable("SEKIBAN_WASMTIME_STATIC_MEMORY_MAX_MB");
+
+    return int.TryParse(candidate, out var configuredMegabytes) && configuredMegabytes > 0
+        ? (ulong)configuredMegabytes * 1024UL * 1024UL
+        : null;
 }
 
 static int ResolvePositiveInt(
@@ -1279,6 +1277,30 @@ static long ResolvePositiveLong(
 {
     var candidate = configuration[configKey] ?? Environment.GetEnvironmentVariable(environmentVariableName);
     return long.TryParse(candidate, out var value) && value > 0
+        ? value
+        : defaultValue;
+}
+
+static int ResolveNonNegativeInt(
+    IConfiguration configuration,
+    string configKey,
+    string environmentVariableName,
+    int defaultValue)
+{
+    var candidate = configuration[configKey] ?? Environment.GetEnvironmentVariable(environmentVariableName);
+    return int.TryParse(candidate, out var value) && value >= 0
+        ? value
+        : defaultValue;
+}
+
+static long ResolveNonNegativeLong(
+    IConfiguration configuration,
+    string configKey,
+    string environmentVariableName,
+    long defaultValue)
+{
+    var candidate = configuration[configKey] ?? Environment.GetEnvironmentVariable(environmentVariableName);
+    return long.TryParse(candidate, out var value) && value >= 0
         ? value
         : defaultValue;
 }
@@ -1412,21 +1434,16 @@ sealed class DirectSnapshotQueryCache : IDisposable
             return;
         }
 
-        var removedEntry = false;
         try
         {
             if (_entries.TryRemove(projectorName, out var evictedEntry))
             {
-                removedEntry = true;
-                evictedEntry.Dispose();
+                evictedEntry.DisposeAndReset();
             }
         }
         finally
         {
-            if (!removedEntry)
-            {
-                entry.Gate.Release();
-            }
+            entry.Gate.Release();
         }
     }
 

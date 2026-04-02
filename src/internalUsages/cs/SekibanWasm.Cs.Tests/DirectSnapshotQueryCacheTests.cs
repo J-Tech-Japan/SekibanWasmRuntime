@@ -62,6 +62,31 @@ public sealed class DirectSnapshotQueryCacheTests
         Assert.True(cache.ShouldResetActiveEntryOnMemoryPressure());
     }
 
+    [Fact]
+    public void Prune_ShouldNotDisposeEntryGate_WhenEntryIsEvicted()
+    {
+        var cache = new DirectSnapshotQueryCache(
+            new DirectSnapshotQueryCacheOptions
+            {
+                MaxEntries = 1,
+                IdleEntryLifetime = TimeSpan.Zero,
+                EvictRssThresholdBytes = long.MaxValue,
+                ResetActiveEntryRssThresholdBytes = long.MaxValue
+            },
+            rssProvider: static () => 0);
+
+        var first = cache.GetOrAdd("WeatherForecastMultiProjection");
+        first.Replace(new StubProjectionActorHost(), metadata: null, "1.0.0", null, 0);
+        var second = cache.GetOrAdd("ReservationListProjection");
+        second.Replace(new StubProjectionActorHost(), metadata: null, "1.0.0", null, 0);
+
+        cache.Prune(activeProjectorName: "ReservationListProjection");
+
+        Assert.Equal(1, cache.Count);
+        Assert.True(first.Gate.Wait(0));
+        first.Gate.Release();
+    }
+
     private sealed class StubProjectionActorHost : IProjectionActorHost, IDisposable
     {
         public bool IsDisposed { get; private set; }

@@ -7,6 +7,10 @@ public sealed class WasmtimeRuntime : IDisposable
     public Engine Engine { get; }
     public object SyncRoot { get; } = new();
 
+    public WasmtimeRuntime() : this(new WasmtimeHostOptions())
+    {
+    }
+
     public WasmtimeRuntime(WasmtimeHostOptions options)
     {
         var config = new Config();

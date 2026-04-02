@@ -348,14 +348,15 @@ public class WasmProjectionActorHostTests
         var tracker = new BatchApplyTracker();
         var firstInstance = new BlockingBatchProjectionInstance(tracker);
         var secondInstance = new BlockingBatchProjectionInstance(tracker);
+        using var catchUpGate = new SemaphoreSlim(1, 1);
         var host = new NamedPrimitiveProjectionHost(new Dictionary<string, IPrimitiveProjectionInstance>
         {
             ["WeatherForecastMultiProjection"] = firstInstance,
             ["ReservationListProjection"] = secondInstance
         });
 
-        var firstHost = CreateHost(host, "WeatherForecastMultiProjection");
-        var secondHost = CreateHost(host, "ReservationListProjection");
+        var firstHost = CreateHost(host, "WeatherForecastMultiProjection", catchUpGate: catchUpGate);
+        var secondHost = CreateHost(host, "ReservationListProjection", catchUpGate: catchUpGate);
         var events = CreateBatchEvents();
 
         var firstTask = Task.Run(() => firstHost.AddSerializableEventsAsync(events, finishedCatchUp: false));
@@ -424,7 +425,8 @@ public class WasmProjectionActorHostTests
     private static WasmProjectionActorHost CreateHost(
         IPrimitiveProjectionInstance instance,
         DcbDomainTypes? domainTypes = null,
-        string projectorName = "WeatherForecastMultiProjection")
+        string projectorName = "WeatherForecastMultiProjection",
+        SemaphoreSlim? catchUpGate = null)
     {
         return new WasmProjectionActorHost(
             new StubPrimitiveProjectionHost(instance),
@@ -432,13 +434,15 @@ public class WasmProjectionActorHostTests
             domainTypes ?? DomainType.GetDomainTypes(),
             DomainJsonOptions,
             projectorName,
-            NullLogger.Instance);
+            NullLogger.Instance,
+            catchUpGate: catchUpGate);
     }
 
     private static WasmProjectionActorHost CreateHost(
         IPrimitiveProjectionHost host,
         string projectorName,
-        DcbDomainTypes? domainTypes = null)
+        DcbDomainTypes? domainTypes = null,
+        SemaphoreSlim? catchUpGate = null)
     {
         return new WasmProjectionActorHost(
             host,
@@ -446,7 +450,8 @@ public class WasmProjectionActorHostTests
             domainTypes ?? DomainType.GetDomainTypes(),
             DomainJsonOptions,
             projectorName,
-            NullLogger.Instance);
+            NullLogger.Instance,
+            catchUpGate: catchUpGate);
     }
 
     private static WasmProjectorRegistry CreateRegistry()

@@ -70,16 +70,12 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
             Environment.GetEnvironmentVariable("WASM_RUNTIME_TRACE_LIFECYCLE"),
             "1",
             StringComparison.Ordinal);
-    private static readonly int CatchUpConcurrency = ResolveConfiguredPositiveInt(
-        "SEKIBAN_WASM_CATCHUP_CONCURRENCY",
-        defaultValue: 1);
-    private static readonly SemaphoreSlim CatchUpGate =
-        new(Math.Max(1, CatchUpConcurrency), Math.Max(1, CatchUpConcurrency));
     private static readonly string TraceFilePath =
         Environment.GetEnvironmentVariable("WASM_RUNTIME_TRACE_PATH")
         ?? Path.Combine(
             Path.GetTempPath(),
             $"kenbai-wasm-runtime-trace-{Environment.ProcessId}.log");
+    private static readonly SemaphoreSlim? SharedCatchUpGate = CreateConfiguredCatchUpGate();
     private static readonly HashSet<string> KanyushaListOrphanSkippableEventTypes =
         [
             "TaDoushuruiHokenKeiyakuAriAried",
@@ -126,9 +122,9 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
     /// and restores the state. This prevents unbounded linear memory growth.
     /// Set to 0 to disable automatic compaction.
     /// </summary>
-    private static readonly int AutoCompactionIntervalEvents = ResolveConfiguredPositiveInt(
-        "SEKIBAN_WASM_AUTO_COMPACTION_INTERVAL_EVENTS",
-        defaultValue: 20_000);
+    private readonly SemaphoreSlim? _catchUpGate;
+    private readonly int _autoCompactionIntervalEvents;
+    private readonly bool _forceCompactingGcAfterCompaction;
     /// <summary>
     /// Stagger offset between projectors to avoid simultaneous compaction of all 9+ projectors.
     /// Each projector gets a unique offset based on its name hash, spreading compactions over
@@ -144,7 +140,10 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
         DcbDomainTypes domainTypes,
         JsonSerializerOptions jsonOptions,
         string projectorName,
-        ILogger logger)
+        ILogger logger,
+        SemaphoreSlim? catchUpGate = null,
+        int? autoCompactionIntervalEvents = null,
+        bool? forceCompactingGcAfterCompaction = null)
     {
         _host = host;
         _registry = registry;
@@ -152,6 +151,15 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
         _jsonOptions = jsonOptions;
         _projectorName = projectorName;
         _logger = logger;
+        _catchUpGate = catchUpGate ?? SharedCatchUpGate;
+        _autoCompactionIntervalEvents =
+            autoCompactionIntervalEvents ?? ResolveConfiguredNonNegativeInt(
+                "SEKIBAN_WASM_AUTO_COMPACTION_INTERVAL_EVENTS",
+                defaultValue: 50_000);
+        _forceCompactingGcAfterCompaction =
+            forceCompactingGcAfterCompaction ?? ResolveConfiguredBoolean(
+                "SEKIBAN_WASM_FORCE_COMPACTING_GC_AFTER_COMPACTION",
+                defaultValue: false);
 
         _projectorVersion = _registry.TryGet(projectorName)?.ProjectorVersion
             ?? throw new InvalidOperationException($"Projector not found: {projectorName}");
@@ -162,9 +170,9 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
         bool finishedCatchUp = true)
     {
         SemaphoreSlim? catchUpGate = null;
-        if (!finishedCatchUp && events.Count > 0)
+        if (!finishedCatchUp && events.Count > 0 && _catchUpGate is not null)
         {
-            catchUpGate = CatchUpGate;
+            catchUpGate = _catchUpGate;
             Trace($"host_add_events:catchup_wait projector={_projectorName} eventCount={events.Count}");
             await catchUpGate.WaitAsync();
         }
@@ -280,18 +288,18 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
 
             // Auto-compaction: periodically reset WASM linear memory to prevent unbounded growth.
             // Staggered across projectors to avoid 9 simultaneous compactions (which spike 659MB).
-            if (AutoCompactionIntervalEvents > 0)
+            if (_autoCompactionIntervalEvents > 0)
             {
                 _eventsSinceLastCompaction += events.Count;
 
                 if (_compactionStaggerOffset < 0)
                 {
-                    _compactionStaggerOffset = Math.Abs(_projectorName.GetHashCode()) % AutoCompactionIntervalEvents;
+                    _compactionStaggerOffset = Math.Abs(_projectorName.GetHashCode()) % _autoCompactionIntervalEvents;
                 }
 
-                if (_eventsSinceLastCompaction >= AutoCompactionIntervalEvents)
+                if (_eventsSinceLastCompaction >= _autoCompactionIntervalEvents)
                 {
-                    var sinceCompaction = _eventsSinceLastCompaction - AutoCompactionIntervalEvents;
+                    var sinceCompaction = _eventsSinceLastCompaction - _autoCompactionIntervalEvents;
                     if (sinceCompaction >= (_compactionStaggerOffset % StaggerSlotSize))
                     {
                         _eventsSinceLastCompaction = 0;
@@ -508,11 +516,17 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
             }
 
             previous.Dispose();
-            // Force LOH compaction so disposed store buffers and event arrays do not keep RSS elevated.
-            GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
-            GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
-            GC.WaitForPendingFinalizers();
-            GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
+            if (_forceCompactingGcAfterCompaction)
+            {
+                GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+                GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
+                GC.WaitForPendingFinalizers();
+                GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
+            }
+            else
+            {
+                GC.Collect(0, GCCollectionMode.Default, blocking: false);
+            }
             var postLinearMem = GetLinearMemoryBytes();
             _logger.LogWarning(
                 "CompactSafeHistory DONE: {ProjectorName} newLinearMem={LinearMemMB}MB (saved {SavedMB}MB)",
@@ -1301,12 +1315,38 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
         }
     }
 
-    private static int ResolveConfiguredPositiveInt(string environmentVariableName, int defaultValue)
+    private static SemaphoreSlim? CreateConfiguredCatchUpGate()
+    {
+        var concurrency = ResolveConfiguredNonNegativeInt(
+            "SEKIBAN_WASM_CATCHUP_CONCURRENCY",
+            defaultValue: 0);
+        return concurrency <= 0
+            ? null
+            : new SemaphoreSlim(concurrency, concurrency);
+    }
+
+    private static int ResolveConfiguredNonNegativeInt(string environmentVariableName, int defaultValue)
     {
         string? raw = Environment.GetEnvironmentVariable(environmentVariableName);
-        return int.TryParse(raw, out int value) && value > 0
+        return int.TryParse(raw, out int value) && value >= 0
             ? value
             : defaultValue;
+    }
+
+    private static bool ResolveConfiguredBoolean(string environmentVariableName, bool defaultValue)
+    {
+        string? raw = Environment.GetEnvironmentVariable(environmentVariableName);
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return defaultValue;
+        }
+
+        return raw.Trim().ToLowerInvariant() switch
+        {
+            "1" or "true" or "yes" or "on" => true,
+            "0" or "false" or "no" or "off" => false,
+            _ => defaultValue
+        };
     }
 
     internal sealed record WasmProjectionPayload(string ProjectorName, string StateJson) : IMultiProjectionPayload;
