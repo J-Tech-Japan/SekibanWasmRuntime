@@ -112,6 +112,14 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
     private int _cachedSerializedStateVersion = -1;
     private byte[]? _pendingCompactionStateUtf8;
     private int _pendingCompactionStateVersion = -1;
+    private int _eventsSinceLastCompaction;
+    /// <summary>
+    /// Number of events to process before triggering automatic compaction.
+    /// Compaction serializes state, creates a fresh WASM instance with minimal linear memory,
+    /// and restores the state. This prevents unbounded linear memory growth.
+    /// Set to 0 to disable automatic compaction.
+    /// </summary>
+    private const int AutoCompactionIntervalEvents = 10_000;
     private HashSet<int> _kanyushaListKnownKanyushaNos = [];
     private Dictionary<string, int> _kanyushaListKnownNendoIndex = new(StringComparer.Ordinal);
 
@@ -247,6 +255,32 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
         }
 
         _isCatchedUp = finishedCatchUp;
+
+        // Auto-compaction: periodically reset WASM linear memory to prevent unbounded growth.
+        // WASM linear memory grows as events are applied but never shrinks.
+        // Compaction serializes state → creates fresh instance → restores state → disposes old instance.
+        if (AutoCompactionIntervalEvents > 0)
+        {
+            _eventsSinceLastCompaction += events.Count;
+            if (_eventsSinceLastCompaction >= AutoCompactionIntervalEvents)
+            {
+                _eventsSinceLastCompaction = 0;
+                try
+                {
+                    CompactSafeHistory();
+                    _logger.LogInformation(
+                        "Auto-compaction completed for {ProjectorName} at version {Version}",
+                        _projectorName, _version);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex,
+                        "Auto-compaction failed for {ProjectorName} at version {Version}",
+                        _projectorName, _version);
+                }
+            }
+        }
+
         return Task.CompletedTask;
     }
 
