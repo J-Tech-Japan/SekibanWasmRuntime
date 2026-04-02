@@ -45,10 +45,11 @@ public sealed class SseTopicHub
 
     public SseSubscription Subscribe(string topic, CancellationToken cancellationToken)
     {
-        var channel = Channel.CreateUnbounded<SseStreamUpdate>(new UnboundedChannelOptions
+        var channel = Channel.CreateBounded<SseStreamUpdate>(new BoundedChannelOptions(1024)
         {
             SingleReader = true,
-            SingleWriter = false
+            SingleWriter = false,
+            FullMode = BoundedChannelFullMode.DropOldest
         });
         var id = Guid.NewGuid();
         var subscribers = _topics.GetOrAdd(topic, _ => new ConcurrentDictionary<Guid, Channel<SseStreamUpdate>>());
@@ -61,8 +62,7 @@ public sealed class SseTopicHub
                 removed.Writer.TryComplete();
                 if (current.IsEmpty)
                 {
-                    ((ICollection<KeyValuePair<string, ConcurrentDictionary<Guid, Channel<SseStreamUpdate>>>>)_topics)
-                        .Remove(new KeyValuePair<string, ConcurrentDictionary<Guid, Channel<SseStreamUpdate>>>(topic, current));
+                    _topics.TryRemove(topic, out _);
                 }
             }
         }

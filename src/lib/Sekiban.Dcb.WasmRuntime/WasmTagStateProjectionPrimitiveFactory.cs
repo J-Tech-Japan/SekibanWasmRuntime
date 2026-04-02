@@ -49,24 +49,52 @@ public sealed class WasmTagStateProjectionPrimitiveFactory : ITagStateProjection
         }
         catch (Exception ex)
         {
-            if (moduleRef is null)
-            {
-                _logger.LogDebug(
-                    ex,
-                    "No manifest entry for tag projector {ProjectorName}, and default module instance creation failed; returning empty accumulator.",
-                    tagStateId.TagProjectorName);
-            }
-            else
-            {
-                _logger.LogWarning(
-                    ex,
-                    "Failed to create WASM accumulator for tag projector {ProjectorName}; returning empty accumulator.",
-                    tagStateId.TagProjectorName);
-            }
-
+            LogAccumulatorCreationFailure(ex, tagStateId.TagProjectorName, moduleRef);
             return new MissingTagStateProjectionAccumulator(
                 tagStateId,
                 moduleRef?.ProjectorVersion ?? string.Empty);
+        }
+    }
+
+    public async ValueTask<ITagStateProjectionAccumulator> CreateAccumulatorAsync(
+        TagStateId tagStateId, CancellationToken ct = default)
+    {
+        var moduleRef = _registry.TryGet(tagStateId.TagProjectorName);
+        try
+        {
+            var instance = await _host.CreateInstanceAsync(tagStateId.TagProjectorName, ct);
+            return new WasmTagStateProjectionPrimitive(
+                instance,
+                tagStateId.TagProjectorName,
+                moduleRef?.ProjectorVersion ?? string.Empty,
+                _eventTypes,
+                _jsonOptions,
+                moduleRef?.TagPayloadName);
+        }
+        catch (Exception ex)
+        {
+            LogAccumulatorCreationFailure(ex, tagStateId.TagProjectorName, moduleRef);
+            return new MissingTagStateProjectionAccumulator(
+                tagStateId,
+                moduleRef?.ProjectorVersion ?? string.Empty);
+        }
+    }
+
+    private void LogAccumulatorCreationFailure(Exception ex, string projectorName, WasmModuleRef? moduleRef)
+    {
+        if (moduleRef is null)
+        {
+            _logger.LogDebug(
+                ex,
+                "No manifest entry for tag projector {ProjectorName}, and default module instance creation failed; returning empty accumulator.",
+                projectorName);
+        }
+        else
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to create WASM accumulator for tag projector {ProjectorName}; returning empty accumulator.",
+                projectorName);
         }
     }
 

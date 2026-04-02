@@ -50,6 +50,7 @@ public sealed class WasmtimeProjectionWarmupServiceTests
 
         var service = new WasmtimeProjectionWarmupService(
             services,
+            new WasmtimeHostOptions { EnableWarmup = true },
             NullLogger<WasmtimeProjectionWarmupService>.Instance);
 
         await service.StartAsync(CancellationToken.None);
@@ -60,6 +61,36 @@ public sealed class WasmtimeProjectionWarmupServiceTests
             ["WeatherForecastProjector", "WeatherForecastMultiProjection"],
             projectionHost.CreatedProjectors);
         Assert.Equal(2, projectionHost.DisposeCount);
+    }
+
+    [Fact]
+    public async Task StartAsync_DoesNotWarmUp_WhenDisabled()
+    {
+        var registry = new WasmProjectorRegistry();
+        registry.Register(new WasmModuleRef(
+            ProjectorName: "WeatherForecastProjector",
+            ModulePath: "/tmp/weather.wasm",
+            AbiKind: "wasi-preview1",
+            ModuleVersion: "1.0.0",
+            ProjectorVersion: "v1"));
+
+        var projectionHost = new RecordingPrimitiveProjectionHost();
+        var services = new ServiceCollection()
+            .AddSingleton(registry)
+            .AddSingleton<IPrimitiveProjectionHost>(projectionHost)
+            .BuildServiceProvider();
+
+        var service = new WasmtimeProjectionWarmupService(
+            services,
+            new WasmtimeHostOptions { EnableWarmup = false },
+            NullLogger<WasmtimeProjectionWarmupService>.Instance);
+
+        await service.StartAsync(CancellationToken.None);
+        await Task.Delay(100);
+        await service.StopAsync(CancellationToken.None);
+
+        Assert.Empty(projectionHost.CreatedProjectors);
+        Assert.Equal(0, projectionHost.DisposeCount);
     }
 
     private static async Task WaitForAsync(Func<bool> condition)

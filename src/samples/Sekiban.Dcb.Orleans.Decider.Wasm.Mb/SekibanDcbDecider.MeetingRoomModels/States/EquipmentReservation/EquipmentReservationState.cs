@@ -37,7 +37,7 @@ public abstract record EquipmentReservationState : ITagStatePayload
         Guid RequesterId,
         DateTime StartTime,
         DateTime EndTime,
-        List<Guid> AssignedItemIds) : EquipmentReservationState;
+        IReadOnlyList<Guid> AssignedItemIds) : EquipmentReservationState;
 
     /// <summary>
     ///     CheckedOut state - equipment has been picked up
@@ -49,7 +49,7 @@ public abstract record EquipmentReservationState : ITagStatePayload
         Guid RequesterId,
         DateTime StartTime,
         DateTime EndTime,
-        List<Guid> CheckedOutItemIds,
+        IReadOnlyList<Guid> CheckedOutItemIds,
         Guid CheckedOutBy,
         DateTime CheckedOutAt) : EquipmentReservationState;
 

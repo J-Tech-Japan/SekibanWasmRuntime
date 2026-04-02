@@ -33,7 +33,7 @@ public record CreateStudent : ICommandWithHandler<CreateStudent>
         var exists = await context.TagExistsAsync(tag);
         if (exists)
         {
-            throw new ApplicationException($"Student {command.StudentId} already exists.");
+            throw new ApplicationException($"Student already exists. StudentId: {command.StudentId}");
         }
 
         return new StudentCreated(command.StudentId, command.Name, command.MaxClassCount).GetEventWithTags();

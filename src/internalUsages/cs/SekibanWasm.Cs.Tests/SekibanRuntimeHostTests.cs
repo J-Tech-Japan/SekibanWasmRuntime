@@ -237,6 +237,32 @@ public class SekibanRuntimeHostTests
         second.Dispose();
     }
 
+    [Fact]
+    public async Task WasmtimePrimitiveProjectionHost_CreateInstance_ShouldWait_ForPermitRelease()
+    {
+        var options = new WasmtimeHostOptions
+        {
+            DefaultModulePath = GetWeatherModulePath(),
+            EnableInstancePooling = true,
+            MaxPooledInstancesPerProjector = 1
+        };
+
+        using var runtime = new WasmtimeRuntime();
+        var moduleCache = new WasmtimeModuleCache(runtime);
+        using var host = new WasmtimePrimitiveProjectionHost(runtime, moduleCache, options);
+
+        using var first = host.CreateInstance("WeatherForecastProjector");
+        var secondTask = Task.Run(() => host.CreateInstance("WeatherForecastProjector"));
+
+        await Task.Delay(200);
+        Assert.False(secondTask.IsCompleted);
+
+        first.Dispose();
+
+        using var second = await secondTask.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.NotNull(second);
+    }
+
     private static async Task<(int StatusCode, string Body)> ExecuteResultAsync(IResult result)
     {
         using var app = WebApplication.CreateBuilder().Build();

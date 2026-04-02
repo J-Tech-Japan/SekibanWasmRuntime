@@ -8,10 +8,17 @@ namespace Sekiban.Dcb.WasmRuntime.Wasmtime;
 
 public sealed class WasmtimeProjectionWarmupService(
     IServiceProvider services,
+    WasmtimeHostOptions options,
     ILogger<WasmtimeProjectionWarmupService> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        if (!options.EnableWarmup)
+        {
+            logger.LogInformation("WASM warmup disabled to reduce startup memory");
+            return;
+        }
+
         var registry = services.GetService<WasmProjectorRegistry>();
         if (registry is null)
         {

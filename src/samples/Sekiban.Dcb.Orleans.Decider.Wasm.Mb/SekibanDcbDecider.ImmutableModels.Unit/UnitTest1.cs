@@ -1,4 +1,4 @@
-﻿using Dcb.ImmutableModels.Events.Weather;
+using Dcb.ImmutableModels.Events.Weather;
 using Dcb.ImmutableModels.States.Weather;
 using Dcb.ImmutableModels.States.Weather.Deciders;
 

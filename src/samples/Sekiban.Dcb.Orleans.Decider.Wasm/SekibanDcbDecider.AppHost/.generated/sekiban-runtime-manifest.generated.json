@@ -1,0 +1,180 @@
+{
+  "defaultModulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+  "queryAssemblyVersion": "wasm",
+  "eventTypes": [
+    "ClassRoomCreated",
+    "StudentDroppedFromClassRoom",
+    "StudentEnrolledInClassRoom",
+    "StudentCreated",
+    "LocationNameChanged",
+    "WeatherForecastCreated",
+    "WeatherForecastDeleted",
+    "WeatherForecastUpdated",
+    "ApprovalDecisionRecorded",
+    "ApprovalFlowStarted",
+    "EquipmentItemRegistered",
+    "EquipmentItemRetired",
+    "EquipmentCheckedOut",
+    "EquipmentItemAssigned",
+    "EquipmentReservationCancelled",
+    "EquipmentReservationCreated",
+    "EquipmentReturned",
+    "EquipmentTypeCreated",
+    "EquipmentTypeUpdated",
+    "ReservationCancelled",
+    "ReservationConfirmed",
+    "ReservationDetailsUpdated",
+    "ReservationDraftCreated",
+    "ReservationExpiredCommitted",
+    "ReservationHoldCommitted",
+    "ReservationRejected",
+    "RoomCreated",
+    "RoomDeactivated",
+    "RoomReactivated",
+    "RoomUpdated",
+    "UserAccessDeactivated",
+    "UserAccessGranted",
+    "UserAccessReactivated",
+    "UserRoleGranted",
+    "UserRoleRevoked",
+    "ExternalIdentityLinked",
+    "ExternalIdentityUnlinked",
+    "UserDeactivated",
+    "UserProfileUpdated",
+    "UserReactivated",
+    "UserRegistered"
+  ],
+  "projectors": [
+    {
+      "projectorName": "StudentProjector",
+      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "projectorVersion": "1.0.0"
+    },
+    {
+      "projectorName": "ClassRoomProjector",
+      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "projectorVersion": "1.0.0"
+    },
+    {
+      "projectorName": "WeatherForecastProjector",
+      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "projectorVersion": "1.0.0"
+    },
+    {
+      "projectorName": "ApprovalRequestProjector",
+      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "projectorVersion": "1.0.0"
+    },
+    {
+      "projectorName": "EquipmentTypeProjector",
+      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "projectorVersion": "1.0.0"
+    },
+    {
+      "projectorName": "ReservationProjector",
+      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "projectorVersion": "1.0.0"
+    },
+    {
+      "projectorName": "RoomProjector",
+      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "projectorVersion": "1.0.0"
+    },
+    {
+      "projectorName": "RoomDailyActivityProjector",
+      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "projectorVersion": "1.0.0"
+    },
+    {
+      "projectorName": "RoomReservationsProjector",
+      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "projectorVersion": "1.0.0"
+    },
+    {
+      "projectorName": "UserAccessProjector",
+      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "projectorVersion": "1.0.0"
+    },
+    {
+      "projectorName": "UserDirectoryProjector",
+      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "projectorVersion": "1.0.0"
+    },
+    {
+      "projectorName": "UserMonthlyReservationProjector",
+      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "projectorVersion": "1.0.0"
+    },
+    {
+      "projectorName": "StudentListProjection",
+      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "projectorVersion": "1.0.0"
+    },
+    {
+      "projectorName": "ClassRoomListProjection",
+      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "projectorVersion": "1.0.0"
+    },
+    {
+      "projectorName": "WeatherForecastProjection",
+      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "projectorVersion": "1.0.0"
+    },
+    {
+      "projectorName": "WeatherForecastProjectorWithTagStateProjector",
+      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "projectorVersion": "1.0.0"
+    },
+    {
+      "projectorName": "ApprovalRequestListProjection",
+      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "projectorVersion": "1.0.0"
+    },
+    {
+      "projectorName": "EquipmentTypeListProjection",
+      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "projectorVersion": "1.0.0"
+    },
+    {
+      "projectorName": "ReservationListProjection",
+      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "projectorVersion": "1.0.0"
+    },
+    {
+      "projectorName": "RoomListProjection",
+      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "projectorVersion": "1.0.0"
+    },
+    {
+      "projectorName": "StudentSummaries",
+      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "projectorVersion": "1.0.0"
+    },
+    {
+      "projectorName": "UserAccessListProjection",
+      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "projectorVersion": "1.0.0"
+    },
+    {
+      "projectorName": "UserDirectoryListProjection",
+      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "projectorVersion": "1.0.0"
+    }
+  ],
+  "queryProjectors": {
+    "GetStudentListQuery": "StudentListProjection",
+    "GetClassRoomListQuery": "ClassRoomListProjection",
+    "GetWeatherForecastListQuery": "WeatherForecastProjection",
+    "GetWeatherForecastListGenericQuery": "WeatherForecastProjection",
+    "GetWeatherForecastListSingleQuery": "WeatherForecastProjectorWithTagStateProjector",
+    "GetReservationListQuery": "ReservationListProjection",
+    "GetRoomListQuery": "RoomListProjection",
+    "GetUserAccessListQuery": "UserAccessListProjection",
+    "GetUserDirectoryListQuery": "UserDirectoryListProjection",
+    "GetEquipmentTypeListQuery": "EquipmentTypeListProjection",
+    "GetApprovalInboxQuery": "ApprovalRequestListProjection",
+    "GetWeatherForecastCountQuery": "WeatherForecastProjection",
+    "GetWeatherForecastCountGenericQuery": "WeatherForecastProjection",
+    "GetWeatherForecastCountSingleQuery": "WeatherForecastProjectorWithTagStateProjector"
+  }
+}

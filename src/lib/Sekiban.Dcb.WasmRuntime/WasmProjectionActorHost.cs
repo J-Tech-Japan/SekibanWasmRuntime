@@ -112,6 +112,21 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
     private int _cachedSerializedStateVersion = -1;
     private byte[]? _pendingCompactionStateUtf8;
     private int _pendingCompactionStateVersion = -1;
+    private int _eventsSinceLastCompaction;
+    private int _compactionStaggerOffset = -1;
+    /// <summary>
+    /// Number of events to process before triggering automatic compaction.
+    /// Compaction serializes state, creates a fresh WASM instance with minimal linear memory,
+    /// and restores the state. This prevents unbounded linear memory growth.
+    /// Set to 0 to disable automatic compaction.
+    /// </summary>
+    private const int AutoCompactionIntervalEvents = 50_000;
+    /// <summary>
+    /// Stagger offset between projectors to avoid simultaneous compaction of all 9+ projectors.
+    /// Each projector gets a unique offset based on its name hash, spreading compactions over
+    /// the interval to reduce peak memory from 9×2×36.6MB=659MB to 1×2×36.6MB=73MB.
+    /// </summary>
+    private const int StaggerSlotSize = 1_000;
     private HashSet<int> _kanyushaListKnownKanyushaNos = [];
     private Dictionary<string, int> _kanyushaListKnownNendoIndex = new(StringComparer.Ordinal);
 
@@ -247,6 +262,43 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
         }
 
         _isCatchedUp = finishedCatchUp;
+
+        // Auto-compaction: periodically reset WASM linear memory to prevent unbounded growth.
+        // Staggered across projectors to avoid 9 simultaneous compactions (which spike 659MB).
+        if (AutoCompactionIntervalEvents > 0)
+        {
+            _eventsSinceLastCompaction += events.Count;
+
+            // Calculate per-projector stagger offset (stable, based on name hash)
+            if (_compactionStaggerOffset < 0)
+            {
+                _compactionStaggerOffset = Math.Abs(_projectorName.GetHashCode()) % AutoCompactionIntervalEvents;
+            }
+
+            if (_eventsSinceLastCompaction >= AutoCompactionIntervalEvents)
+            {
+                // Check if this projector's stagger slot has arrived
+                var sinceCompaction = _eventsSinceLastCompaction - AutoCompactionIntervalEvents;
+                if (sinceCompaction >= (_compactionStaggerOffset % StaggerSlotSize))
+                {
+                    _eventsSinceLastCompaction = 0;
+                    try
+                    {
+                        CompactSafeHistory();
+                        _logger.LogWarning(
+                            "Auto-compaction: {ProjectorName} v{Version}",
+                            _projectorName, _version);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex,
+                            "Auto-compaction failed for {ProjectorName} at version {Version}",
+                            _projectorName, _version);
+                    }
+                }
+            }
+        }
+
         return Task.CompletedTask;
     }
 
@@ -415,7 +467,11 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
             return;
         }
 
+        var preLinearMem = GetLinearMemoryBytes();
         byte[] stateJsonUtf8 = TakePendingCompactionState() ?? _instance.SerializeStateUtf8();
+        _logger.LogWarning(
+            "CompactSafeHistory: {ProjectorName} stateSize={StateSizeKB}KB linearMem={LinearMemMB}MB version={Version}",
+            _projectorName, stateJsonUtf8.Length / 1024, preLinearMem / 1024 / 1024, _version);
         IPrimitiveProjectionInstance previous = _instance;
         IPrimitiveProjectionInstance? replacement = null;
 
@@ -436,7 +492,13 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
             }
 
             previous.Dispose();
-            _logger.LogDebug("Compacted WASM projection instance for {ProjectorName}", _projectorName);
+            // Ensure native Wasmtime Store handle is finalized promptly to release mmap'd memory
+            GC.Collect(0, GCCollectionMode.Default, blocking: false);
+            var postLinearMem = GetLinearMemoryBytes();
+            _logger.LogWarning(
+                "CompactSafeHistory DONE: {ProjectorName} newLinearMem={LinearMemMB}MB (saved {SavedMB}MB)",
+                _projectorName, postLinearMem / 1024 / 1024,
+                (preLinearMem - postLinearMem) / 1024 / 1024);
         }
         catch (Exception ex)
         {
@@ -478,6 +540,28 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
     public string PeekCurrentSafeWindowThreshold() => _lastSortableUniqueId ?? string.Empty;
 
     public string GetProjectorVersion() => _projectorVersion;
+
+    /// <summary>
+    /// Returns the current WASM linear memory size in bytes for the underlying instance.
+    /// Returns 0 if no instance is active.
+    /// </summary>
+    public long GetLinearMemoryBytes()
+    {
+        try
+        {
+            var instance = _instance;
+            if (instance == null) return 0;
+            // Use reflection to call GetLinearMemoryBytes on the underlying instance
+            var method = instance.GetType().GetMethod("GetLinearMemoryBytes");
+            if (method != null)
+                return (long)(method.Invoke(instance, null) ?? 0);
+            return -1;
+        }
+        catch
+        {
+            return -1;
+        }
+    }
 
     public async Task<ResultBox<bool>> RewriteSnapshotVersionAsync(
         Stream source,

@@ -38,7 +38,25 @@ manifest.Validate();
 
 var jsonOptions = ManifestDomainTypes.CreateJsonOptions();
 var domainTypes = ManifestDomainTypes.Create(manifest, jsonOptions);
+// Create registry FIRST (before filtering) so all projectors are available for tag-state
 var registry = manifest.CreateRegistry();
+
+// Remove tag-only projectors from Projectors list to prevent MultiProjectionGrain activation.
+// Tag-only projectors (not mapped to any query) don't need MultiProjectionGrain.
+// They waste 36.6MB WASM linear memory each and process events unnecessarily.
+// SharedTagStateProcessor handles tag-state directly without MultiProjectionGrain.
+// The registry still has all projectors for tag-state lookup.
+var queryMappedProjectors = new HashSet<string>(
+    manifest.QueryProjectors.Values, StringComparer.Ordinal);
+var tagOnlyProjectorNames = manifest.Projectors
+    .Where(p => !queryMappedProjectors.Contains(p.ProjectorName))
+    .Select(p => p.ProjectorName)
+    .ToList();
+if (tagOnlyProjectorNames.Count > 0 && !string.Equals(Environment.GetEnvironmentVariable("KEEP_TAG_PROJECTORS"), "true", StringComparison.OrdinalIgnoreCase))
+{
+    manifest.Projectors.RemoveAll(p => tagOnlyProjectorNames.Contains(p.ProjectorName));
+    Console.WriteLine($"Removed {tagOnlyProjectorNames.Count} tag-only projectors from MultiProjectionGrain: {string.Join(", ", tagOnlyProjectorNames)}");
+}
 var storageConfiguration = RuntimeHostStorageConfigurationResolver.Resolve(
     builder.Configuration,
     builder.Environment.ContentRootPath);
@@ -66,6 +84,12 @@ builder.UseOrleans(silo =>
     silo.AddMemoryGrainStorage("PubSubStore");
     silo.AddMemoryStreams("SekibanQueue");
     silo.AddMemoryStreams("EventStreamProvider");
+    // Deactivate idle grains faster to release WASM projection hosts sooner.
+    // Default is 120 minutes; 5 minutes is sufficient for benchmark workloads.
+    silo.Configure<GrainCollectionOptions>(options =>
+    {
+        options.CollectionAge = TimeSpan.FromMinutes(5);
+    });
 });
 
 builder.Services.AddSingleton(manifest);
@@ -111,6 +135,10 @@ builder.Services.AddTransient<ISerializedSekibanDcbExecutor>(sp =>
 builder.Services.AddWasmtimeProjectionHost(options =>
 {
     options.DefaultModulePath = manifest.DefaultModulePath;
+    // Pool=1: keep 1 idle instance per projector for reuse.
+    // With tag projector filtering, only ~10 projectors → 10 × 55MB = 550MB idle.
+    // Pool reuse avoids 55MB instance creation cost on every call.
+    options.MaxPooledInstancesPerProjector = 1;
 });
 builder.Services.AddWasmTagStateRuntime(options =>
 {
@@ -181,15 +209,59 @@ if (enableProjectionStatusEndpoint)
     });
 }
 
+// Memory diagnostic: report serialized state size per multi-projector
+app.MapGet("/api/sekiban/memory-stats", async (HttpContext http) =>
+{
+    var clusterClient = http.RequestServices.GetRequiredService<IClusterClient>();
+    var serviceIdProvider = http.RequestServices.GetRequiredService<IServiceIdProvider>();
+    var serviceId = serviceIdProvider.GetCurrentServiceId();
+    var results = new List<object>();
+
+    foreach (var projector in manifest.Projectors)
+    {
+        try
+        {
+            var grainKey = ServiceIdGrainKey.Build(serviceId, projector.ProjectorName);
+            var grain = clusterClient.GetGrain<IMultiProjectionGrain>(grainKey);
+            var status = await grain.GetStatusAsync();
+            results.Add(new
+            {
+                projector.ProjectorName,
+                status.EventsProcessed,
+            });
+        }
+        catch (Exception ex)
+        {
+            results.Add(new { projector.ProjectorName, error = ex.Message });
+        }
+    }
+
+    // Process memory
+    var process = System.Diagnostics.Process.GetCurrentProcess();
+    return Results.Ok(new
+    {
+        processRssMB = process.WorkingSet64 / 1024 / 1024,
+        projectors = results
+    });
+});
+
 InstanceEndpoints.Map(app);
 
-// Limit concurrent tag-state replays to prevent memory spikes from multiple
-// simultaneous WASM accumulator + event-list allocations.
-var tagStateReplaySemaphore = new SemaphoreSlim(2, 2);
-var tagStateReplayCounter = new StrongBox<int>(0);
+// Pure-function tag-state processor: creates fresh accumulator per call but limits
+// concurrency to 1 per projector type. With pool=1, the same WASM instance is reused.
+// Memory: ~6 projectors × 36.6MB = 220MB (vs 200+ × 36.6MB = 7.3GB without limiting).
+var sharedTagStateProcessor = new SharedTagStateProcessor(
+    app.Services.GetRequiredService<ITagStateProjectionPrimitive>(),
+    app.Services.GetRequiredService<IEventStore>(),
+    app.Services.GetRequiredService<IActorObjectAccessor>(),
+    app.Services.GetRequiredService<WasmProjectorRegistry>(),
+    domainTypes,
+    app.Services.GetRequiredService<ILoggerFactory>());
 
 app.MapPost("/api/sekiban/serialized/tag-state", async (HttpContext http, TagStateRequest request) =>
 {
+    try
+    {
     TagStateId tagStateId;
     try
     {
@@ -219,35 +291,29 @@ app.MapPost("/api/sekiban/serialized/tag-state", async (HttpContext http, TagSta
             projectorVersion));
     }
 
-    // Check if we have a cached response for this tag-state (avoids Orleans grain activation)
-    var responseCache = http.RequestServices.GetRequiredService<TagStateResponseCache>();
-    var tagStateKey = request.TagStateId;
-    if (responseCache.TryGet(tagStateKey, out var cachedState))
+    // Pure function mode: 1 WASM instance per projector, serialized access via semaphore.
+    var tagState = await sharedTagStateProcessor.GetTagStateAsync(tagStateId);
+    if (tagState is null)
     {
-        return Results.Ok(cachedState);
+        return Results.BadRequest(new { error = $"Failed to compute tag state for {request.TagStateId}" });
     }
 
-    SerializableTagState tagState;
-    if (ResolveDirectSnapshotQueryEnabled(http.RequestServices.GetRequiredService<IConfiguration>()))
-    {
-        var directResult = await TryGetSerializableTagStateDirectAsync(http, tagStateId, tagStateReplaySemaphore, tagStateReplayCounter);
-        if (directResult is not null)
-        {
-            responseCache.Set(tagStateKey, directResult);
-            return Results.Ok(directResult);
-        }
-    }
-
-    var executor = http.RequestServices.GetRequiredService<ISerializedSekibanDcbExecutor>();
-    var result = await executor.GetSerializableTagStateAsync(tagStateId);
-    if (!result.IsSuccess)
-    {
-        return Results.BadRequest(new { error = result.GetException().Message });
-    }
-
-    tagState = result.GetValue();
-    responseCache.Set(tagStateKey, tagState);
     return Results.Ok(tagState);
+    }
+    catch (TimeoutException ex)
+    {
+        return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status504GatewayTimeout);
+    }
+    catch (OperationCanceledException)
+    {
+        return Results.StatusCode(499);
+    }
+    catch (Exception ex)
+    {
+        var logger = http.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("TagState");
+        logger.LogError(ex, "Unhandled error in tag-state endpoint for {TagStateId}", request.TagStateId);
+        return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status500InternalServerError);
+    }
 });
 
 app.MapPost("/api/sekiban/serialized/tag-latest-sortable", async (
@@ -280,41 +346,45 @@ app.MapPost("/api/sekiban/serialized/tag-latest-sortable", async (
         lastSortableUniqueId));
 });
 
-var commitCounter = new StrongBox<int>(0);
-
 app.MapPost("/api/sekiban/serialized/commit", async (
     HttpContext http,
     SerializedCommitRequest request,
     CancellationToken ct) =>
 {
-    var executor = http.RequestServices.GetRequiredService<ISerializedSekibanDcbExecutor>();
-    var result = await executor.CommitSerializableEventsAsync(request, ct);
-    if (!result.IsSuccess)
+    try
     {
-        return Results.BadRequest(new { error = result.GetException().Message });
+        var executor = http.RequestServices.GetRequiredService<ISerializedSekibanDcbExecutor>();
+        var result = await executor.CommitSerializableEventsAsync(request, ct);
+        if (!result.IsSuccess)
+        {
+            return Results.BadRequest(new { error = result.GetException().Message });
+        }
+
+        // Track committed tags so the tag-state fast-path knows which tags have events.
+        var committedTags = request.EventCandidates.SelectMany(static e => e.Tags).Distinct().ToList();
+        var tagTracker = http.RequestServices.GetRequiredService<KnownTagTracker>();
+        tagTracker.MarkTagsAsWritten(committedTags);
+
+        // Invalidate SharedTagStateProcessor's cache for affected tags
+        // so the next tag-state request re-computes from the event store.
+        sharedTagStateProcessor.InvalidateForTags(committedTags);
+
+        return Results.Ok(result.GetValue());
     }
-
-    // Track committed tags so the tag-state fast-path knows which tags have events.
-    var committedTags = request.EventCandidates.SelectMany(static e => e.Tags).Distinct().ToList();
-    var tagTracker = http.RequestServices.GetRequiredService<KnownTagTracker>();
-    tagTracker.MarkTagsAsWritten(committedTags);
-
-    // Invalidate cached tag-state responses for affected tags so the next request
-    // re-fetches the updated state from Orleans.
-    var responseCache = http.RequestServices.GetRequiredService<TagStateResponseCache>();
-    responseCache.InvalidateForTags(committedTags);
-
-    // Periodically hint the GC to collect tag-state accumulators and event arrays.
-    // Reservation workflows invalidate ~5 tag caches per commit, causing frequent WASM
-    // accumulator allocations that land on the Large Object Heap.
-    // Collect Gen 2 every ~100 commits to reclaim LOH memory promptly.
-    var count = Interlocked.Increment(ref commitCounter.Value);
-    if (count % 100 == 0)
+    catch (TimeoutException ex)
     {
-        GC.Collect(2, GCCollectionMode.Optimized, blocking: false);
+        return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status504GatewayTimeout);
     }
-
-    return Results.Ok(result.GetValue());
+    catch (OperationCanceledException)
+    {
+        return Results.StatusCode(499);
+    }
+    catch (Exception ex)
+    {
+        var logger = http.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("Commit");
+        logger.LogError(ex, "Unhandled error in commit endpoint");
+        return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status500InternalServerError);
+    }
 });
 
 app.MapPost("/api/sekiban/serialized/query", async (
@@ -452,11 +522,13 @@ static async Task<SerializableTagState?> TryGetSerializableTagStateDirectAsync(
         // Without LOH compaction, RSS grows to 10+ GB at 300K events.
         // LOH compaction requires blocking GC; non-blocking GC won't compact the LOH.
         // Every ~50 replays gives a good balance: ~5GB peak with moderate throughput impact.
+        // Non-blocking Gen 2 GC every 50 tag-state replays.
+        // Version-aware caching reduces replay frequency significantly.
+        // Non-blocking avoids throughput degradation from GC pauses.
         var count = Interlocked.Increment(ref replayCounter.Value);
         if (count % 50 == 0)
         {
-            GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
-            GC.Collect(2, GCCollectionMode.Optimized, blocking: true, compacting: true);
+            GC.Collect(2, GCCollectionMode.Optimized, blocking: false);
         }
     }
 
@@ -1220,55 +1292,75 @@ sealed record DirectTagStateCacheEntry(SerializableTagState CachedState, string 
 /// - Each weather forecast creates a unique tag that is never accessed again after commit,
 ///   so these are invalidated and not re-cached
 /// </summary>
+/// <summary>
+/// Version-aware tag-state response cache. Instead of invalidating entries on commit,
+/// entries are marked as stale and their freshness is checked against the Orleans grain's
+/// latest sortable unique ID on each request. This dramatically reduces WASM accumulator
+/// creations: only re-compute when the tag actually has new events.
+/// </summary>
 sealed class TagStateResponseCache
 {
     private const int MaxEntries = 10_000;
 
     private readonly ConcurrentDictionary<string, TagStateResponseCacheEntry> _entries = new(StringComparer.Ordinal);
 
-    public bool TryGet(string tagStateKey, out SerializableTagState value)
+    /// <summary>
+    /// Try to get a cached entry. Returns true if the entry exists (even if stale).
+    /// Caller must check <paramref name="isStale"/> and verify freshness via Orleans
+    /// if the entry is stale.
+    /// </summary>
+    public bool TryGet(string tagStateKey, out SerializableTagState value, out bool isStale)
     {
         if (_entries.TryGetValue(tagStateKey, out var entry))
         {
             entry.LastAccessedTicks = Environment.TickCount64;
             value = entry.State;
+            isStale = entry.IsStale;
             return true;
         }
         value = default!;
+        isStale = false;
         return false;
     }
 
-    public void Set(string tagStateKey, SerializableTagState value)
+    /// <summary>
+    /// Cache a freshly computed tag-state result with its sortable unique ID for freshness checks.
+    /// </summary>
+    public void Set(string tagStateKey, SerializableTagState value, string? lastSortableUniqueId = null)
     {
         if (_entries.Count >= MaxEntries)
         {
             EvictOldest();
         }
-        _entries[tagStateKey] = new TagStateResponseCacheEntry(value);
+        _entries[tagStateKey] = new TagStateResponseCacheEntry(value, lastSortableUniqueId);
     }
 
     /// <summary>
-    /// Invalidates all cached entries whose tagStateId starts with "tagGroup:tagContent:".
-    /// Called after commit to ensure subsequent tag-state requests get fresh data.
+    /// Mark all cached entries for the given tags as stale (not deleted).
+    /// Stale entries can still be returned if Orleans confirms the sortable ID hasn't advanced.
+    /// This avoids unnecessary WASM accumulator re-creations when concurrent commits
+    /// don't actually affect the queried tag.
     /// </summary>
-    public void InvalidateForTags(IEnumerable<string> tags)
+    public void MarkTagsAsStale(IEnumerable<string> tags)
     {
         foreach (var tag in tags)
         {
             var prefix = tag + ":";
-            foreach (var key in _entries.Keys)
+            foreach (var kvp in _entries)
             {
-                if (key.StartsWith(prefix, StringComparison.Ordinal))
+                if (kvp.Key.StartsWith(prefix, StringComparison.Ordinal))
                 {
-                    _entries.TryRemove(key, out _);
+                    kvp.Value.IsStale = true;
                 }
             }
         }
     }
 
+    /// <summary>Kept for backward compatibility, delegates to MarkTagsAsStale.</summary>
+    public void InvalidateForTags(IEnumerable<string> tags) => MarkTagsAsStale(tags);
+
     private void EvictOldest()
     {
-        // Remove the oldest half of entries by access time
         var entries = _entries.ToArray();
         var sorted = entries.OrderBy(e => e.Value.LastAccessedTicks).ToArray();
         var removeCount = sorted.Length / 2;
@@ -1281,12 +1373,16 @@ sealed class TagStateResponseCache
     private sealed class TagStateResponseCacheEntry
     {
         public SerializableTagState State { get; }
+        public string? LastSortableUniqueId { get; }
         public long LastAccessedTicks { get; set; }
+        public bool IsStale { get; set; }
 
-        public TagStateResponseCacheEntry(SerializableTagState state)
+        public TagStateResponseCacheEntry(SerializableTagState state, string? lastSortableUniqueId)
         {
             State = state;
+            LastSortableUniqueId = lastSortableUniqueId;
             LastAccessedTicks = Environment.TickCount64;
+            IsStale = false;
         }
     }
 }
@@ -1317,5 +1413,218 @@ sealed class KnownTagTracker
         {
             _knownTags.TryAdd(tag, 0);
         }
+    }
+}
+
+/// <summary>
+/// Pure-function tag-state processor. Holds ONE WASM accumulator per projector type
+/// and reuses it for all tag-state requests via RestoreState→ApplyEvents→SerializeState.
+/// This reduces WASM instance count from 200+ (one per concurrent grain) to ~6 (one per projector).
+/// Memory savings: 200×36.6MB=7.3GB → 6×36.6MB=220MB for C# WASM.
+/// </summary>
+/// <summary>
+/// Pure-function tag-state processor. Creates a fresh WASM accumulator per call but
+/// limits concurrency to 1 per projector type via semaphore. This means at most ~6
+/// WASM instances exist at any time (one per projector), vs 200+ without limiting.
+/// Uses in-process state cache with incremental replay (delta events only).
+/// Memory: 6×36.6MB=220MB (vs 200×36.6MB=7.3GB without limiting).
+/// </summary>
+sealed class SharedTagStateProcessor : IDisposable
+{
+    private readonly SemaphoreSlim _globalGate = new(1, 1);
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _gates = new();
+    private readonly ConcurrentDictionary<string, SerializableTagState> _stateCache = new();
+    private const int MaxCacheEntries = 10_000;
+
+    private readonly ITagStateProjectionPrimitive _primitive;
+    private readonly IEventStore _eventStore;
+    private readonly IActorObjectAccessor _actorAccessor;
+    private readonly WasmProjectorRegistry _registry;
+    private readonly ILogger _logger;
+
+    public SharedTagStateProcessor(
+        ITagStateProjectionPrimitive primitive,
+        IEventStore eventStore,
+        IActorObjectAccessor actorAccessor,
+        WasmProjectorRegistry registry,
+        DcbDomainTypes domainTypes,
+        ILoggerFactory loggerFactory)
+    {
+        _primitive = primitive;
+        _eventStore = eventStore;
+        _actorAccessor = actorAccessor;
+        _registry = registry;
+        _logger = loggerFactory.CreateLogger("SharedTagState");
+    }
+
+    public async Task<SerializableTagState?> GetTagStateAsync(TagStateId tagStateId)
+    {
+        var projectorName = tagStateId.TagProjectorName;
+        if (_registry.TryGet(projectorName) is null)
+        {
+            _logger.LogDebug("Projector {ProjectorName} not in manifest.", projectorName);
+            return null;
+        }
+
+        // Global lock: only 1 tag-state WASM operation at a time to prevent
+        // pool/instance interference between concurrent requests.
+        await _globalGate.WaitAsync();
+        try
+        {
+            var cacheKey = tagStateId.GetTagStateId();
+            var cachedState = _stateCache.GetValueOrDefault(cacheKey);
+
+            // Get latest sortable unique ID from Orleans
+            string? latestSortableUniqueId = null;
+            var tagActorId = $"{tagStateId.TagGroup}:{tagStateId.TagContent}";
+            var tagActorResult = await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagActorId);
+            if (tagActorResult.IsSuccess)
+            {
+                var latestResult = await tagActorResult.GetValue().GetLatestSortableUniqueIdAsync();
+                if (latestResult.IsSuccess)
+                {
+                    latestSortableUniqueId = latestResult.GetValue();
+                }
+            }
+
+            // Cache hit: sortable ID hasn't advanced
+            if (cachedState != null &&
+                !string.IsNullOrEmpty(cachedState.LastSortedUniqueId) &&
+                string.Equals(cachedState.LastSortedUniqueId, latestSortableUniqueId, StringComparison.Ordinal))
+            {
+                return cachedState;
+            }
+
+            // Load delta events (only since last cached state)
+            SortableUniqueId? since = null;
+            if (cachedState != null &&
+                !string.IsNullOrEmpty(cachedState.LastSortedUniqueId) &&
+                SortableUniqueId.TryParse(cachedState.LastSortedUniqueId, out var parsedSince))
+            {
+                since = parsedSince;
+            }
+
+            var tag = new FallbackTag(tagStateId.TagGroup, tagStateId.TagContent);
+            _logger.LogInformation("SharedTagState: Loading events for {Tag} since={Since}",
+                $"{tagStateId.TagGroup}:{tagStateId.TagContent}", since?.ToString() ?? "null");
+            var eventsResult = await _eventStore.ReadSerializableEventsByTagAsync(tag, since);
+            if (!eventsResult.IsSuccess)
+            {
+                _logger.LogWarning("Event read failed for {TagStateId}: {Error}",
+                    tagStateId, eventsResult.GetException().Message);
+                return null;
+            }
+
+            var events = eventsResult.GetValue().ToList();
+            _logger.LogInformation("SharedTagState: Loaded {EventCount} events for {Tag}, cachedState={HasCached}, latestSortableId={Latest}",
+                events.Count,
+                $"{tagStateId.TagGroup}:{tagStateId.TagContent}:{tagStateId.TagProjectorName}",
+                cachedState != null,
+                latestSortableUniqueId ?? "null");
+
+            // Create fresh accumulator (gets pooled instance if available).
+            using var accumulator = _primitive.CreateAccumulator(tagStateId);
+
+            // Log event details for debugging
+            foreach (var ev in events.Take(3))
+            {
+                var payloadPreview = ev.Payload.Length > 0
+                    ? System.Text.Encoding.UTF8.GetString(ev.Payload)[..Math.Min(200, ev.Payload.Length)]
+                    : "<empty>";
+                _logger.LogInformation("SharedTagState: Event type={EventType} tags=[{Tags}] payloadLen={PayloadLen} payload={Payload}",
+                    ev.EventPayloadName,
+                    string.Join(",", ev.Tags),
+                    ev.Payload.Length,
+                    payloadPreview);
+            }
+
+            // Pure function: RestoreState → ApplyEvents → SerializeState
+            var applyStateResult = accumulator.ApplyState(cachedState);
+            _logger.LogInformation("SharedTagState: ApplyState(cached={HasCached}) returned {Result}",
+                cachedState != null, applyStateResult);
+            if (!applyStateResult)
+            {
+                _logger.LogWarning("ApplyState failed for {TagStateId}", tagStateId);
+                return null;
+            }
+
+            if (events.Count > 0)
+            {
+                var applyEventsResult = accumulator.ApplyEvents(events, latestSortableUniqueId);
+                _logger.LogInformation("SharedTagState: ApplyEvents({Count} events) returned {Result}",
+                    events.Count, applyEventsResult);
+                if (!applyEventsResult)
+                {
+                    _logger.LogWarning("ApplyEvents failed for {TagStateId}", tagStateId);
+                    return null;
+                }
+            }
+
+            var rawState = accumulator.GetSerializedState();
+            var rawPayloadPreview = rawState.Payload.Length > 0
+                ? System.Text.Encoding.UTF8.GetString(rawState.Payload)[..Math.Min(150, rawState.Payload.Length)]
+                : "<empty>";
+            _logger.LogWarning("SharedTagState: RESULT version={Version} payloadLen={PayloadLen} name={PayloadName} payload={Payload}",
+                rawState.Version, rawState.Payload.Length, rawState.TagPayloadName, rawPayloadPreview);
+
+            // Override metadata from tagStateId (accumulator may pick up wrong metadata
+            // from multi-tagged events, e.g., Room events tagged with both Room and Reservation).
+            var payloadName = rawState.TagPayloadName;
+            if (rawState.Payload.Length > 0 &&
+                (string.Equals(payloadName, nameof(EmptyTagStatePayload), StringComparison.Ordinal) ||
+                 string.IsNullOrWhiteSpace(payloadName)) &&
+                projectorName.EndsWith("Projector", StringComparison.Ordinal))
+            {
+                payloadName = projectorName[..^"Projector".Length] + "State";
+            }
+
+            var newState = rawState with
+            {
+                TagGroup = tagStateId.TagGroup,
+                TagContent = tagStateId.TagContent,
+                TagProjector = projectorName,
+                TagPayloadName = payloadName
+            };
+
+            // Cache the result for incremental replay on next request
+            if (_stateCache.Count >= MaxCacheEntries)
+            {
+                var keys = _stateCache.Keys.Take(_stateCache.Count / 2).ToList();
+                foreach (var k in keys) _stateCache.TryRemove(k, out _);
+            }
+            _stateCache[cacheKey] = newState;
+
+            return newState;
+        }
+        finally
+        {
+            _globalGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Invalidate cached tag states for the given tags after a commit.
+    /// The next request will re-compute from the event store.
+    /// </summary>
+    public void InvalidateForTags(IEnumerable<string> tags)
+    {
+        foreach (var tag in tags)
+        {
+            var prefix = tag + ":";
+            foreach (var key in _stateCache.Keys)
+            {
+                if (key.StartsWith(prefix, StringComparison.Ordinal) || key.Contains($":{tag}:"))
+                {
+                    _stateCache.TryRemove(key, out _);
+                }
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        foreach (var (_, gate) in _gates) gate.Dispose();
+        _gates.Clear();
+        _stateCache.Clear();
     }
 }

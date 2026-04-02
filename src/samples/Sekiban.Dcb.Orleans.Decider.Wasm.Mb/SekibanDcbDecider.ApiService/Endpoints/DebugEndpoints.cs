@@ -17,7 +17,6 @@ public static class DebugEndpoints
         {
             group.RequireAuthorization("AdminOnly");
         }
-
         group.MapGet("/events", GetEventsAsync)
             .WithName("DebugGetEvents");
 

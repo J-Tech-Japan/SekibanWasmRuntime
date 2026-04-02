@@ -12,7 +12,6 @@ namespace SekibanDcbOrleans.Unit;
 public class SampleTests
 {
     private static long _eventCounter;
-
     [Test]
     public void ClassRoomProjector_Should_Preserve_MaxStudents_When_Dropping_From_Full_ClassRoom()
     {
