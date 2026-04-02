@@ -1319,7 +1319,7 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
     {
         var concurrency = ResolveConfiguredNonNegativeInt(
             "SEKIBAN_WASM_CATCHUP_CONCURRENCY",
-            defaultValue: 0);
+            defaultValue: 1);
         return concurrency <= 0
             ? null
             : new SemaphoreSlim(concurrency, concurrency);
