@@ -9,9 +9,14 @@ public static class DebugEndpoints
 {
     public static void MapDebugEndpoints(this IEndpointRouteBuilder endpoints)
     {
+        var environment = endpoints.ServiceProvider.GetRequiredService<IHostEnvironment>();
         var group = endpoints.MapGroup("/debug")
             .WithTags("Debug");
 
+        if (!environment.IsDevelopment())
+        {
+            group.RequireAuthorization("AdminOnly");
+        }
         group.MapGet("/events", GetEventsAsync)
             .WithName("DebugGetEvents");
 

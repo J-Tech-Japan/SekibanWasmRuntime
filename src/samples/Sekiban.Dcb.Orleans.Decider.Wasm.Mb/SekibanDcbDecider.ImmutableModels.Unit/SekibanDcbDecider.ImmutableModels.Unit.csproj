@@ -22,5 +22,8 @@
     <ItemGroup>
         <Using Include="Xunit"/>
     </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\SekibanDcbDecider.ImmutableModels\SekibanDcbDecider.ImmutableModels.csproj" />
+    </ItemGroup>
 
 </Project>

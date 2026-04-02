@@ -43,17 +43,22 @@ public sealed class WasmtimePrimitiveProjectionHost :
 
     public IPrimitiveProjectionInstance CreateInstance(string projectorName)
     {
-        Trace($"host:create_instance:start projector={projectorName}");
-        if (TryRent(projectorName, out WasmtimePrimitiveProjectionInstance? pooled) &&
-            pooled is not null)
+        if (_options.MaxPooledInstancesPerProjector <= 0)
         {
-            Trace($"host:create_instance:pool_hit projector={projectorName}");
-            return new PooledPrimitiveProjectionLease(projectorName, pooled, ReturnToPool);
+            return CreateLease(projectorName, releasePermit: null);
         }
 
-        Trace($"host:create_instance:pool_miss projector={projectorName}");
-        WasmtimePrimitiveProjectionInstance core = CreateCoreInstance(projectorName);
-        return new PooledPrimitiveProjectionLease(projectorName, core, ReturnToPool);
+        var limit = GetInstanceLimit(projectorName);
+        limit.Wait();
+        try
+        {
+            return CreateLease(projectorName, () => limit.Release());
+        }
+        catch
+        {
+            limit.Release();
+            throw;
+        }
     }
 
     /// <summary>
@@ -66,42 +71,20 @@ public sealed class WasmtimePrimitiveProjectionHost :
     {
         if (_options.MaxPooledInstancesPerProjector <= 0)
         {
-            return CreateInstance(projectorName);
+            return CreateLease(projectorName, releasePermit: null);
         }
 
-        // Semaphore limits concurrent instances regardless of pooling config.
-        // This prevents unbounded WASM instance creation (each 36.6MB C# WASM).
-        var limit = _instanceLimits.GetOrAdd(
-            projectorName,
-            _ => new SemaphoreSlim(_options.MaxPooledInstancesPerProjector, _options.MaxPooledInstancesPerProjector));
-
+        var limit = GetInstanceLimit(projectorName);
         Trace($"host:create_instance_async:wait projector={projectorName}");
         await limit.WaitAsync(ct);
         try
         {
-            // Try pool first
-            if (TryRent(projectorName, out WasmtimePrimitiveProjectionInstance? pooled) &&
-                pooled is not null)
-            {
-                Trace($"host:create_instance_async:pool_hit projector={projectorName}");
-                return new PooledPrimitiveProjectionLease(projectorName, pooled, ReturnToPoolAndRelease);
-            }
-
-            // Create new (we have the permit so this is safe)
-            Trace($"host:create_instance_async:new projector={projectorName}");
-            WasmtimePrimitiveProjectionInstance core = CreateCoreInstance(projectorName);
-            return new PooledPrimitiveProjectionLease(projectorName, core, ReturnToPoolAndRelease);
+            return CreateLease(projectorName, () => limit.Release());
         }
         catch
         {
             limit.Release();
             throw;
-        }
-
-        void ReturnToPoolAndRelease(string name, WasmtimePrimitiveProjectionInstance instance)
-        {
-            ReturnToPool(name, instance);
-            limit.Release();
         }
     }
 
@@ -148,6 +131,44 @@ public sealed class WasmtimePrimitiveProjectionHost :
             var instance = linker.Instantiate(store, module);
             Trace($"host:create_instance:after_instantiate projector={projectorName}");
             return new WasmtimePrimitiveProjectionInstance(store, instance, projectorName);
+        }
+    }
+
+    private SemaphoreSlim GetInstanceLimit(string projectorName) =>
+        _instanceLimits.GetOrAdd(
+            projectorName,
+            _ => new SemaphoreSlim(_options.MaxPooledInstancesPerProjector, _options.MaxPooledInstancesPerProjector));
+
+    private IPrimitiveProjectionInstance CreateLease(string projectorName, Action? releasePermit)
+    {
+        Trace($"host:create_instance:start projector={projectorName}");
+        if (TryRent(projectorName, out WasmtimePrimitiveProjectionInstance? pooled) &&
+            pooled is not null)
+        {
+            Trace($"host:create_instance:pool_hit projector={projectorName}");
+            return new PooledPrimitiveProjectionLease(
+                projectorName,
+                pooled,
+                releasePermit is null ? ReturnToPool : ReturnToPoolAndRelease);
+        }
+
+        Trace($"host:create_instance:pool_miss projector={projectorName}");
+        WasmtimePrimitiveProjectionInstance core = CreateCoreInstance(projectorName);
+        return new PooledPrimitiveProjectionLease(
+            projectorName,
+            core,
+            releasePermit is null ? ReturnToPool : ReturnToPoolAndRelease);
+
+        void ReturnToPoolAndRelease(string name, WasmtimePrimitiveProjectionInstance instance)
+        {
+            try
+            {
+                ReturnToPool(name, instance);
+            }
+            finally
+            {
+                releasePermit!();
+            }
         }
     }
 

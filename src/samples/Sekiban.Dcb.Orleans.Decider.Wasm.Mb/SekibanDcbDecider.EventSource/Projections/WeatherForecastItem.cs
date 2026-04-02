@@ -2,7 +2,8 @@ using Orleans;
 namespace Dcb.EventSource.Projections;
 
 /// <summary>
-///     Weather forecast item in projection
+///     Weather forecast item in projection.
+///     Date values are normalized to UTC midnight so clients keep date-only semantics.
 /// </summary>
 public record WeatherForecastItem(
     [property: Id(0)]

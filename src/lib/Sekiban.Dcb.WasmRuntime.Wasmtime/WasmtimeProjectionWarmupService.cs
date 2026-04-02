@@ -8,16 +8,16 @@ namespace Sekiban.Dcb.WasmRuntime.Wasmtime;
 
 public sealed class WasmtimeProjectionWarmupService(
     IServiceProvider services,
+    WasmtimeHostOptions options,
     ILogger<WasmtimeProjectionWarmupService> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Skip warmup to reduce startup memory.
-        // Each C# WASM instance uses 55MB of linear memory. With 23 projectors,
-        // warmup creates 23 × 55MB = 1.2GB of instances at startup.
-        // Instances are created on-demand when first needed instead.
-        logger.LogInformation("WASM warmup disabled to reduce startup memory");
-        return;
+        if (!options.EnableWarmup)
+        {
+            logger.LogInformation("WASM warmup disabled to reduce startup memory");
+            return;
+        }
 
         var registry = services.GetService<WasmProjectorRegistry>();
         if (registry is null)

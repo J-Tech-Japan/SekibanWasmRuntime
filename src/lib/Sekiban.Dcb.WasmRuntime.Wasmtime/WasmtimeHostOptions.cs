@@ -26,6 +26,8 @@ public class WasmtimeHostOptions
 
     public int MaxPooledInstancesPerProjector { get; set; } = 4;
 
+    public bool EnableWarmup { get; set; } = false;
+
     public string? ResolveModulePath(string projectorName)
     {
         if (ProjectorModulePaths.TryGetValue(projectorName, out var path))

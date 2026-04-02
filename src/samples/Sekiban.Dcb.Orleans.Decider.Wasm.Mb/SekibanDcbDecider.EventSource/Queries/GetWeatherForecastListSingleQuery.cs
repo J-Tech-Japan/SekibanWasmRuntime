@@ -39,7 +39,7 @@ public record GetWeatherForecastListSingleQuery :
             .Select(x => new WeatherForecastItem(
                 x.State!.ForecastId,
                 x.State.Location,
-                x.State.Date.ToDateTime(TimeOnly.MinValue),
+                x.State.Date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
                 x.State.TemperatureC,
                 x.State.Summary,
                 ParseLastUpdated(x.LastSortedUniqueId)))
