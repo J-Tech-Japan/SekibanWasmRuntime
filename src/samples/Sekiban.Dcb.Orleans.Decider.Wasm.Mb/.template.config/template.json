@@ -1,0 +1,57 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "J-Tech Japan",
+  "classifications": ["Aspire", "Orleans", "Sekiban", "Dcb", "EventSourcing", "Decider"],
+  "name": "Sekiban Dcb Decider Aspire Template (Decider)",
+  "description": "SekibanDcbDeciderAspireDecider - Template with ImmutableModels project for Decider pattern",
+  "precedence": "0",
+  "identity": "Sekiban.Dcb.Orleans.Aspire.Decider",
+  "shortName": "sekiban-dcb-decider",
+  "tags": {
+    "language": "C#",
+    "type": "solution"
+  },
+  "sourceName": "SekibanDcbDecider",
+  "preferNameDirectory": true,
+  "symbols": {
+    "IncludeTests": {
+      "type": "parameter",
+      "datatype": "bool",
+      "defaultValue": "true",
+      "description": "Include unit test project"
+    }
+  },
+  "sources": [
+    {
+      "source": "./",
+      "target": "./",
+      "exclude": [
+        ".template.config/**/*",
+        ".idea",
+        "**/bin/**",
+        "**/obj/**"
+      ],
+      "modifiers": [
+        {
+          "condition": "(!IncludeTests)",
+          "exclude": [
+            "SekibanDcbDecider.Unit/**/*"
+          ]
+        }
+      ]
+    }
+  ],
+  "primaryOutputs": [
+    { "path": "SekibanDcbDecider.slnx" }
+  ],
+  "postActions": [
+    {
+      "id": "restore",
+      "actionId": "210D431B-A78B-4D2F-B762-4ED3E3EA9025",
+      "manualInstructions": [
+        { "text": "Run 'dotnet restore'" }
+      ],
+      "continueOnError": true
+    }
+  ]
+}

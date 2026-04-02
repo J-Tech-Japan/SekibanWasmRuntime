@@ -1,0 +1,47 @@
+{
+  "warn-list": "-44",
+  "supported-targets": ["wasm"],
+  "import": [
+    { "path": "moonbitlang/core/json", "alias": "json" },
+    { "path": "moonbitlang/core/ref", "alias": "ref" },
+    { "path": "moonbitlang/core/encoding/utf8", "alias": "encoding/utf8" },
+    { "path": "sekiban/sekiban-dcb-decider-moonbit/ffi", "alias": "ffi" }
+  ],
+  "link": {
+    "wasm": {
+      "exports": [
+        "alloc:alloc",
+        "dealloc:dealloc",
+        "create_instance:create_instance",
+        "apply_event:apply_event",
+        "apply_event_with_metadata:apply_event_with_metadata",
+        "execute_query:execute_query",
+        "execute_list_query:execute_list_query",
+        "serialize_state:serialize_state",
+        "restore_state:restore_state",
+        "cmd_create_weather:create_weather",
+        "cmd_update_weather_location:update_weather_location",
+        "cmd_delete_weather:delete_weather",
+        "cmd_create_student:create_student",
+        "cmd_create_classroom:create_classroom",
+        "cmd_enroll:enroll",
+        "cmd_drop:drop",
+        "cmd_register_user:register_user",
+        "cmd_update_user_monthly_limit:update_user_monthly_limit",
+        "cmd_grant_user_access:grant_user_access",
+        "cmd_grant_user_role:grant_user_role",
+        "cmd_create_room:create_room",
+        "cmd_update_room:update_room",
+        "cmd_create_reservation_draft:create_reservation_draft",
+        "cmd_commit_reservation_hold:commit_reservation_hold",
+        "cmd_confirm_reservation:confirm_reservation",
+        "cmd_cancel_reservation:cancel_reservation",
+        "cmd_reject_reservation:reject_reservation",
+        "cmd_start_approval_flow:start_approval_flow",
+        "cmd_record_approval_decision:record_approval_decision"
+      ],
+      "export-memory-name": "memory",
+      "heap-start-address": 16
+    }
+  }
+}

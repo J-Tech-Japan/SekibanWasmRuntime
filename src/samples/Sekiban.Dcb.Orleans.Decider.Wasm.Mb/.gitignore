@@ -1,0 +1,14 @@
+bin/
+obj/
+.vs/
+**/bin/
+**/obj/
+target/
+**/target/
+_build/
+**/_build/
+.generated/
+**/.generated/
+modules/*.wasm
+.env
+secrets.json
