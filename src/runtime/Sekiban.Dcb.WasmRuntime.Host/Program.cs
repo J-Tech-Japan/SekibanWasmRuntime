@@ -52,7 +52,7 @@ var tagOnlyProjectorNames = manifest.Projectors
     .Where(p => !queryMappedProjectors.Contains(p.ProjectorName))
     .Select(p => p.ProjectorName)
     .ToList();
-if (tagOnlyProjectorNames.Count > 0)
+if (tagOnlyProjectorNames.Count > 0 && !string.Equals(Environment.GetEnvironmentVariable("KEEP_TAG_PROJECTORS"), "true", StringComparison.OrdinalIgnoreCase))
 {
     manifest.Projectors.RemoveAll(p => tagOnlyProjectorNames.Contains(p.ProjectorName));
     Console.WriteLine($"Removed {tagOnlyProjectorNames.Count} tag-only projectors from MultiProjectionGrain: {string.Join(", ", tagOnlyProjectorNames)}");
@@ -135,12 +135,10 @@ builder.Services.AddTransient<ISerializedSekibanDcbExecutor>(sp =>
 builder.Services.AddWasmtimeProjectionHost(options =>
 {
     options.DefaultModulePath = manifest.DefaultModulePath;
-    // Each C# WASM instance holds ~36.6MB of linear memory.
-    // With 23 projectors, pool=1 wastes 23 × 36.6MB = 842MB on idle instances.
-    // Pool=0 disables idle pooling. The async bounded pool (CreateInstanceAsync)
-    // still limits concurrent instances but disposes them after use.
-    options.EnableInstancePooling = false;
-    options.MaxPooledInstancesPerProjector = 1;  // Used as concurrent limit for async pool
+    // Pool=1: keep 1 idle instance per projector for reuse.
+    // With tag projector filtering, only ~10 projectors → 10 × 55MB = 550MB idle.
+    // Pool reuse avoids 55MB instance creation cost on every call.
+    options.MaxPooledInstancesPerProjector = 1;
 });
 builder.Services.AddWasmTagStateRuntime(options =>
 {

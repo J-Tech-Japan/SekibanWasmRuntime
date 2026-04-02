@@ -120,7 +120,7 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
     /// and restores the state. This prevents unbounded linear memory growth.
     /// Set to 0 to disable automatic compaction.
     /// </summary>
-    private const int AutoCompactionIntervalEvents = 10_000;
+    private const int AutoCompactionIntervalEvents = 50_000;
     /// <summary>
     /// Stagger offset between projectors to avoid simultaneous compaction of all 9+ projectors.
     /// Each projector gets a unique offset based on its name hash, spreading compactions over
@@ -492,6 +492,8 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
             }
 
             previous.Dispose();
+            // Ensure native Wasmtime Store handle is finalized promptly to release mmap'd memory
+            GC.Collect(0, GCCollectionMode.Default, blocking: false);
             var postLinearMem = GetLinearMemoryBytes();
             _logger.LogWarning(
                 "CompactSafeHistory DONE: {ProjectorName} newLinearMem={LinearMemMB}MB (saved {SavedMB}MB)",

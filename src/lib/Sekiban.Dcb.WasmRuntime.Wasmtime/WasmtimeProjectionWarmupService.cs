@@ -12,6 +12,13 @@ public sealed class WasmtimeProjectionWarmupService(
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Skip warmup if disabled (reduces startup memory by ~550MB for 10 projectors)
+        if (string.Equals(Environment.GetEnvironmentVariable("WASM_SKIP_WARMUP"), "true", StringComparison.OrdinalIgnoreCase))
+        {
+            logger.LogInformation("WASM warmup skipped (WASM_SKIP_WARMUP=true)");
+            return;
+        }
+
         var registry = services.GetService<WasmProjectorRegistry>();
         if (registry is null)
         {
