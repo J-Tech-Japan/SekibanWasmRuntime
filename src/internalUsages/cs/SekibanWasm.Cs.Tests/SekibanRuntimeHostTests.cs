@@ -221,7 +221,7 @@ public class SekibanRuntimeHostTests
             MaxPooledInstancesPerProjector = 1
         };
 
-        using var runtime = new WasmtimeRuntime();
+        using var runtime = new WasmtimeRuntime(options);
         var moduleCache = new WasmtimeModuleCache(runtime);
         using var host = new WasmtimePrimitiveProjectionHost(runtime, moduleCache, options);
 
@@ -247,7 +247,7 @@ public class SekibanRuntimeHostTests
             MaxPooledInstancesPerProjector = 1
         };
 
-        using var runtime = new WasmtimeRuntime();
+        using var runtime = new WasmtimeRuntime(options);
         var moduleCache = new WasmtimeModuleCache(runtime);
         using var host = new WasmtimePrimitiveProjectionHost(runtime, moduleCache, options);
 

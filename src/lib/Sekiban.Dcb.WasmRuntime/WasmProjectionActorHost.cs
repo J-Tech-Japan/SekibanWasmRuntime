@@ -1,5 +1,6 @@
 using System.Collections;
 using System.IO.Compression;
+using System.Runtime;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -69,6 +70,11 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
             Environment.GetEnvironmentVariable("WASM_RUNTIME_TRACE_LIFECYCLE"),
             "1",
             StringComparison.Ordinal);
+    private static readonly int CatchUpConcurrency = ResolveConfiguredPositiveInt(
+        "SEKIBAN_WASM_CATCHUP_CONCURRENCY",
+        defaultValue: 1);
+    private static readonly SemaphoreSlim CatchUpGate =
+        new(Math.Max(1, CatchUpConcurrency), Math.Max(1, CatchUpConcurrency));
     private static readonly string TraceFilePath =
         Environment.GetEnvironmentVariable("WASM_RUNTIME_TRACE_PATH")
         ?? Path.Combine(
@@ -120,7 +126,9 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
     /// and restores the state. This prevents unbounded linear memory growth.
     /// Set to 0 to disable automatic compaction.
     /// </summary>
-    private const int AutoCompactionIntervalEvents = 50_000;
+    private static readonly int AutoCompactionIntervalEvents = ResolveConfiguredPositiveInt(
+        "SEKIBAN_WASM_AUTO_COMPACTION_INTERVAL_EVENTS",
+        defaultValue: 20_000);
     /// <summary>
     /// Stagger offset between projectors to avoid simultaneous compaction of all 9+ projectors.
     /// Each projector gets a unique offset based on its name hash, spreading compactions over
@@ -149,31 +157,41 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
             ?? throw new InvalidOperationException($"Projector not found: {projectorName}");
     }
 
-    public Task AddSerializableEventsAsync(
+    public async Task AddSerializableEventsAsync(
         IReadOnlyList<SerializableEvent> events,
         bool finishedCatchUp = true)
     {
-        var instance = EnsureInstance();
-        bool useBatchApply = !finishedCatchUp && events.Count > 1;
-        List<SerializableEvent>? batchEvents = useBatchApply
-            ? new List<SerializableEvent>(events.Count)
-            : null;
-        foreach (var serializedEvent in events)
+        SemaphoreSlim? catchUpGate = null;
+        if (!finishedCatchUp && events.Count > 0)
         {
-            bool traceHokenProjection = string.Equals(
-                _projectorName,
-                "HokenNendoShosaiListProjection",
-                StringComparison.Ordinal);
-            bool needsPayloadJsonInspection = ShouldInspectPayloadJson(serializedEvent.EventPayloadName);
-            Trace(
-                $"host_add_events:start projector={_projectorName} eventId={serializedEvent.Id} eventType={serializedEvent.EventPayloadName} sortableUniqueId={serializedEvent.SortableUniqueIdValue} tagCount={serializedEvent.Tags.Count}");
-            if (ShouldSkipEvent(serializedEvent.EventPayloadName, serializedEvent.Tags))
+            catchUpGate = CatchUpGate;
+            Trace($"host_add_events:catchup_wait projector={_projectorName} eventCount={events.Count}");
+            await catchUpGate.WaitAsync();
+        }
+
+        try
+        {
+            var instance = EnsureInstance();
+            bool useBatchApply = !finishedCatchUp && events.Count > 1;
+            List<SerializableEvent>? batchEvents = useBatchApply
+                ? new List<SerializableEvent>(events.Count)
+                : null;
+            foreach (var serializedEvent in events)
             {
+                bool traceHokenProjection = string.Equals(
+                    _projectorName,
+                    "HokenNendoShosaiListProjection",
+                    StringComparison.Ordinal);
+                bool needsPayloadJsonInspection = ShouldInspectPayloadJson(serializedEvent.EventPayloadName);
                 Trace(
-                    $"host_add_events:skipped projector={_projectorName} eventId={serializedEvent.Id} eventType={serializedEvent.EventPayloadName} sortableUniqueId={serializedEvent.SortableUniqueIdValue}");
-            }
-            else
-            {
+                    $"host_add_events:start projector={_projectorName} eventId={serializedEvent.Id} eventType={serializedEvent.EventPayloadName} sortableUniqueId={serializedEvent.SortableUniqueIdValue} tagCount={serializedEvent.Tags.Count}");
+                if (ShouldSkipEvent(serializedEvent.EventPayloadName, serializedEvent.Tags))
+                {
+                    Trace(
+                        $"host_add_events:skipped projector={_projectorName} eventId={serializedEvent.Id} eventType={serializedEvent.EventPayloadName} sortableUniqueId={serializedEvent.SortableUniqueIdValue}");
+                    continue;
+                }
+
                 string? payloadJson = needsPayloadJsonInspection || !useBatchApply
                     ? Encoding.UTF8.GetString(serializedEvent.Payload)
                     : null;
@@ -182,124 +200,122 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
                 {
                     Trace(
                         $"host_add_events:skipped_orphan projector={_projectorName} eventId={serializedEvent.Id} eventType={serializedEvent.EventPayloadName} sortableUniqueId={serializedEvent.SortableUniqueIdValue}");
+                    continue;
+                }
+
+                if (traceHokenProjection)
+                {
+                    WriteHokenTraceLine(
+                        $"start projector={_projectorName} eventType={serializedEvent.EventPayloadName} eventId={serializedEvent.Id} sortableUniqueId={serializedEvent.SortableUniqueIdValue} tagCount={serializedEvent.Tags.Count}");
+                    _logger.LogInformation(
+                        "WASM HokenNendo event apply start: Projector={ProjectorName}, EventType={EventType}, EventId={EventId}, SortableUniqueId={SortableUniqueId}, TagCount={TagCount}",
+                        _projectorName,
+                        serializedEvent.EventPayloadName,
+                        serializedEvent.Id,
+                        serializedEvent.SortableUniqueIdValue,
+                        serializedEvent.Tags.Count);
+                }
+
+                if (useBatchApply)
+                {
+                    batchEvents!.Add(serializedEvent);
+                    continue;
+                }
+
+                instance.ApplyEvent(
+                    serializedEvent.EventPayloadName,
+                    payloadJson ?? Encoding.UTF8.GetString(serializedEvent.Payload),
+                    serializedEvent.Tags,
+                    serializedEvent.SortableUniqueIdValue);
+
+                if (traceHokenProjection)
+                {
+                    WriteHokenTraceLine(
+                        $"completed projector={_projectorName} eventType={serializedEvent.EventPayloadName} eventId={serializedEvent.Id} sortableUniqueId={serializedEvent.SortableUniqueIdValue}");
+                    _logger.LogInformation(
+                        "WASM HokenNendo event apply completed: Projector={ProjectorName}, EventType={EventType}, EventId={EventId}, SortableUniqueId={SortableUniqueId}",
+                        _projectorName,
+                        serializedEvent.EventPayloadName,
+                        serializedEvent.Id,
+                        serializedEvent.SortableUniqueIdValue);
+                }
+
+                Trace(
+                    $"host_add_events:completed projector={_projectorName} eventId={serializedEvent.Id} eventType={serializedEvent.EventPayloadName} sortableUniqueId={serializedEvent.SortableUniqueIdValue}");
+                AdvanceEventVersion(serializedEvent);
+            }
+
+            if (batchEvents is { Count: > 0 })
+            {
+                Trace($"host_add_events:batch_start projector={_projectorName} eventCount={batchEvents.Count}");
+                if (instance is ISerializableEventBatchProjectionInstance serializableBatchInstance)
+                {
+                    serializableBatchInstance.ApplySerializableEvents(batchEvents);
                 }
                 else
                 {
-                    if (traceHokenProjection)
+                    var envelopes = new List<PrimitiveProjectionEventEnvelope>(batchEvents.Count);
+                    foreach (SerializableEvent serializedEvent in batchEvents)
                     {
-                        WriteHokenTraceLine(
-                            $"start projector={_projectorName} eventType={serializedEvent.EventPayloadName} eventId={serializedEvent.Id} sortableUniqueId={serializedEvent.SortableUniqueIdValue} tagCount={serializedEvent.Tags.Count}");
-                        _logger.LogInformation(
-                            "WASM HokenNendo event apply start: Projector={ProjectorName}, EventType={EventType}, EventId={EventId}, SortableUniqueId={SortableUniqueId}, TagCount={TagCount}",
-                            _projectorName,
+                        envelopes.Add(new PrimitiveProjectionEventEnvelope(
                             serializedEvent.EventPayloadName,
-                            serializedEvent.Id,
-                            serializedEvent.SortableUniqueIdValue,
-                            serializedEvent.Tags.Count);
-                    }
-
-                    if (useBatchApply)
-                    {
-                        batchEvents!.Add(serializedEvent);
-                    }
-                    else
-                    {
-                        instance.ApplyEvent(
-                            serializedEvent.EventPayloadName,
-                            payloadJson ?? Encoding.UTF8.GetString(serializedEvent.Payload),
+                            Encoding.UTF8.GetString(serializedEvent.Payload),
                             serializedEvent.Tags,
-                            serializedEvent.SortableUniqueIdValue);
+                            serializedEvent.SortableUniqueIdValue));
+                    }
 
-                        if (traceHokenProjection)
+                    instance.ApplyEvents(envelopes);
+                }
+                Trace($"host_add_events:batch_completed projector={_projectorName} eventCount={batchEvents.Count}");
+
+                foreach (var serializedEvent in batchEvents)
+                {
+                    AdvanceEventVersion(serializedEvent);
+                    Trace(
+                        $"host_add_events:completed projector={_projectorName} eventId={serializedEvent.Id} eventType={serializedEvent.EventPayloadName} sortableUniqueId={serializedEvent.SortableUniqueIdValue}");
+                }
+            }
+
+            _isCatchedUp = finishedCatchUp;
+
+            // Auto-compaction: periodically reset WASM linear memory to prevent unbounded growth.
+            // Staggered across projectors to avoid 9 simultaneous compactions (which spike 659MB).
+            if (AutoCompactionIntervalEvents > 0)
+            {
+                _eventsSinceLastCompaction += events.Count;
+
+                if (_compactionStaggerOffset < 0)
+                {
+                    _compactionStaggerOffset = Math.Abs(_projectorName.GetHashCode()) % AutoCompactionIntervalEvents;
+                }
+
+                if (_eventsSinceLastCompaction >= AutoCompactionIntervalEvents)
+                {
+                    var sinceCompaction = _eventsSinceLastCompaction - AutoCompactionIntervalEvents;
+                    if (sinceCompaction >= (_compactionStaggerOffset % StaggerSlotSize))
+                    {
+                        _eventsSinceLastCompaction = 0;
+                        try
                         {
-                            WriteHokenTraceLine(
-                                $"completed projector={_projectorName} eventType={serializedEvent.EventPayloadName} eventId={serializedEvent.Id} sortableUniqueId={serializedEvent.SortableUniqueIdValue}");
-                            _logger.LogInformation(
-                                "WASM HokenNendo event apply completed: Projector={ProjectorName}, EventType={EventType}, EventId={EventId}, SortableUniqueId={SortableUniqueId}",
-                                _projectorName,
-                                serializedEvent.EventPayloadName,
-                                serializedEvent.Id,
-                                serializedEvent.SortableUniqueIdValue);
+                            CompactSafeHistory();
+                            _logger.LogWarning(
+                                "Auto-compaction: {ProjectorName} v{Version}",
+                                _projectorName, _version);
                         }
-
-                        Trace(
-                            $"host_add_events:completed projector={_projectorName} eventId={serializedEvent.Id} eventType={serializedEvent.EventPayloadName} sortableUniqueId={serializedEvent.SortableUniqueIdValue}");
-                        AdvanceEventVersion(serializedEvent);
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex,
+                                "Auto-compaction failed for {ProjectorName} at version {Version}",
+                                _projectorName, _version);
+                        }
                     }
                 }
             }
         }
-
-        if (batchEvents is { Count: > 0 })
+        finally
         {
-            Trace($"host_add_events:batch_start projector={_projectorName} eventCount={batchEvents.Count}");
-            if (instance is ISerializableEventBatchProjectionInstance serializableBatchInstance)
-            {
-                serializableBatchInstance.ApplySerializableEvents(batchEvents);
-            }
-            else
-            {
-                var envelopes = new List<PrimitiveProjectionEventEnvelope>(batchEvents.Count);
-                foreach (SerializableEvent serializedEvent in batchEvents)
-                {
-                    envelopes.Add(new PrimitiveProjectionEventEnvelope(
-                        serializedEvent.EventPayloadName,
-                        Encoding.UTF8.GetString(serializedEvent.Payload),
-                        serializedEvent.Tags,
-                        serializedEvent.SortableUniqueIdValue));
-                }
-
-                instance.ApplyEvents(envelopes);
-            }
-            Trace($"host_add_events:batch_completed projector={_projectorName} eventCount={batchEvents.Count}");
-
-            foreach (var serializedEvent in batchEvents)
-            {
-                AdvanceEventVersion(serializedEvent);
-                Trace(
-                    $"host_add_events:completed projector={_projectorName} eventId={serializedEvent.Id} eventType={serializedEvent.EventPayloadName} sortableUniqueId={serializedEvent.SortableUniqueIdValue}");
-            }
+            catchUpGate?.Release();
         }
-
-        _isCatchedUp = finishedCatchUp;
-
-        // Auto-compaction: periodically reset WASM linear memory to prevent unbounded growth.
-        // Staggered across projectors to avoid 9 simultaneous compactions (which spike 659MB).
-        if (AutoCompactionIntervalEvents > 0)
-        {
-            _eventsSinceLastCompaction += events.Count;
-
-            // Calculate per-projector stagger offset (stable, based on name hash)
-            if (_compactionStaggerOffset < 0)
-            {
-                _compactionStaggerOffset = Math.Abs(_projectorName.GetHashCode()) % AutoCompactionIntervalEvents;
-            }
-
-            if (_eventsSinceLastCompaction >= AutoCompactionIntervalEvents)
-            {
-                // Check if this projector's stagger slot has arrived
-                var sinceCompaction = _eventsSinceLastCompaction - AutoCompactionIntervalEvents;
-                if (sinceCompaction >= (_compactionStaggerOffset % StaggerSlotSize))
-                {
-                    _eventsSinceLastCompaction = 0;
-                    try
-                    {
-                        CompactSafeHistory();
-                        _logger.LogWarning(
-                            "Auto-compaction: {ProjectorName} v{Version}",
-                            _projectorName, _version);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex,
-                            "Auto-compaction failed for {ProjectorName} at version {Version}",
-                            _projectorName, _version);
-                    }
-                }
-            }
-        }
-
-        return Task.CompletedTask;
     }
 
     private bool ShouldInspectPayloadJson(string eventType) =>
@@ -492,8 +508,11 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
             }
 
             previous.Dispose();
-            // Ensure native Wasmtime Store handle is finalized promptly to release mmap'd memory
-            GC.Collect(0, GCCollectionMode.Default, blocking: false);
+            // Force LOH compaction so disposed store buffers and event arrays do not keep RSS elevated.
+            GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+            GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
+            GC.WaitForPendingFinalizers();
+            GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
             var postLinearMem = GetLinearMemoryBytes();
             _logger.LogWarning(
                 "CompactSafeHistory DONE: {ProjectorName} newLinearMem={LinearMemMB}MB (saved {SavedMB}MB)",
@@ -1280,6 +1299,14 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
         {
             // Debug tracing must not affect runtime behavior.
         }
+    }
+
+    private static int ResolveConfiguredPositiveInt(string environmentVariableName, int defaultValue)
+    {
+        string? raw = Environment.GetEnvironmentVariable(environmentVariableName);
+        return int.TryParse(raw, out int value) && value > 0
+            ? value
+            : defaultValue;
     }
 
     internal sealed record WasmProjectionPayload(string ProjectorName, string StateJson) : IMultiProjectionPayload;

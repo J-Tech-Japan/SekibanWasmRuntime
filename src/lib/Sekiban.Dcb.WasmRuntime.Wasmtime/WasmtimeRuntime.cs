@@ -7,9 +7,15 @@ public sealed class WasmtimeRuntime : IDisposable
     public Engine Engine { get; }
     public object SyncRoot { get; } = new();
 
-    public WasmtimeRuntime()
+    public WasmtimeRuntime(WasmtimeHostOptions options)
     {
         var config = new Config();
+        if (options.StaticMemoryMaximumSizeBytes is { } staticMemoryMaximumSizeBytes &&
+            staticMemoryMaximumSizeBytes > 0)
+        {
+            config.WithStaticMemoryMaximumSize(staticMemoryMaximumSizeBytes);
+        }
+
         Engine = new Engine(config);
     }
 
