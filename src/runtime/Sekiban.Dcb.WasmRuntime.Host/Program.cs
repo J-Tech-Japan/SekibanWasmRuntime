@@ -117,11 +117,10 @@ builder.Services.AddTransient<ISerializedSekibanDcbExecutor>(sp =>
 builder.Services.AddWasmtimeProjectionHost(options =>
 {
     options.DefaultModulePath = manifest.DefaultModulePath;
-    // Reduce pooled WASM instances from 4 to 1 per projector.
     // Each C# WASM instance holds ~36.6MB of linear memory.
-    // With 6+ projectors, 4 pooled × 6 = 24 instances = ~878MB idle memory.
-    // Reducing to 1 saves ~660MB while still allowing instance reuse.
-    options.MaxPooledInstancesPerProjector = 8;
+    // Pool=1: only 1 idle instance per projector (6 × 36.6MB = 220MB idle).
+    // Pool=8 wastes 6 × 8 × 36.6MB = 1.75GB on idle instances.
+    options.MaxPooledInstancesPerProjector = 1;
 });
 builder.Services.AddWasmTagStateRuntime(options =>
 {
