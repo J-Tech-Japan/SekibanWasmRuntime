@@ -64,11 +64,13 @@ public sealed class WasmtimePrimitiveProjectionHost :
     public async ValueTask<IPrimitiveProjectionInstance> CreateInstanceAsync(
         string projectorName, CancellationToken ct = default)
     {
-        if (!_options.EnableInstancePooling || _options.MaxPooledInstancesPerProjector <= 0)
+        if (_options.MaxPooledInstancesPerProjector <= 0)
         {
             return CreateInstance(projectorName);
         }
 
+        // Semaphore limits concurrent instances regardless of pooling config.
+        // This prevents unbounded WASM instance creation (each 36.6MB C# WASM).
         var limit = _instanceLimits.GetOrAdd(
             projectorName,
             _ => new SemaphoreSlim(_options.MaxPooledInstancesPerProjector, _options.MaxPooledInstancesPerProjector));

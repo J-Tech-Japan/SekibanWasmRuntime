@@ -118,9 +118,11 @@ builder.Services.AddWasmtimeProjectionHost(options =>
 {
     options.DefaultModulePath = manifest.DefaultModulePath;
     // Each C# WASM instance holds ~36.6MB of linear memory.
-    // Pool=1: only 1 idle instance per projector (6 × 36.6MB = 220MB idle).
-    // Pool=8 wastes 6 × 8 × 36.6MB = 1.75GB on idle instances.
-    options.MaxPooledInstancesPerProjector = 1;
+    // With 23 projectors, pool=1 wastes 23 × 36.6MB = 842MB on idle instances.
+    // Pool=0 disables idle pooling. The async bounded pool (CreateInstanceAsync)
+    // still limits concurrent instances but disposes them after use.
+    options.EnableInstancePooling = false;
+    options.MaxPooledInstancesPerProjector = 1;  // Used as concurrent limit for async pool
 });
 builder.Services.AddWasmTagStateRuntime(options =>
 {
