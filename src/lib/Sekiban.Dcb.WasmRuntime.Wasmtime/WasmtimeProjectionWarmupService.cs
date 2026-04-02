@@ -12,12 +12,12 @@ public sealed class WasmtimeProjectionWarmupService(
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Skip warmup if disabled (reduces startup memory by ~550MB for 10 projectors)
-        if (string.Equals(Environment.GetEnvironmentVariable("WASM_SKIP_WARMUP"), "true", StringComparison.OrdinalIgnoreCase))
-        {
-            logger.LogInformation("WASM warmup skipped (WASM_SKIP_WARMUP=true)");
-            return;
-        }
+        // Skip warmup to reduce startup memory.
+        // Each C# WASM instance uses 55MB of linear memory. With 23 projectors,
+        // warmup creates 23 × 55MB = 1.2GB of instances at startup.
+        // Instances are created on-demand when first needed instead.
+        logger.LogInformation("WASM warmup disabled to reduce startup memory");
+        return;
 
         var registry = services.GetService<WasmProjectorRegistry>();
         if (registry is null)
