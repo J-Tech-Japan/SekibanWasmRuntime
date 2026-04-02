@@ -194,9 +194,8 @@ if (enableProjectionStatusEndpoint)
 
 InstanceEndpoints.Map(app);
 
-// Limit concurrent tag-state grain calls to bound the number of simultaneous WASM instances.
-// Each C# WASM instance holds ~36.6MB of linear memory. Without limiting concurrency,
-// 200+ concurrent TagStateGrain activations create 200 × 36.6MB = 7.3GB of WASM memory.
+// Limit concurrent tag-state grain calls to bound WASM instance count.
+// Each C# WASM instance holds ~36.6MB of linear memory.
 // With a semaphore of 4, peak WASM memory is bounded to 4 × 36.6MB ≈ 146MB.
 var tagStateConcurrencyLimit = new SemaphoreSlim(4, 4);
 
@@ -234,8 +233,6 @@ app.MapPost("/api/sekiban/serialized/tag-state", async (HttpContext http, TagSta
     }
 
     // Limit concurrent Orleans grain calls to bound WASM instance count.
-    // TagStateGrain creates a WASM accumulator (~36.6MB C# / 0.7MB Rust per instance).
-    // Without this, 200+ concurrent grains = 7GB+ C# WASM linear memory.
     await tagStateConcurrencyLimit.WaitAsync();
     SerializableTagState tagState;
     try
@@ -252,19 +249,13 @@ app.MapPost("/api/sekiban/serialized/tag-state", async (HttpContext http, TagSta
     {
         tagStateConcurrencyLimit.Release();
     }
-    // Fix EmptyTagStatePayload name: Orleans grain may return state with a placeholder
-    // payload name that the ClientApi/WASM executor doesn't recognize.
-    // Infer the correct payload name from the projector name convention.
-    bool needsPayloadNameFix =
-        tagState.Payload.Length > 0 &&
-        string.Equals(tagState.TagPayloadName, nameof(EmptyTagStatePayload), StringComparison.Ordinal);
-    if (needsPayloadNameFix)
+
+    // Fix EmptyTagStatePayload name
+    if (tagState.Payload.Length > 0 &&
+        string.Equals(tagState.TagPayloadName, nameof(EmptyTagStatePayload), StringComparison.Ordinal) &&
+        tagStateId.TagProjectorName.EndsWith("Projector", StringComparison.Ordinal))
     {
-        var inferredPayloadName = InferTagPayloadName(tagStateId.TagProjectorName);
-        if (!string.IsNullOrWhiteSpace(inferredPayloadName))
-        {
-            tagState = tagState with { TagPayloadName = inferredPayloadName };
-        }
+        tagState = tagState with { TagPayloadName = tagStateId.TagProjectorName[..^"Projector".Length] + "State" };
     }
 
     return Results.Ok(tagState);
@@ -1384,5 +1375,167 @@ sealed class KnownTagTracker
         {
             _knownTags.TryAdd(tag, 0);
         }
+    }
+}
+
+/// <summary>
+/// Pure-function tag-state processor. Holds ONE WASM accumulator per projector type
+/// and reuses it for all tag-state requests via RestoreState→ApplyEvents→SerializeState.
+/// This reduces WASM instance count from 200+ (one per concurrent grain) to ~6 (one per projector).
+/// Memory savings: 200×36.6MB=7.3GB → 6×36.6MB=220MB for C# WASM.
+/// </summary>
+/// <summary>
+/// Pure-function tag-state processor. Creates a fresh WASM accumulator per call but
+/// limits concurrency to 1 per projector type via semaphore. This means at most ~6
+/// WASM instances exist at any time (one per projector), vs 200+ without limiting.
+/// Uses in-process state cache with incremental replay (delta events only).
+/// Memory: 6×36.6MB=220MB (vs 200×36.6MB=7.3GB without limiting).
+/// </summary>
+sealed class SharedTagStateProcessor : IDisposable
+{
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _gates = new();
+    private readonly ConcurrentDictionary<string, SerializableTagState> _stateCache = new();
+    private const int MaxCacheEntries = 10_000;
+
+    private readonly ITagStateProjectionPrimitive _primitive;
+    private readonly IEventStore _eventStore;
+    private readonly IActorObjectAccessor _actorAccessor;
+    private readonly WasmProjectorRegistry _registry;
+    private readonly ILogger _logger;
+
+    public SharedTagStateProcessor(
+        ITagStateProjectionPrimitive primitive,
+        IEventStore eventStore,
+        IActorObjectAccessor actorAccessor,
+        WasmProjectorRegistry registry,
+        DcbDomainTypes domainTypes,
+        ILoggerFactory loggerFactory)
+    {
+        _primitive = primitive;
+        _eventStore = eventStore;
+        _actorAccessor = actorAccessor;
+        _registry = registry;
+        _logger = loggerFactory.CreateLogger("SharedTagState");
+    }
+
+    public async Task<SerializableTagState?> GetTagStateAsync(TagStateId tagStateId)
+    {
+        var projectorName = tagStateId.TagProjectorName;
+        if (_registry.TryGet(projectorName) is null)
+        {
+            _logger.LogDebug("Projector {ProjectorName} not in manifest.", projectorName);
+            return null;
+        }
+
+        // Limit to 1 concurrent WASM instance per projector type.
+        // The pool (MaxPooledInstancesPerProjector=1) will reuse the same instance.
+        var gate = _gates.GetOrAdd(projectorName, _ => new SemaphoreSlim(1, 1));
+
+        await gate.WaitAsync();
+        try
+        {
+            var cacheKey = tagStateId.GetTagStateId();
+            var cachedState = _stateCache.GetValueOrDefault(cacheKey);
+
+            // Get latest sortable unique ID from Orleans
+            string? latestSortableUniqueId = null;
+            var tagActorId = $"{tagStateId.TagGroup}:{tagStateId.TagContent}";
+            var tagActorResult = await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagActorId);
+            if (tagActorResult.IsSuccess)
+            {
+                var latestResult = await tagActorResult.GetValue().GetLatestSortableUniqueIdAsync();
+                if (latestResult.IsSuccess)
+                {
+                    latestSortableUniqueId = latestResult.GetValue();
+                }
+            }
+
+            // Cache hit: sortable ID hasn't advanced
+            if (cachedState != null &&
+                !string.IsNullOrEmpty(cachedState.LastSortedUniqueId) &&
+                string.Equals(cachedState.LastSortedUniqueId, latestSortableUniqueId, StringComparison.Ordinal))
+            {
+                return cachedState;
+            }
+
+            // Load delta events (only since last cached state)
+            SortableUniqueId? since = null;
+            if (cachedState != null &&
+                !string.IsNullOrEmpty(cachedState.LastSortedUniqueId) &&
+                SortableUniqueId.TryParse(cachedState.LastSortedUniqueId, out var parsedSince))
+            {
+                since = parsedSince;
+            }
+
+            var tag = new FallbackTag(tagStateId.TagGroup, tagStateId.TagContent);
+            var eventsResult = await _eventStore.ReadSerializableEventsByTagAsync(tag, since);
+            if (!eventsResult.IsSuccess)
+            {
+                _logger.LogWarning("Event read failed for {TagStateId}: {Error}",
+                    tagStateId, eventsResult.GetException().Message);
+                return null;
+            }
+
+            var events = eventsResult.GetValue().ToList();
+
+            // Create fresh accumulator (gets pooled instance if available).
+            // With semaphore(1) per projector and pool(1), this reuses the same WASM instance.
+            using var accumulator = _primitive.CreateAccumulator(tagStateId);
+
+            // Pure function: RestoreState → ApplyEvents → SerializeState
+            if (!accumulator.ApplyState(cachedState))
+            {
+                _logger.LogWarning("ApplyState failed for {TagStateId}", tagStateId);
+                return null;
+            }
+
+            if (events.Count > 0 && !accumulator.ApplyEvents(events, latestSortableUniqueId))
+            {
+                _logger.LogWarning("ApplyEvents failed for {TagStateId}", tagStateId);
+                return null;
+            }
+
+            var rawState = accumulator.GetSerializedState();
+
+            // Override metadata from tagStateId (accumulator may pick up wrong metadata
+            // from multi-tagged events, e.g., Room events tagged with both Room and Reservation).
+            var payloadName = rawState.TagPayloadName;
+            if (rawState.Payload.Length > 0 &&
+                (string.Equals(payloadName, nameof(EmptyTagStatePayload), StringComparison.Ordinal) ||
+                 string.IsNullOrWhiteSpace(payloadName)) &&
+                projectorName.EndsWith("Projector", StringComparison.Ordinal))
+            {
+                payloadName = projectorName[..^"Projector".Length] + "State";
+            }
+
+            var newState = rawState with
+            {
+                TagGroup = tagStateId.TagGroup,
+                TagContent = tagStateId.TagContent,
+                TagProjector = projectorName,
+                TagPayloadName = payloadName
+            };
+
+            // Cache the result for incremental replay on next request
+            if (_stateCache.Count >= MaxCacheEntries)
+            {
+                var keys = _stateCache.Keys.Take(_stateCache.Count / 2).ToList();
+                foreach (var k in keys) _stateCache.TryRemove(k, out _);
+            }
+            _stateCache[cacheKey] = newState;
+
+            return newState;
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    public void Dispose()
+    {
+        foreach (var (_, gate) in _gates) gate.Dispose();
+        _gates.Clear();
+        _stateCache.Clear();
     }
 }
