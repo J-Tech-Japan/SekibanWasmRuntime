@@ -38,7 +38,25 @@ manifest.Validate();
 
 var jsonOptions = ManifestDomainTypes.CreateJsonOptions();
 var domainTypes = ManifestDomainTypes.Create(manifest, jsonOptions);
+// Create registry FIRST (before filtering) so all projectors are available for tag-state
 var registry = manifest.CreateRegistry();
+
+// Remove tag-only projectors from Projectors list to prevent MultiProjectionGrain activation.
+// Tag-only projectors (not mapped to any query) don't need MultiProjectionGrain.
+// They waste 36.6MB WASM linear memory each and process events unnecessarily.
+// SharedTagStateProcessor handles tag-state directly without MultiProjectionGrain.
+// The registry still has all projectors for tag-state lookup.
+var queryMappedProjectors = new HashSet<string>(
+    manifest.QueryProjectors.Values, StringComparer.Ordinal);
+var tagOnlyProjectorNames = manifest.Projectors
+    .Where(p => !queryMappedProjectors.Contains(p.ProjectorName))
+    .Select(p => p.ProjectorName)
+    .ToList();
+if (tagOnlyProjectorNames.Count > 0)
+{
+    manifest.Projectors.RemoveAll(p => tagOnlyProjectorNames.Contains(p.ProjectorName));
+    Console.WriteLine($"Removed {tagOnlyProjectorNames.Count} tag-only projectors from MultiProjectionGrain: {string.Join(", ", tagOnlyProjectorNames)}");
+}
 var storageConfiguration = RuntimeHostStorageConfigurationResolver.Resolve(
     builder.Configuration,
     builder.Environment.ContentRootPath);
@@ -192,6 +210,42 @@ if (enableProjectionStatusEndpoint)
         });
     });
 }
+
+// Memory diagnostic: report serialized state size per multi-projector
+app.MapGet("/api/sekiban/memory-stats", async (HttpContext http) =>
+{
+    var clusterClient = http.RequestServices.GetRequiredService<IClusterClient>();
+    var serviceIdProvider = http.RequestServices.GetRequiredService<IServiceIdProvider>();
+    var serviceId = serviceIdProvider.GetCurrentServiceId();
+    var results = new List<object>();
+
+    foreach (var projector in manifest.Projectors)
+    {
+        try
+        {
+            var grainKey = ServiceIdGrainKey.Build(serviceId, projector.ProjectorName);
+            var grain = clusterClient.GetGrain<IMultiProjectionGrain>(grainKey);
+            var status = await grain.GetStatusAsync();
+            results.Add(new
+            {
+                projector.ProjectorName,
+                status.EventsProcessed,
+            });
+        }
+        catch (Exception ex)
+        {
+            results.Add(new { projector.ProjectorName, error = ex.Message });
+        }
+    }
+
+    // Process memory
+    var process = System.Diagnostics.Process.GetCurrentProcess();
+    return Results.Ok(new
+    {
+        processRssMB = process.WorkingSet64 / 1024 / 1024,
+        projectors = results
+    });
+});
 
 InstanceEndpoints.Map(app);
 

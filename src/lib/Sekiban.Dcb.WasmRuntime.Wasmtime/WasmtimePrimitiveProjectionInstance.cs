@@ -1529,6 +1529,19 @@ public class WasmtimePrimitiveProjectionInstance :
         }
     }
 
+    /// <summary>
+    /// Returns the current WASM linear memory size in bytes.
+    /// This is the actual committed memory, not just reserved virtual memory.
+    /// </summary>
+    public long GetLinearMemoryBytes()
+    {
+        lock (_syncRoot)
+        {
+            if (_disposed) return 0;
+            return _memory.GetLength();
+        }
+    }
+
     public byte[] SerializeStateUtf8()
     {
         lock (_syncRoot)

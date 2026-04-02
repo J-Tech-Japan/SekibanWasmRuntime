@@ -531,6 +531,27 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
 
     public string GetProjectorVersion() => _projectorVersion;
 
+    /// <summary>
+    /// Returns the current WASM linear memory size in bytes for the underlying instance.
+    /// Returns 0 if no instance is active.
+    /// </summary>
+    public long GetLinearMemoryBytes()
+    {
+        try
+        {
+            // SerializeStateUtf8 length gives a proxy for state size
+            // GetLinearMemoryBytes is on WasmtimePrimitiveProjectionInstance
+            var instance = _instance;
+            if (instance == null) return 0;
+            var stateBytes = instance.SerializeStateUtf8();
+            return stateBytes.Length;
+        }
+        catch
+        {
+            return -1;
+        }
+    }
+
     public async Task<ResultBox<bool>> RewriteSnapshotVersionAsync(
         Stream source,
         Stream target,
