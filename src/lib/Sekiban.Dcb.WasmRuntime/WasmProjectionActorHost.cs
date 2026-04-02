@@ -113,6 +113,7 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
     private byte[]? _pendingCompactionStateUtf8;
     private int _pendingCompactionStateVersion = -1;
     private int _eventsSinceLastCompaction;
+    private int _compactionStaggerOffset = -1;
     /// <summary>
     /// Number of events to process before triggering automatic compaction.
     /// Compaction serializes state, creates a fresh WASM instance with minimal linear memory,
@@ -120,6 +121,12 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
     /// Set to 0 to disable automatic compaction.
     /// </summary>
     private const int AutoCompactionIntervalEvents = 10_000;
+    /// <summary>
+    /// Stagger offset between projectors to avoid simultaneous compaction of all 9+ projectors.
+    /// Each projector gets a unique offset based on its name hash, spreading compactions over
+    /// the interval to reduce peak memory from 9×2×36.6MB=659MB to 1×2×36.6MB=73MB.
+    /// </summary>
+    private const int StaggerSlotSize = 1_000;
     private HashSet<int> _kanyushaListKnownKanyushaNos = [];
     private Dictionary<string, int> _kanyushaListKnownNendoIndex = new(StringComparer.Ordinal);
 
@@ -257,26 +264,37 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
         _isCatchedUp = finishedCatchUp;
 
         // Auto-compaction: periodically reset WASM linear memory to prevent unbounded growth.
-        // WASM linear memory grows as events are applied but never shrinks.
-        // Compaction serializes state → creates fresh instance → restores state → disposes old instance.
+        // Staggered across projectors to avoid 9 simultaneous compactions (which spike 659MB).
         if (AutoCompactionIntervalEvents > 0)
         {
             _eventsSinceLastCompaction += events.Count;
+
+            // Calculate per-projector stagger offset (stable, based on name hash)
+            if (_compactionStaggerOffset < 0)
+            {
+                _compactionStaggerOffset = Math.Abs(_projectorName.GetHashCode()) % AutoCompactionIntervalEvents;
+            }
+
             if (_eventsSinceLastCompaction >= AutoCompactionIntervalEvents)
             {
-                _eventsSinceLastCompaction = 0;
-                try
+                // Check if this projector's stagger slot has arrived
+                var sinceCompaction = _eventsSinceLastCompaction - AutoCompactionIntervalEvents;
+                if (sinceCompaction >= (_compactionStaggerOffset % StaggerSlotSize))
                 {
-                    CompactSafeHistory();
-                    _logger.LogInformation(
-                        "Auto-compaction completed for {ProjectorName} at version {Version}",
-                        _projectorName, _version);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex,
-                        "Auto-compaction failed for {ProjectorName} at version {Version}",
-                        _projectorName, _version);
+                    _eventsSinceLastCompaction = 0;
+                    try
+                    {
+                        CompactSafeHistory();
+                        _logger.LogInformation(
+                            "Auto-compaction completed for {ProjectorName} at version {Version}",
+                            _projectorName, _version);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex,
+                            "Auto-compaction failed for {ProjectorName} at version {Version}",
+                            _projectorName, _version);
+                    }
                 }
             }
         }
