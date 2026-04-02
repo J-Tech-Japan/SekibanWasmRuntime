@@ -194,12 +194,11 @@ if (enableProjectionStatusEndpoint)
 
 InstanceEndpoints.Map(app);
 
-// Limit concurrent tag-state replays to prevent memory spikes from multiple
-// simultaneous WASM accumulator + event-list allocations.
-// Limit to 1 concurrent tag-state WASM replay to minimize peak memory.
-// With version-aware caching, most requests hit the cache and don't need replay.
-var tagStateReplaySemaphore = new SemaphoreSlim(1, 1);
-var tagStateReplayCounter = new StrongBox<int>(0);
+// Limit concurrent tag-state grain calls to bound the number of simultaneous WASM instances.
+// Each C# WASM instance holds ~36.6MB of linear memory. Without limiting concurrency,
+// 200+ concurrent TagStateGrain activations create 200 × 36.6MB = 7.3GB of WASM memory.
+// With a semaphore of 4, peak WASM memory is bounded to 4 × 36.6MB ≈ 146MB.
+var tagStateConcurrencyLimit = new SemaphoreSlim(4, 4);
 
 app.MapPost("/api/sekiban/serialized/tag-state", async (HttpContext http, TagStateRequest request) =>
 {
@@ -234,19 +233,25 @@ app.MapPost("/api/sekiban/serialized/tag-state", async (HttpContext http, TagSta
             projectorVersion));
     }
 
-    // Delegate to Orleans TagStateGrain which manages its own cached state.
-    // The grain caches projection state in Orleans grain storage and only replays
-    // new events since the last cached sortable unique ID (incremental replay).
-    // This eliminates the need for WasmServer-side caching or direct WASM replays.
-    var executor = http.RequestServices.GetRequiredService<ISerializedSekibanDcbExecutor>();
-    var result = await executor.GetSerializableTagStateAsync(tagStateId);
-    if (!result.IsSuccess)
+    // Limit concurrent Orleans grain calls to bound WASM instance count.
+    // TagStateGrain creates a WASM accumulator (~36.6MB C# / 0.7MB Rust per instance).
+    // Without this, 200+ concurrent grains = 7GB+ C# WASM linear memory.
+    await tagStateConcurrencyLimit.WaitAsync();
+    SerializableTagState tagState;
+    try
     {
-        return Results.BadRequest(new { error = result.GetException().Message });
+        var executor = http.RequestServices.GetRequiredService<ISerializedSekibanDcbExecutor>();
+        var result = await executor.GetSerializableTagStateAsync(tagStateId);
+        if (!result.IsSuccess)
+        {
+            return Results.BadRequest(new { error = result.GetException().Message });
+        }
+        tagState = result.GetValue();
     }
-
-    var tagState = result.GetValue();
-
+    finally
+    {
+        tagStateConcurrencyLimit.Release();
+    }
     // Fix EmptyTagStatePayload name: Orleans grain may return state with a placeholder
     // payload name that the ClientApi/WASM executor doesn't recognize.
     // Infer the correct payload name from the projector name convention.
