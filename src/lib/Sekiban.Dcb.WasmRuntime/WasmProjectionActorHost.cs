@@ -285,8 +285,8 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
                     try
                     {
                         CompactSafeHistory();
-                        _logger.LogInformation(
-                            "Auto-compaction completed for {ProjectorName} at version {Version}",
+                        _logger.LogWarning(
+                            "Auto-compaction: {ProjectorName} v{Version}",
                             _projectorName, _version);
                     }
                     catch (Exception ex)
@@ -467,7 +467,11 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
             return;
         }
 
+        var preLinearMem = GetLinearMemoryBytes();
         byte[] stateJsonUtf8 = TakePendingCompactionState() ?? _instance.SerializeStateUtf8();
+        _logger.LogWarning(
+            "CompactSafeHistory: {ProjectorName} stateSize={StateSizeKB}KB linearMem={LinearMemMB}MB version={Version}",
+            _projectorName, stateJsonUtf8.Length / 1024, preLinearMem / 1024 / 1024, _version);
         IPrimitiveProjectionInstance previous = _instance;
         IPrimitiveProjectionInstance? replacement = null;
 
@@ -488,7 +492,11 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
             }
 
             previous.Dispose();
-            _logger.LogDebug("Compacted WASM projection instance for {ProjectorName}", _projectorName);
+            var postLinearMem = GetLinearMemoryBytes();
+            _logger.LogWarning(
+                "CompactSafeHistory DONE: {ProjectorName} newLinearMem={LinearMemMB}MB (saved {SavedMB}MB)",
+                _projectorName, postLinearMem / 1024 / 1024,
+                (preLinearMem - postLinearMem) / 1024 / 1024);
         }
         catch (Exception ex)
         {
@@ -539,12 +547,13 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
     {
         try
         {
-            // SerializeStateUtf8 length gives a proxy for state size
-            // GetLinearMemoryBytes is on WasmtimePrimitiveProjectionInstance
             var instance = _instance;
             if (instance == null) return 0;
-            var stateBytes = instance.SerializeStateUtf8();
-            return stateBytes.Length;
+            // Use reflection to call GetLinearMemoryBytes on the underlying instance
+            var method = instance.GetType().GetMethod("GetLinearMemoryBytes");
+            if (method != null)
+                return (long)(method.Invoke(instance, null) ?? 0);
+            return -1;
         }
         catch
         {

@@ -359,6 +359,12 @@ public sealed class WasmtimePrimitiveProjectionHost :
             return _inner.SerializeStateUtf8();
         }
 
+        public long GetLinearMemoryBytes()
+        {
+            if (_disposed != 0) return 0;
+            return _inner.GetLinearMemoryBytes();
+        }
+
         public void RestoreState(string stateJson)
         {
             ThrowIfDisposed();
