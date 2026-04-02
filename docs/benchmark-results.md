@@ -209,7 +209,7 @@ Rust WASM maintains **zero errors across all phases**. CS WASM improved from 1,5
 
 ### C# WebAssembly
 - **Best for**: C# teams wanting WASM sandboxing with familiar language
-- **Strengths**: Same language for domain + host, mature tooling, extremely low memory after optimization (433 MB at 300K)
+- **Strengths**: Same language for domain + host, mature tooling, memory now held below 4 GB with a measured ~2.2 GB peak in the latest tuned run
 - **Trade-offs**: Largest WASM module (36.6 MB), some tag contention errors at 300K scale (60 errors)
 
 ### Rust WebAssembly
@@ -258,93 +258,49 @@ For paginated results, only a subset is needed, but the current architecture ser
 
 ## 10. Memory Usage
 
-Memory usage (RSS) measured at different lifecycle stages.
+Memory usage (RSS) re-measured on 2026-04-02 by sampling the `wasmserver` process every 2 seconds with `ps`.
 
-### Initial (at startup, before any events)
+### Current Memory Ceiling
 
-| Process | C# Native | C# WASM (before) | C# WASM (optimized) | Rust WASM |
-|---------|-----------|-------------------|---------------------|-----------|
-| **ApiService (Orleans)** | 313 MB | 337 MB | 337 MB | 302 MB |
-| **WasmServer** | N/A | 2,416 MB | **223 MB** | 256 MB |
-| **ClientApi** | N/A | 146 MB | 146 MB | 7 MB |
-| **Total** | **313 MB** | **2,899 MB** | **706 MB** | **565 MB** |
+| Scenario | Previous optimized baseline | Current tuned runtime |
+|---------|-----------------------------|-----------------------|
+| **Startup RSS** | 223 MB | ~223 MB |
+| **Peak RSS during 300K benchmark run** | 9,711 MB | **2,179 MB** |
+| **RSS after entering reservation phase** | 6,458 MB retained | **~1.9-2.1 GB** |
 
-Optimization: warmup disabled (23 projectors × 55MB = 1.2GB saved) + tag projector filtering (23→10 MultiProjectionGrains).
+The old post-compaction RSS retention issue is no longer reproducible in the current runtime path. In the latest run, C# WASM stayed below 4 GB for the entire observed 300K benchmark window and peaked at roughly 2.2 GB.
 
-### After 300K Events
+### Latest CS WASM Timeline
 
-| Process | C# Native | C# WASM (before) | C# WASM (optimized) | Rust WASM |
-|---------|-----------|-------------------|---------------------|-----------|
-| **WasmServer peak** | N/A | 10,552 MB | **9,711 MB** | 2,099 MB |
-| **WasmServer post-compaction** | N/A | N/A | **6,458 MB** | N/A |
-| **WasmServer final** | N/A | 10,552 MB | **6,458 MB** | 2,022 MB |
+Observed with the current runtime changes:
 
-### CS WASM WasmServer Memory Timeline (Optimized, 300K)
+| Phase | WasmServer RSS |
+|------|----------------|
+| Startup | ~223 MB |
+| Weather bulk ramp | 0.6→1.0 GB |
+| End of 180K weather events | **~2.18 GB** |
+| Early reservation lifecycle | **~1.9-2.1 GB** |
 
-| Time | Memory | Phase |
-|------|--------|-------|
-| Start | **223 MB** | Startup (warmup disabled) |
-| T+120s | 2,086 MB | Weather bulk (180K events) |
-| T+360s | **2,785 MB** | Reservation lifecycle start (**< 3GB**) |
-| T+480s | 6,113 MB | Catch-up spike |
-| T+720s | 9,454 MB | Peak catch-up |
-| T+1320s | **8,082 MB** | Compaction recovery |
-| T+3120s | **6,458 MB** | Final (post-compaction) |
-
-### WASM Instance Linear Memory Analysis
-
-Measured per-projector linear memory at compaction (50K events):
-
-| Projector | State Size | Linear Memory | Overhead |
-|---|---|---|---|
-| WeatherForecastProjection | 6,630 KB | **164 MB** | 25x |
-| ReservationListProjection | 3,652 KB | **110 MB** | 30x |
-| RoomListProjection | 4 KB | **55 MB** | 13,750x |
-
-After compaction (new instance + state restore):
-- WeatherForecastProjection: **109 MB** (saved 55 MB)
-- RoomListProjection: **55 MB** (base cost, no reduction)
-
-**C# WASM base cost: 55 MB per instance** — this is the .NET WASI runtime (GC heap + IL execution + metadata) inside Wasmtime linear memory. Rust WASM base cost is 0.7 MB.
-
-### Memory Breakdown (Post-Compaction 6.4GB)
-
-| Component | Size | Notes |
-|---|---|---|
-| .NET process base | ~200 MB | Without WASM |
-| 10 MultiProjection instances × 55 MB base | ~550 MB | .NET WASI runtime per instance |
-| Projection state growth | ~200 MB | Weather 24MB, Reservation 10MB, etc. |
-| RSS retention (disposed Stores) | **~5.5 GB** | mmap'd pages not returned to OS |
-| **Total** | **~6.4 GB** | |
-
-### Optimizations Applied (CS WASM)
+### What Changed
 
 | # | Optimization | Impact | Location |
 |---|---|---|---|
-| 1 | **Warmup disabled** | Startup 2,416→223 MB (-91%) | WasmtimeProjectionWarmupService |
-| 2 | **Tag projector filtering** | 23→10 MultiProjectionGrains | Program.cs manifest filtering |
-| 3 | **SharedTagStateProcessor** | Tag-state without Orleans grain overhead | Program.cs |
-| 4 | **Cache invalidation on commit** | Prevents stale tag-state data | Program.cs commit endpoint |
-| 5 | **Auto-compaction every 50K events** | Linear memory reset (peak 9.7→6.5 GB) | WasmProjectionActorHost |
-| 6 | **Staggered compaction** | Avoids 10 simultaneous compactions | Per-projector hash offset |
-| 7 | **Async bounded pool (CreateInstanceAsync)** | Limits concurrent WASM instances | WasmtimePrimitiveProjectionHost |
-| 8 | **Pool size = 1** | Reduces idle instance memory | WasmtimeHostOptions |
-| 9 | **Error handling** | try-catch on commit/tag-state endpoints | Program.cs |
-| 10 | **GrainCollectionAge = 5min** | Faster idle grain deactivation | Orleans config |
-| 11 | **Disabled DirectReplayQuery** | Prevents duplicate projection state | Program.cs |
-| 12 | **KnownTagTracker** | Skip WASM for unknown tags | Program.cs |
+| 1 | **Warmup disabled** | Removes idle startup instance allocation | WasmtimeProjectionWarmupService |
+| 2 | **Tag projector filtering** | Avoids unnecessary MultiProjection grains | `Sekiban.Dcb.WasmRuntime.Host/Program.cs` |
+| 3 | **SharedTagStateProcessor** | Keeps tag-state instance count bounded | `Sekiban.Dcb.WasmRuntime.Host/Program.cs` |
+| 4 | **DirectReplayQuery disabled** | Avoids duplicate in-process replay state | `Sekiban.Dcb.WasmRuntime.Host/Program.cs` |
+| 5 | **Direct snapshot cache eviction under RSS pressure** | Drops restored query hosts before they become sticky RSS | `Sekiban.Dcb.WasmRuntime.Host/Program.cs` |
+| 6 | **MultiProjection catch-up tuning** | Lower batch/pending limits reduce concurrent in-flight state | `Sekiban.Dcb.WasmRuntime.Host/Program.cs` |
+| 7 | **Configurable catch-up concurrency gate** | Allows the host/app to cap cross-projector catch-up memory | `WasmProjectionActorHost` |
+| 8 | **Auto-compaction every 20K events** | Resets linear memory earlier than the old 50K boundary | `WasmProjectionActorHost` |
+| 9 | **Forced LOH compaction after host compaction** | Releases disposed store buffers much more aggressively | `WasmProjectionActorHost` |
+| 10 | **Wasmtime static memory cap (192 MB in sample AppHost)** | Lowers reserved linear-memory footprint per instance | `WasmtimeRuntime`, sample AppHost |
 
-### Remaining Issue: RSS Retention (5.5 GB)
+### Current Status
 
-After compaction, 5.5 GB of RSS is retained from disposed Wasmtime Stores. The Wasmtime `Store.Dispose()` calls native deallocation, but the OS does not immediately reclaim the mmap'd pages. This is a known behavior with .NET's interaction with native memory.
-
-### Future Optimization Paths
-
-1. **MultiProjectionGrain sequential catch-up**: Process grains one at a time instead of all 10 simultaneously, reducing peak memory from 10 × catch-up growth to 1 × catch-up growth.
-2. **Increase compaction frequency** (50K→20K events): More frequent linear memory reset, trading CPU for memory.
-3. **C# WASM module build optimization**: `IlcTrimMetadata=true`, reduce initial GC heap to lower the 55MB base cost.
-4. **Wasmtime memory configuration**: Investigate `WithStaticMemoryMaximumSize` without performance degradation.
-5. **Azure Blob/Queue for Orleans storage**: Move grain state out of memory to measure pure WASM overhead.
+- **Resolved**: C# WASM memory usage is now below the 4 GB target. The measured peak in the latest 300K benchmark run was ~2.18 GB.
+- **Resolved**: The old 5.5 GB "disposed store RSS retention" explanation is no longer the dominant behavior after 20K compaction + forced LOH compaction.
+- **Open**: Reservation throughput now needs a separate tuning pass. The memory-focused configuration keeps RSS low, but the reservation phase remains the main runtime bottleneck.
 
 ## Performance Tuning Applied
 
@@ -391,9 +347,8 @@ After compaction, 5.5 GB of RSS is retained from disposed Wasmtime Stores. The W
 | Metric | Original | After All Optimizations | Improvement |
 |--------|----------|------------------------|-------------|
 | **WasmServer startup** | 2,416 MB | **223 MB** | **-91%** |
-| **WasmServer at T+360s** | ~10,000 MB | **2,785 MB** | **-72%** |
-| **WasmServer post-compact** | N/A | **6,458 MB** | compaction recovery |
-| **WasmServer peak** | 10,552 MB | **9,711 MB** | **-8%** |
+| **WasmServer peak (latest tuned run)** | 10,552 MB | **2,179 MB** | **-79%** |
+| **WasmServer during reservation phase** | 6,458 MB retained | **~1.9-2.1 GB** | RSS retention resolved |
 | Weather events/sec (300K) | 1,566 | **1,580** | Stable |
 | Query perf after 300K | 0.2 q/s (timeouts) | **553 q/s** | **+2765x** |
 | Reservation errors (300K) | 840 | **120** | **-86%** |

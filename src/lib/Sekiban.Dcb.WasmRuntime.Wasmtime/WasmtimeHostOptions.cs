@@ -28,6 +28,8 @@ public class WasmtimeHostOptions
 
     public bool EnableWarmup { get; set; } = false;
 
+    public ulong? StaticMemoryMaximumSizeBytes { get; set; }
+
     public string? ResolveModulePath(string projectorName)
     {
         if (ProjectorModulePaths.TryGetValue(projectorName, out var path))

@@ -39,6 +39,11 @@ var wasmServerBuilder = builder
     .WithEnvironment("SEKIBAN_STORAGE_PROVIDER", "postgres")
     .WithEnvironment("WASM_MODULE_PATH", csharpWasmModulePath)
     .WithEnvironment("SEKIBAN_MANIFEST_PATH", csharpManifestPath)
+    .WithEnvironment("SEKIBAN_WASM_CATCHUP_CONCURRENCY", "4")
+    .WithEnvironment("SEKIBAN_WASM_MULTIPROJECTION_CATCHUP_BATCH_SIZE", "250")
+    .WithEnvironment("SEKIBAN_WASM_AUTO_COMPACTION_INTERVAL_EVENTS", "20000")
+    .WithEnvironment("SEKIBAN_WASM_FORCE_COMPACTING_GC_AFTER_COMPACTION", "true")
+    .WithEnvironment("SEKIBAN_WASMTIME_STATIC_MEMORY_MAX_MB", "192")
     .WithReference(wasmPostgres, "SekibanDcb")
     .WaitFor(wasmPostgres)
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");

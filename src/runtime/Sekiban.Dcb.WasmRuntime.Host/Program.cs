@@ -65,6 +65,9 @@ var sqliteDatabasePath = storageConfiguration.SqlitePath;
 var waitForSortableUniqueIdTimeout = ResolveWaitForSortableUniqueIdTimeout(builder.Configuration);
 var queryResponseTimeout = ResolveQueryResponseTimeout(builder.Configuration);
 var directSnapshotQueryEnabled = ResolveDirectSnapshotQueryEnabled(builder.Configuration);
+var multiProjectionActorOptions = ResolveGeneralMultiProjectionActorOptions(builder.Configuration);
+var directSnapshotQueryCacheOptions = ResolveDirectSnapshotQueryCacheOptions(builder.Configuration);
+var staticMemoryMaximumSizeBytes = ResolveWasmtimeStaticMemoryMaximumSizeBytes(builder.Configuration);
 var enableProjectionStatusEndpoint = builder.Environment.IsDevelopment()
     || builder.Configuration.GetValue<bool>("KENBAI_WASM_ENABLE_PROJECTION_STATUS_ENDPOINT");
 
@@ -97,6 +100,7 @@ builder.Services.AddSingleton(domainTypes);
 builder.Services.AddSingleton<JsonSerializerOptions>(jsonOptions);
 builder.Services.AddSingleton(registry);
 builder.Services.AddSingleton<ProjectionInstanceStore>();
+builder.Services.AddSingleton(directSnapshotQueryCacheOptions);
 builder.Services.AddSingleton<DirectSnapshotQueryCache>();
 builder.Services.AddSingleton<KnownTagTracker>();
 builder.Services.AddSingleton<TagStateResponseCache>();
@@ -123,7 +127,7 @@ builder.Services.AddSingleton<IEventSubscriptionResolver>(_ =>
         "AllEvents",
         Guid.Empty));
 builder.Services.AddSingleton<IMultiProjectionEventStatistics, NoOpMultiProjectionEventStatistics>();
-builder.Services.AddSingleton(new GeneralMultiProjectionActorOptions());
+builder.Services.AddSingleton(multiProjectionActorOptions);
 builder.Services.AddSingleton<IActorObjectAccessor, OrleansActorObjectAccessor>();
 builder.Services.AddSingleton<IProjectionActorHostFactory, WasmProjectionActorHostFactory>();
 builder.Services.AddTransient<OrleansDcbExecutor>();
@@ -139,6 +143,7 @@ builder.Services.AddWasmtimeProjectionHost(options =>
     // With tag projector filtering, only ~10 projectors → 10 × 55MB = 550MB idle.
     // Pool reuse avoids 55MB instance creation cost on every call.
     options.MaxPooledInstancesPerProjector = 1;
+    options.StaticMemoryMaximumSizeBytes = staticMemoryMaximumSizeBytes;
 });
 builder.Services.AddWasmTagStateRuntime(options =>
 {
@@ -855,11 +860,13 @@ static async Task<IResult?> TryExecuteDirectSnapshotQueryAsync(
     }
 
     var cache = http.RequestServices.GetRequiredService<DirectSnapshotQueryCache>();
+    cache.Prune(projectorName);
     var cacheEntry = cache.GetOrAdd(projectorName);
     var hostFactory = http.RequestServices.GetRequiredService<IProjectionActorHostFactory>();
     await cacheEntry.Gate.WaitAsync(ct);
     try
     {
+        cacheEntry.Touch();
         var stopwatch = Stopwatch.StartNew();
         logger.LogInformation(
             "Direct snapshot query start: QueryType={QueryType}, Projector={ProjectorName}, IsListQuery={IsListQuery}, EventsProcessed={EventsProcessed}, LastSortableUniqueId={LastSortableUniqueId}",
@@ -943,7 +950,18 @@ static async Task<IResult?> TryExecuteDirectSnapshotQueryAsync(
                 request.QueryType,
                 projectorName,
                 stopwatch.ElapsedMilliseconds);
-            return Results.Ok(new SerializedQueryResponse(resultJson));
+            var response = Results.Ok(new SerializedQueryResponse(resultJson));
+            if (cache.ShouldResetActiveEntryOnMemoryPressure())
+            {
+                logger.LogWarning(
+                    "Direct snapshot cache reset under RSS pressure: Projector={ProjectorName}, RssMB={RssMB}",
+                    projectorName,
+                    cache.GetCurrentRssBytes() / 1024 / 1024);
+                cacheEntry.DisposeAndReset();
+            }
+
+            cache.Prune(projectorName);
+            return response;
         }
 
         var listResult = await host.ExecuteListQueryAsync(
@@ -967,12 +985,23 @@ static async Task<IResult?> TryExecuteDirectSnapshotQueryAsync(
             value.TotalCount,
             value.CurrentPage,
             value.PageSize);
-        return Results.Ok(new SerializedListQueryResponse(
+        var listResponse = Results.Ok(new SerializedListQueryResponse(
             ItemsJson: itemsJson,
             TotalCount: value.TotalCount,
             TotalPages: value.TotalPages,
             CurrentPage: value.CurrentPage,
             PageSize: value.PageSize));
+        if (cache.ShouldResetActiveEntryOnMemoryPressure())
+        {
+            logger.LogWarning(
+                "Direct snapshot cache reset under RSS pressure: Projector={ProjectorName}, RssMB={RssMB}",
+                projectorName,
+                cache.GetCurrentRssBytes() / 1024 / 1024);
+            cacheEntry.DisposeAndReset();
+        }
+
+        cache.Prune(projectorName);
+        return listResponse;
     }
     finally
     {
@@ -1167,18 +1196,228 @@ static TimeSpan ResolveQueryResponseTimeout(IConfiguration configuration)
     return TimeSpan.FromMinutes(5);
 }
 
+static GeneralMultiProjectionActorOptions ResolveGeneralMultiProjectionActorOptions(IConfiguration configuration) =>
+    new()
+    {
+        CatchUpBatchSize = ResolvePositiveInt(
+            configuration,
+            "Sekiban:MultiProjection:CatchUpBatchSize",
+            "SEKIBAN_WASM_MULTIPROJECTION_CATCHUP_BATCH_SIZE",
+            200),
+        MaxPendingStreamEvents = ResolvePositiveInt(
+            configuration,
+            "Sekiban:MultiProjection:MaxPendingStreamEvents",
+            "SEKIBAN_WASM_MULTIPROJECTION_MAX_PENDING_STREAM_EVENTS",
+            5_000),
+        ProcessedEventIdCacheSize = ResolvePositiveInt(
+            configuration,
+            "Sekiban:MultiProjection:ProcessedEventIdCacheSize",
+            "SEKIBAN_WASM_MULTIPROJECTION_EVENT_ID_CACHE_SIZE",
+            50_000),
+        ForceGcAfterLargeSnapshotPersist = true,
+        LargeSnapshotGcThresholdBytes = ResolvePositiveLong(
+            configuration,
+            "Sekiban:MultiProjection:LargeSnapshotGcThresholdBytes",
+            "SEKIBAN_WASM_MULTIPROJECTION_LARGE_SNAPSHOT_GC_THRESHOLD_BYTES",
+            5_000_000)
+    };
+
+static DirectSnapshotQueryCacheOptions ResolveDirectSnapshotQueryCacheOptions(IConfiguration configuration) =>
+    new()
+    {
+        MaxEntries = ResolvePositiveInt(
+            configuration,
+            "Sekiban:DirectSnapshotCache:MaxEntries",
+            "SEKIBAN_DIRECT_SNAPSHOT_CACHE_MAX_ENTRIES",
+            3),
+        IdleEntryLifetime = TimeSpan.FromSeconds(ResolveNonNegativeInt(
+            configuration,
+            "Sekiban:DirectSnapshotCache:IdleSeconds",
+            "SEKIBAN_DIRECT_SNAPSHOT_CACHE_IDLE_SECONDS",
+            45)),
+        EvictRssThresholdBytes = ResolveNonNegativeLong(
+            configuration,
+            "Sekiban:DirectSnapshotCache:EvictRssThresholdBytes",
+            "SEKIBAN_DIRECT_SNAPSHOT_CACHE_EVICT_RSS_BYTES",
+            3L * 1024 * 1024 * 1024),
+        ResetActiveEntryRssThresholdBytes = ResolveNonNegativeLong(
+            configuration,
+            "Sekiban:DirectSnapshotCache:ResetActiveEntryRssThresholdBytes",
+            "SEKIBAN_DIRECT_SNAPSHOT_CACHE_RESET_ACTIVE_RSS_BYTES",
+            3_500L * 1024 * 1024)
+    };
+
+static ulong? ResolveWasmtimeStaticMemoryMaximumSizeBytes(IConfiguration configuration)
+{
+    var candidate = configuration["Sekiban:Wasmtime:StaticMemoryMaximumSizeMb"]
+        ?? Environment.GetEnvironmentVariable("SEKIBAN_WASMTIME_STATIC_MEMORY_MAX_MB");
+
+    return int.TryParse(candidate, out var configuredMegabytes) && configuredMegabytes > 0
+        ? (ulong)configuredMegabytes * 1024UL * 1024UL
+        : null;
+}
+
+static int ResolvePositiveInt(
+    IConfiguration configuration,
+    string configKey,
+    string environmentVariableName,
+    int defaultValue)
+{
+    var candidate = configuration[configKey] ?? Environment.GetEnvironmentVariable(environmentVariableName);
+    return int.TryParse(candidate, out var value) && value > 0
+        ? value
+        : defaultValue;
+}
+
+static long ResolvePositiveLong(
+    IConfiguration configuration,
+    string configKey,
+    string environmentVariableName,
+    long defaultValue)
+{
+    var candidate = configuration[configKey] ?? Environment.GetEnvironmentVariable(environmentVariableName);
+    return long.TryParse(candidate, out var value) && value > 0
+        ? value
+        : defaultValue;
+}
+
+static int ResolveNonNegativeInt(
+    IConfiguration configuration,
+    string configKey,
+    string environmentVariableName,
+    int defaultValue)
+{
+    var candidate = configuration[configKey] ?? Environment.GetEnvironmentVariable(environmentVariableName);
+    return int.TryParse(candidate, out var value) && value >= 0
+        ? value
+        : defaultValue;
+}
+
+static long ResolveNonNegativeLong(
+    IConfiguration configuration,
+    string configKey,
+    string environmentVariableName,
+    long defaultValue)
+{
+    var candidate = configuration[configKey] ?? Environment.GetEnvironmentVariable(environmentVariableName);
+    return long.TryParse(candidate, out var value) && value >= 0
+        ? value
+        : defaultValue;
+}
+
 sealed class WaitForSortableUniqueIdTimeoutOptions
 {
     public TimeSpan Timeout { get; init; }
 }
 
+sealed class DirectSnapshotQueryCacheOptions
+{
+    public int MaxEntries { get; init; } = 3;
+    public TimeSpan IdleEntryLifetime { get; init; } = TimeSpan.FromSeconds(45);
+    public long EvictRssThresholdBytes { get; init; } = 3L * 1024 * 1024 * 1024;
+    public long ResetActiveEntryRssThresholdBytes { get; init; } = 3_500L * 1024 * 1024;
+}
+
 sealed class DirectSnapshotQueryCache : IDisposable
 {
+    private readonly DirectSnapshotQueryCacheOptions _options;
+    private readonly Func<long> _rssProvider;
     private readonly ConcurrentDictionary<string, DirectSnapshotQueryCacheEntry> _entries =
         new(StringComparer.Ordinal);
 
-    public DirectSnapshotQueryCacheEntry GetOrAdd(string projectorName) =>
-        _entries.GetOrAdd(projectorName, static _ => new DirectSnapshotQueryCacheEntry());
+    public DirectSnapshotQueryCache(DirectSnapshotQueryCacheOptions options)
+        : this(options, rssProvider: null)
+    {
+    }
+
+    internal DirectSnapshotQueryCache(DirectSnapshotQueryCacheOptions options, Func<long>? rssProvider)
+    {
+        _options = options;
+        _rssProvider = rssProvider ?? GetCurrentProcessRss;
+    }
+
+    internal int Count => _entries.Count;
+
+    internal IReadOnlyCollection<string> ProjectorNames => _entries.Keys.ToArray();
+
+    public DirectSnapshotQueryCacheEntry GetOrAdd(string projectorName)
+    {
+        Prune(projectorName);
+        var entry = _entries.GetOrAdd(projectorName, static name => new DirectSnapshotQueryCacheEntry(name));
+        entry.Touch();
+        return entry;
+    }
+
+    public void Prune(string? activeProjectorName = null)
+    {
+        if (_entries.IsEmpty)
+        {
+            return;
+        }
+
+        long now = Environment.TickCount64;
+        if (_options.IdleEntryLifetime > TimeSpan.Zero)
+        {
+            long idleThreshold = now - (long)_options.IdleEntryLifetime.TotalMilliseconds;
+            foreach ((string projectorName, DirectSnapshotQueryCacheEntry entry) in _entries.ToArray())
+            {
+                if (string.Equals(projectorName, activeProjectorName, StringComparison.Ordinal) ||
+                    entry.LastAccessedTicks >= idleThreshold)
+                {
+                    continue;
+                }
+
+                TryRemove(projectorName, entry);
+            }
+        }
+
+        if (_entries.Count > _options.MaxEntries)
+        {
+            foreach ((string projectorName, DirectSnapshotQueryCacheEntry entry) in _entries
+                         .OrderBy(pair => pair.Value.LastAccessedTicks)
+                         .ToArray())
+            {
+                if (_entries.Count <= _options.MaxEntries)
+                {
+                    break;
+                }
+
+                if (string.Equals(projectorName, activeProjectorName, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                TryRemove(projectorName, entry);
+            }
+        }
+
+        if (_options.EvictRssThresholdBytes > 0 && _rssProvider() >= _options.EvictRssThresholdBytes)
+        {
+            foreach ((string projectorName, DirectSnapshotQueryCacheEntry entry) in _entries
+                         .OrderBy(pair => pair.Value.LastAccessedTicks)
+                         .ToArray())
+            {
+                if (string.Equals(projectorName, activeProjectorName, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                TryRemove(projectorName, entry);
+            }
+
+            if (!_entries.IsEmpty)
+            {
+                GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+                GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
+            }
+        }
+    }
+
+    public bool ShouldResetActiveEntryOnMemoryPressure() =>
+        _options.ResetActiveEntryRssThresholdBytes > 0 &&
+        _rssProvider() >= _options.ResetActiveEntryRssThresholdBytes;
+
+    public long GetCurrentRssBytes() => _rssProvider();
 
     public void Dispose()
     {
@@ -1187,13 +1426,39 @@ sealed class DirectSnapshotQueryCache : IDisposable
             entry.Dispose();
         }
     }
+
+    private void TryRemove(string projectorName, DirectSnapshotQueryCacheEntry entry)
+    {
+        if (!entry.Gate.Wait(0))
+        {
+            return;
+        }
+
+        try
+        {
+            if (_entries.TryRemove(projectorName, out var evictedEntry))
+            {
+                evictedEntry.DisposeAndReset();
+            }
+        }
+        finally
+        {
+            entry.Gate.Release();
+        }
+    }
+
+    private static long GetCurrentProcessRss() => Process.GetCurrentProcess().WorkingSet64;
 }
 
 sealed class DirectSnapshotQueryCacheEntry : IDisposable
 {
+    public DirectSnapshotQueryCacheEntry(string projectorName) => ProjectorName = projectorName;
+
+    public string ProjectorName { get; }
     public SemaphoreSlim Gate { get; } = new(1, 1);
     public IProjectionActorHost? Host { get; private set; }
     public ProjectionStateMetadata? Metadata { get; private set; }
+    public long LastAccessedTicks { get; private set; } = Environment.TickCount64;
     private string? ProjectorVersion { get; set; }
     private string? LastSortableUniqueId { get; set; }
     public long EventsProcessed { get; private set; }
@@ -1221,6 +1486,7 @@ sealed class DirectSnapshotQueryCacheEntry : IDisposable
         ProjectorVersion = projectorVersion;
         LastSortableUniqueId = lastSortableUniqueId;
         EventsProcessed = eventsProcessed;
+        Touch();
     }
 
     public void UpdateMetadata(
@@ -1231,7 +1497,10 @@ sealed class DirectSnapshotQueryCacheEntry : IDisposable
         Metadata = metadata;
         LastSortableUniqueId = lastSortableUniqueId;
         EventsProcessed = eventsProcessed;
+        Touch();
     }
+
+    public void Touch() => LastAccessedTicks = Environment.TickCount64;
 
     /// <summary>
     /// Dispose the cached host and reset to empty state.

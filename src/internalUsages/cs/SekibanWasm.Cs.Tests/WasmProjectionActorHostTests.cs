@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Domains;
@@ -342,6 +343,40 @@ public class WasmProjectionActorHostTests
     }
 
     [Fact]
+    public async Task AddSerializableEventsAsync_ShouldSerializeCatchUpAcrossProjectors()
+    {
+        var tracker = new BatchApplyTracker();
+        var firstInstance = new BlockingBatchProjectionInstance(tracker);
+        var secondInstance = new BlockingBatchProjectionInstance(tracker);
+        using var catchUpGate = new SemaphoreSlim(1, 1);
+        var host = new NamedPrimitiveProjectionHost(new Dictionary<string, IPrimitiveProjectionInstance>
+        {
+            ["WeatherForecastMultiProjection"] = firstInstance,
+            ["ReservationListProjection"] = secondInstance
+        });
+
+        var firstHost = CreateHost(host, "WeatherForecastMultiProjection", catchUpGate: catchUpGate);
+        var secondHost = CreateHost(host, "ReservationListProjection", catchUpGate: catchUpGate);
+        var events = CreateBatchEvents();
+
+        var firstTask = Task.Run(() => firstHost.AddSerializableEventsAsync(events, finishedCatchUp: false));
+        Assert.True(firstInstance.BatchEntered.Wait(TimeSpan.FromSeconds(5)));
+
+        var secondTask = Task.Run(() => secondHost.AddSerializableEventsAsync(events, finishedCatchUp: false));
+        await Task.Delay(150);
+        Assert.False(secondInstance.BatchEntered.IsSet);
+
+        firstInstance.AllowCompletion.Set();
+        await firstTask;
+
+        Assert.True(secondInstance.BatchEntered.Wait(TimeSpan.FromSeconds(5)));
+        secondInstance.AllowCompletion.Set();
+        await secondTask;
+
+        Assert.Equal(1, tracker.MaxConcurrentBatchApplies);
+    }
+
+    [Fact]
     public async Task CompactSafeHistory_ShouldRecreateInstance_AndPreserveState()
     {
         var first = new StubPrimitiveProjectionInstance();
@@ -388,16 +423,35 @@ public class WasmProjectionActorHostTests
     }
 
     private static WasmProjectionActorHost CreateHost(
-        StubPrimitiveProjectionInstance instance,
-        DcbDomainTypes? domainTypes = null)
+        IPrimitiveProjectionInstance instance,
+        DcbDomainTypes? domainTypes = null,
+        string projectorName = "WeatherForecastMultiProjection",
+        SemaphoreSlim? catchUpGate = null)
     {
         return new WasmProjectionActorHost(
             new StubPrimitiveProjectionHost(instance),
             CreateRegistry(),
             domainTypes ?? DomainType.GetDomainTypes(),
             DomainJsonOptions,
-            "WeatherForecastMultiProjection",
-            NullLogger.Instance);
+            projectorName,
+            NullLogger.Instance,
+            catchUpGate: catchUpGate);
+    }
+
+    private static WasmProjectionActorHost CreateHost(
+        IPrimitiveProjectionHost host,
+        string projectorName,
+        DcbDomainTypes? domainTypes = null,
+        SemaphoreSlim? catchUpGate = null)
+    {
+        return new WasmProjectionActorHost(
+            host,
+            CreateRegistry(),
+            domainTypes ?? DomainType.GetDomainTypes(),
+            DomainJsonOptions,
+            projectorName,
+            NullLogger.Instance,
+            catchUpGate: catchUpGate);
     }
 
     private static WasmProjectorRegistry CreateRegistry()
@@ -409,8 +463,32 @@ public class WasmProjectionActorHostTests
             AbiKind: "wasi-preview1",
             ModuleVersion: "1.0.0",
             ProjectorVersion: "1.0.0"));
+        registry.Register(new WasmModuleRef(
+            ProjectorName: "ReservationListProjection",
+            ModulePath: "/tmp/reservation.wasm",
+            AbiKind: "wasi-preview1",
+            ModuleVersion: "1.0.0",
+            ProjectorVersion: "1.0.0"));
         return registry;
     }
+
+    private static IReadOnlyList<SerializableEvent> CreateBatchEvents() =>
+    [
+        new SerializableEvent(
+            Payload: Encoding.UTF8.GetBytes("""{"forecastId":"f-1","location":"Tokyo"}"""),
+            SortableUniqueIdValue: "20260316010101000000000000000011",
+            Id: Guid.NewGuid(),
+            EventMetadata: new EventMetadata("cause", "correlation", "user"),
+            Tags: ["WeatherForecast:f-1"],
+            EventPayloadName: "WeatherForecastCreated"),
+        new SerializableEvent(
+            Payload: Encoding.UTF8.GetBytes("""{"forecastId":"f-2","location":"Osaka"}"""),
+            SortableUniqueIdValue: "20260316010101000000000000000012",
+            Id: Guid.NewGuid(),
+            EventMetadata: new EventMetadata("cause", "correlation", "user"),
+            Tags: ["WeatherForecast:f-2"],
+            EventPayloadName: "WeatherForecastCreated")
+    ];
 
     private static DcbDomainTypes CreateDomainTypesWithoutProjectorRegistry() =>
         DomainType.GetDomainTypes() with
@@ -437,11 +515,22 @@ public class WasmProjectionActorHostTests
         return await reader.ReadToEndAsync();
     }
 
-    private sealed class StubPrimitiveProjectionHost(StubPrimitiveProjectionInstance instance) : IPrimitiveProjectionHost
+    private sealed class StubPrimitiveProjectionHost(IPrimitiveProjectionInstance instance) : IPrimitiveProjectionHost
     {
-        private readonly StubPrimitiveProjectionInstance _instance = instance;
+        private readonly IPrimitiveProjectionInstance _instance = instance;
 
         public IPrimitiveProjectionInstance CreateInstance(string projectorName) => _instance;
+    }
+
+    private sealed class NamedPrimitiveProjectionHost(IReadOnlyDictionary<string, IPrimitiveProjectionInstance> instances)
+        : IPrimitiveProjectionHost
+    {
+        private readonly IReadOnlyDictionary<string, IPrimitiveProjectionInstance> _instances = instances;
+
+        public IPrimitiveProjectionInstance CreateInstance(string projectorName) =>
+            _instances.TryGetValue(projectorName, out var instance)
+                ? instance
+                : throw new InvalidOperationException($"No instance registered for {projectorName}.");
     }
 
     private sealed class FactoryPrimitiveProjectionHost(IEnumerable<StubPrimitiveProjectionInstance> instances) :
@@ -621,5 +710,64 @@ public class WasmProjectionActorHostTests
 
             return property.GetString() ?? string.Empty;
         }
+    }
+
+    private sealed class BlockingBatchProjectionInstance(BatchApplyTracker tracker) :
+        IPrimitiveProjectionInstance,
+        ISerializableEventBatchProjectionInstance
+    {
+        private readonly BatchApplyTracker _tracker = tracker;
+
+        public ManualResetEventSlim BatchEntered { get; } = new(false);
+        public ManualResetEventSlim AllowCompletion { get; } = new(false);
+
+        public void ApplyEvent(
+            string eventType,
+            string eventPayloadJson,
+            IReadOnlyList<string> tags,
+            string? sortableUniqueId)
+        {
+        }
+
+        public void ApplyEvents(IReadOnlyList<PrimitiveProjectionEventEnvelope> events) => ApplySerializableEvents([]);
+
+        public void ApplySerializableEvents(IReadOnlyList<SerializableEvent> events)
+        {
+            var current = Interlocked.Increment(ref _tracker.CurrentConcurrentBatchApplies);
+            _tracker.MaxConcurrentBatchApplies = Math.Max(_tracker.MaxConcurrentBatchApplies, current);
+            BatchEntered.Set();
+            if (!AllowCompletion.Wait(TimeSpan.FromSeconds(5)))
+            {
+                throw new TimeoutException("Timed out waiting to release the batch apply.");
+            }
+
+            Interlocked.Decrement(ref _tracker.CurrentConcurrentBatchApplies);
+        }
+
+        public string ExecuteQuery(string queryType, string queryParamsJson) => "{}";
+
+        public string ExecuteListQuery(string queryType, string queryParamsJson) => "[]";
+
+        public string SerializeState() => "{}";
+
+        public byte[] SerializeStateUtf8() => "{}"u8.ToArray();
+
+        public void RestoreState(string stateJson)
+        {
+        }
+
+        public void RestoreStateUtf8(byte[] stateJsonUtf8)
+        {
+        }
+
+        public void Dispose()
+        {
+        }
+    }
+
+    private sealed class BatchApplyTracker
+    {
+        public int CurrentConcurrentBatchApplies;
+        public int MaxConcurrentBatchApplies;
     }
 }
