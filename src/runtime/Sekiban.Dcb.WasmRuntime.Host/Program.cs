@@ -121,7 +121,7 @@ builder.Services.AddWasmtimeProjectionHost(options =>
     // Each C# WASM instance holds ~36.6MB of linear memory.
     // With 6+ projectors, 4 pooled × 6 = 24 instances = ~878MB idle memory.
     // Reducing to 1 saves ~660MB while still allowing instance reuse.
-    options.MaxPooledInstancesPerProjector = 1;
+    options.MaxPooledInstancesPerProjector = 8;
 });
 builder.Services.AddWasmTagStateRuntime(options =>
 {
@@ -194,10 +194,16 @@ if (enableProjectionStatusEndpoint)
 
 InstanceEndpoints.Map(app);
 
-// Limit concurrent tag-state grain calls to bound WASM instance count.
-// Each C# WASM instance holds ~36.6MB of linear memory.
-// With a semaphore of 4, peak WASM memory is bounded to 4 × 36.6MB ≈ 146MB.
-var tagStateConcurrencyLimit = new SemaphoreSlim(4, 4);
+// Pure-function tag-state processor: creates fresh accumulator per call but limits
+// concurrency to 1 per projector type. With pool=1, the same WASM instance is reused.
+// Memory: ~6 projectors × 36.6MB = 220MB (vs 200+ × 36.6MB = 7.3GB without limiting).
+var sharedTagStateProcessor = new SharedTagStateProcessor(
+    app.Services.GetRequiredService<ITagStateProjectionPrimitive>(),
+    app.Services.GetRequiredService<IEventStore>(),
+    app.Services.GetRequiredService<IActorObjectAccessor>(),
+    app.Services.GetRequiredService<WasmProjectorRegistry>(),
+    domainTypes,
+    app.Services.GetRequiredService<ILoggerFactory>());
 
 app.MapPost("/api/sekiban/serialized/tag-state", async (HttpContext http, TagStateRequest request) =>
 {
@@ -232,30 +238,11 @@ app.MapPost("/api/sekiban/serialized/tag-state", async (HttpContext http, TagSta
             projectorVersion));
     }
 
-    // Limit concurrent Orleans grain calls to bound WASM instance count.
-    await tagStateConcurrencyLimit.WaitAsync();
-    SerializableTagState tagState;
-    try
+    // Pure function mode: 1 WASM instance per projector, serialized access via semaphore.
+    var tagState = await sharedTagStateProcessor.GetTagStateAsync(tagStateId);
+    if (tagState is null)
     {
-        var executor = http.RequestServices.GetRequiredService<ISerializedSekibanDcbExecutor>();
-        var result = await executor.GetSerializableTagStateAsync(tagStateId);
-        if (!result.IsSuccess)
-        {
-            return Results.BadRequest(new { error = result.GetException().Message });
-        }
-        tagState = result.GetValue();
-    }
-    finally
-    {
-        tagStateConcurrencyLimit.Release();
-    }
-
-    // Fix EmptyTagStatePayload name
-    if (tagState.Payload.Length > 0 &&
-        string.Equals(tagState.TagPayloadName, nameof(EmptyTagStatePayload), StringComparison.Ordinal) &&
-        tagStateId.TagProjectorName.EndsWith("Projector", StringComparison.Ordinal))
-    {
-        tagState = tagState with { TagPayloadName = tagStateId.TagProjectorName[..^"Projector".Length] + "State" };
+        return Results.BadRequest(new { error = $"Failed to compute tag state for {request.TagStateId}" });
     }
 
     return Results.Ok(tagState);
@@ -325,11 +312,9 @@ app.MapPost("/api/sekiban/serialized/commit", async (
         var tagTracker = http.RequestServices.GetRequiredService<KnownTagTracker>();
         tagTracker.MarkTagsAsWritten(committedTags);
 
-        // Version-aware cache: mark tags as stale (new sortable ID available)
-        // rather than deleting entries. The tag-state endpoint will check freshness
-        // on next request and only re-compute if the sortable ID has advanced.
-        var responseCache = http.RequestServices.GetRequiredService<TagStateResponseCache>();
-        responseCache.MarkTagsAsStale(committedTags);
+        // Invalidate SharedTagStateProcessor's cache for affected tags
+        // so the next tag-state request re-computes from the event store.
+        sharedTagStateProcessor.InvalidateForTags(committedTags);
 
         return Results.Ok(result.GetValue());
     }
@@ -1393,6 +1378,7 @@ sealed class KnownTagTracker
 /// </summary>
 sealed class SharedTagStateProcessor : IDisposable
 {
+    private readonly SemaphoreSlim _globalGate = new(1, 1);
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _gates = new();
     private readonly ConcurrentDictionary<string, SerializableTagState> _stateCache = new();
     private const int MaxCacheEntries = 10_000;
@@ -1427,11 +1413,9 @@ sealed class SharedTagStateProcessor : IDisposable
             return null;
         }
 
-        // Limit to 1 concurrent WASM instance per projector type.
-        // The pool (MaxPooledInstancesPerProjector=1) will reuse the same instance.
-        var gate = _gates.GetOrAdd(projectorName, _ => new SemaphoreSlim(1, 1));
-
-        await gate.WaitAsync();
+        // Global lock: only 1 tag-state WASM operation at a time to prevent
+        // pool/instance interference between concurrent requests.
+        await _globalGate.WaitAsync();
         try
         {
             var cacheKey = tagStateId.GetTagStateId();
@@ -1468,6 +1452,8 @@ sealed class SharedTagStateProcessor : IDisposable
             }
 
             var tag = new FallbackTag(tagStateId.TagGroup, tagStateId.TagContent);
+            _logger.LogInformation("SharedTagState: Loading events for {Tag} since={Since}",
+                $"{tagStateId.TagGroup}:{tagStateId.TagContent}", since?.ToString() ?? "null");
             var eventsResult = await _eventStore.ReadSerializableEventsByTagAsync(tag, since);
             if (!eventsResult.IsSuccess)
             {
@@ -1477,25 +1463,56 @@ sealed class SharedTagStateProcessor : IDisposable
             }
 
             var events = eventsResult.GetValue().ToList();
+            _logger.LogInformation("SharedTagState: Loaded {EventCount} events for {Tag}, cachedState={HasCached}, latestSortableId={Latest}",
+                events.Count,
+                $"{tagStateId.TagGroup}:{tagStateId.TagContent}:{tagStateId.TagProjectorName}",
+                cachedState != null,
+                latestSortableUniqueId ?? "null");
 
             // Create fresh accumulator (gets pooled instance if available).
-            // With semaphore(1) per projector and pool(1), this reuses the same WASM instance.
             using var accumulator = _primitive.CreateAccumulator(tagStateId);
 
+            // Log event details for debugging
+            foreach (var ev in events.Take(3))
+            {
+                var payloadPreview = ev.Payload.Length > 0
+                    ? System.Text.Encoding.UTF8.GetString(ev.Payload)[..Math.Min(200, ev.Payload.Length)]
+                    : "<empty>";
+                _logger.LogInformation("SharedTagState: Event type={EventType} tags=[{Tags}] payloadLen={PayloadLen} payload={Payload}",
+                    ev.EventPayloadName,
+                    string.Join(",", ev.Tags),
+                    ev.Payload.Length,
+                    payloadPreview);
+            }
+
             // Pure function: RestoreState → ApplyEvents → SerializeState
-            if (!accumulator.ApplyState(cachedState))
+            var applyStateResult = accumulator.ApplyState(cachedState);
+            _logger.LogInformation("SharedTagState: ApplyState(cached={HasCached}) returned {Result}",
+                cachedState != null, applyStateResult);
+            if (!applyStateResult)
             {
                 _logger.LogWarning("ApplyState failed for {TagStateId}", tagStateId);
                 return null;
             }
 
-            if (events.Count > 0 && !accumulator.ApplyEvents(events, latestSortableUniqueId))
+            if (events.Count > 0)
             {
-                _logger.LogWarning("ApplyEvents failed for {TagStateId}", tagStateId);
-                return null;
+                var applyEventsResult = accumulator.ApplyEvents(events, latestSortableUniqueId);
+                _logger.LogInformation("SharedTagState: ApplyEvents({Count} events) returned {Result}",
+                    events.Count, applyEventsResult);
+                if (!applyEventsResult)
+                {
+                    _logger.LogWarning("ApplyEvents failed for {TagStateId}", tagStateId);
+                    return null;
+                }
             }
 
             var rawState = accumulator.GetSerializedState();
+            var rawPayloadPreview = rawState.Payload.Length > 0
+                ? System.Text.Encoding.UTF8.GetString(rawState.Payload)[..Math.Min(150, rawState.Payload.Length)]
+                : "<empty>";
+            _logger.LogWarning("SharedTagState: RESULT version={Version} payloadLen={PayloadLen} name={PayloadName} payload={Payload}",
+                rawState.Version, rawState.Payload.Length, rawState.TagPayloadName, rawPayloadPreview);
 
             // Override metadata from tagStateId (accumulator may pick up wrong metadata
             // from multi-tagged events, e.g., Room events tagged with both Room and Reservation).
@@ -1528,7 +1545,26 @@ sealed class SharedTagStateProcessor : IDisposable
         }
         finally
         {
-            gate.Release();
+            _globalGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Invalidate cached tag states for the given tags after a commit.
+    /// The next request will re-compute from the event store.
+    /// </summary>
+    public void InvalidateForTags(IEnumerable<string> tags)
+    {
+        foreach (var tag in tags)
+        {
+            var prefix = tag + ":";
+            foreach (var key in _stateCache.Keys)
+            {
+                if (key.StartsWith(prefix, StringComparison.Ordinal) || key.Contains($":{tag}:"))
+                {
+                    _stateCache.TryRemove(key, out _);
+                }
+            }
         }
     }
 
