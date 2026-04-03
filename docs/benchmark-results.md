@@ -15,10 +15,12 @@ Older 2026-04-02 and early 2026-04-03 result files are still kept under `benchma
 
 | Runtime | Host Path | Client API | WASM Module | Module Size |
 |---|---|---|---|---|
-| C# Native | `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm` | ASP.NET Core | N/A | N/A |
+| C# Native | `submodules/Sekiban/templates/Sekiban.Dcb.Templates/content/Sekiban.Dcb.Orleans.Decider` | ASP.NET Core | N/A | N/A |
 | C# WASM | `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm` | ASP.NET Core proxy | `sekiban-dcb-decider.wasm` | ~35 MB |
 | Rust WASM | `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs` | Rust/Axum proxy | `sekiban-dcb-decider-rust.wasm` | ~728 KB |
 | MoonBit WASM | `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Mb` | Node proxy | `sekiban-dcb-decider-moonbit.wasm` | ~355 KB |
+
+The C# WASM sample AppHost is now treated as WASM-only. Native benchmark and stability runs should start from the Sekiban template AppHost directly, not from `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm`.
 
 ## Benchmark Method
 
@@ -68,11 +70,13 @@ This means the current C# WASM path now satisfies the original memory target eve
 
 ## 2026-04-03 Fresh Comparable 30K Rerun
 
+The native row below now comes from a direct run against the Sekiban template AppHost. It no longer uses the mixed `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm` host.
+
 Throughput table:
 
 | Runtime | Weather events/sec | Reservation events/sec | Query ops/sec | Total wall-clock | Errors |
 |---|---:|---:|---:|---:|---:|
-| C# Native | `1891.5` | `1599.2` | `241.5` | `18.3 s` | `0` |
+| C# Native | `1855.5` | `1719.6` | `1723.6` | `17.2 s` | `0` |
 | C# WASM | `1329.6` | `1907.2` | `38.2` | `26.5 s` | `0` |
 | Rust WASM | `1336.8` | `1111.6` | `702.1` | `25.1 s` | `0` |
 | MoonBit WASM | `1284.1` | `1020.0` | `151.9` | `27.9 s` | `0` |
@@ -81,7 +85,7 @@ Latency table:
 
 | Runtime | Weather p50 / p95 | Reservation p50 / p95 | Query p50 / p95 |
 |---|---|---|---|
-| C# Native | `4.0 / 5.8 ms` | `11.8 / 16.9 ms` | `1.2 / 6.0 ms` |
+| C# Native | `4.1 / 5.7 ms` | `11.4 / 15.7 ms` | `0.2 / 0.4 ms` |
 | C# WASM | `5.8 / 7.8 ms` | `10.2 / 14.0 ms` | `13.3 / 52.9 ms` |
 | Rust WASM | `5.7 / 8.2 ms` | `19.6 / 25.1 ms` | `0.8 / 1.7 ms` |
 | MoonBit WASM | `6.0 / 8.4 ms` | `21.9 / 27.9 ms` | `2.5 / 22.9 ms` |
@@ -90,7 +94,7 @@ Observed peak RSS:
 
 | Runtime | Peak RSS | Note |
 |---|---:|---|
-| C# Native | `~1879.6 MB` | sampled in a follow-up native RSS run; that run had `8` transient reservation 500s, so throughput comparisons above use the clean rerun |
+| C# Native | `not remeasured` | the template-direct separation pass reran throughput only; the older mixed-host follow-up had `~1879.6 MB` peak RSS |
 | C# WASM | `~2041.3 MB` | sampled during `cs-wasm-30k-20260403-fixed-rss` |
 | Rust WASM | `~558.0 MB` | sampled during `rs-wasm-30k-20260403` |
 | MoonBit WASM | `~545.6 MB` | sampled during `mb-wasm-30k-20260403` |
@@ -99,7 +103,7 @@ Observed peak RSS:
 
 - The major C# WASM reservation regression is fixed. Reservation throughput improved from `60.6` events/sec on the earlier 2026-04-03 baseline to `1907.2` events/sec on the current run.
 - C# WASM no longer fails reservation progression by corrupting `RoomProjector` tag-state after reservation writes.
-- Native C# remains the fastest overall implementation because its weather and query paths are still much stronger than the WASM variants.
+- Native C# remains the strongest overall implementation after moving native measurement onto the template AppHost directly.
 - Rust WASM currently has the best query throughput by a large margin.
 - Rust WASM and MoonBit WASM still keep the smallest RSS footprints, both around `0.55 GB`.
 - C# WASM now fits comfortably under the `4 GB` goal, but query performance is still the weakest measured path.
@@ -143,8 +147,7 @@ The earlier failed optimization attempts from the same day (`cs-wasm-30k-2026040
 
 ### Current 2026-04-03 comparable reruns
 
-- `benchmarks/results/native-30k-20260403-rerun.json`
-- `benchmarks/results/native-30k-20260403-rerun-rss.log`
+- `benchmarks/results/native-template-30k-20260403.json`
 - `benchmarks/results/cs-wasm-30k-20260403-fixed.json`
 - `benchmarks/results/cs-wasm-30k-20260403-fixed-rss.json`
 - `benchmarks/results/cs-wasm-30k-20260403-fixed-rss.log`
@@ -155,6 +158,8 @@ The earlier failed optimization attempts from the same day (`cs-wasm-30k-2026040
 
 ### Historical regression reference files
 
+- `benchmarks/results/native-30k-20260403-rerun.json`
+- `benchmarks/results/native-30k-20260403-rerun-rss.log`
 - `benchmarks/results/cs-wasm-30k-20260402.json`
 - `benchmarks/results/mb-wasm-30k-20260402.json`
 - `benchmarks/results/cs-wasm-30k-20260403.json`
@@ -171,7 +176,7 @@ The earlier failed optimization attempts from the same day (`cs-wasm-30k-2026040
 ### C# Native
 
 ```bash
-dotnet run --project src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/SekibanDcbDecider.AppHost/SekibanDcbDecider.AppHost.csproj
+dotnet run --project submodules/Sekiban/templates/Sekiban.Dcb.Templates/content/Sekiban.Dcb.Orleans.Decider/SekibanDcbDecider.AppHost/SekibanDcbDecider.AppHost.csproj
 
 dotnet run --project benchmarks/Sekiban.Benchmark.Cli/Sekiban.Benchmark.Cli.csproj -- \
   --base-url http://127.0.0.1:5141 \
