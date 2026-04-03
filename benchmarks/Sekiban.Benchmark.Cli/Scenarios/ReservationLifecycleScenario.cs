@@ -30,6 +30,10 @@ public static class ReservationLifecycleScenario
         var opsCount = 0;
         var latencies = new List<double>();
         var statusCounts = new Dictionary<int, int>();
+        var lastReportedEvents = 0;
+        var lastReportedErrors = 0;
+        var lastReportedOps = 0;
+        var lastReportedAt = TimeSpan.Zero;
 
         var semaphore = new SemaphoreSlim(effectiveConcurrency);
         var tasks = new List<Task>();
@@ -62,6 +66,7 @@ public static class ReservationLifecycleScenario
 
         while (Volatile.Read(ref eventsCreated) < targetEvents && Volatile.Read(ref callIndex) < maxCalls)
         {
+            ReportProgressIfNeeded();
             await semaphore.WaitAsync();
             var idx = Interlocked.Increment(ref callIndex) - 1;
 
@@ -123,12 +128,7 @@ public static class ReservationLifecycleScenario
                             Interlocked.Increment(ref eventsCreated);
                     }
 
-                    var current = Volatile.Read(ref eventsCreated);
-                    if (current % 10000 == 0 && current > 0)
-                    {
-                        var elapsed = sw.Elapsed.TotalSeconds;
-                        Console.WriteLine($"  Progress: ~{current:N0}/{targetEvents:N0} events ({current / elapsed:F0} events/sec)");
-                    }
+                    ReportProgressIfNeeded();
                 }
                 catch (Exception ex)
                 {
@@ -154,6 +154,7 @@ public static class ReservationLifecycleScenario
 
         await Task.WhenAll(tasks);
         sw.Stop();
+        ReportProgress(force: true);
 
         foreach (var ms in latencies) phase.CommandLatency.Record(ms);
         phase.CommandLatency.Compute();
@@ -192,6 +193,49 @@ public static class ReservationLifecycleScenario
                     Console.WriteLine($"  [HTTP {(int)resp.StatusCode}] {body}");
                 }
             }
+        }
+
+        void ReportProgressIfNeeded()
+        {
+            var elapsed = sw.Elapsed;
+            if (elapsed - lastReportedAt >= TimeSpan.FromSeconds(15))
+            {
+                ReportProgress();
+            }
+        }
+
+        void ReportProgress(bool force = false)
+        {
+            var elapsed = sw.Elapsed;
+            if (!force && elapsed - lastReportedAt < TimeSpan.FromSeconds(15))
+            {
+                return;
+            }
+
+            var currentEvents = Volatile.Read(ref eventsCreated);
+            var currentErrors = Volatile.Read(ref errorCount);
+            var currentOps = Volatile.Read(ref opsCount);
+            var intervalSeconds = Math.Max((elapsed - lastReportedAt).TotalSeconds, 0.001);
+            var intervalEvents = currentEvents - lastReportedEvents;
+            var intervalErrors = currentErrors - lastReportedErrors;
+            var intervalOps = currentOps - lastReportedOps;
+            var averageEventsPerSecond = currentEvents / Math.Max(elapsed.TotalSeconds, 0.001);
+            var intervalEventsPerSecond = intervalEvents / intervalSeconds;
+
+            Console.WriteLine(
+                $"  Progress: events={currentEvents:N0}/{targetEvents:N0} ops={currentOps:N0} " +
+                $"avg={averageEventsPerSecond:F0} eps interval={intervalEventsPerSecond:F0} eps " +
+                $"deltaEvents={intervalEvents:N0} deltaOps={intervalOps:N0} errors={currentErrors:N0} deltaErrors={intervalErrors:N0}");
+
+            if (intervalEvents == 0 && currentEvents < targetEvents)
+            {
+                Console.WriteLine("  [STALL] No reservation events completed in the last interval.");
+            }
+
+            lastReportedAt = elapsed;
+            lastReportedEvents = currentEvents;
+            lastReportedErrors = currentErrors;
+            lastReportedOps = currentOps;
         }
     }
 }

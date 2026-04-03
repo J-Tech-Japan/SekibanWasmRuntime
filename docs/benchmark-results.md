@@ -44,6 +44,28 @@ All three WASM AppHosts now use the same WasmServer tuning:
 
 The last setting is important for the C# WASM fix: it prevents `RoomProjector` cached tag-state replay from reapplying reservation-tagged events that do not belong to room-state evolution.
 
+## 2026-04-03 C# WASM 300K Rerun
+
+After adding time-based progress logging to the reservation benchmark phase, a fresh C# WASM `300,000` run was executed again on 2026-04-03.
+
+Result summary:
+
+| Phase | Events/sec | p50 | p95 | Errors |
+|---|---:|---:|---:|---:|
+| Setup | `238.1` | `3.9 ms` | `6.0 ms` | `0` |
+| WeatherBulk | `1353.3` | `5.6 ms` | `7.6 ms` | `0` |
+| ReservationLifecycle | `1964.5` | `9.7 ms` | `13.2 ms` | `0` |
+| QueryPerformance | `45.8 ops/sec` | `9.1 ms` | `54.1 ms` | `0` |
+
+Additional observations:
+
+- Total wall-clock: `199.7 s`
+- Peak WasmServer RSS: `~3059.6 MB`
+- Reservation progress stayed stable through the full `120,000` target events
+- The earlier “300K reservation phase never finishes and RSS climbs toward 7 GB” regression did not reproduce on this build
+
+This means the current C# WASM path now satisfies the original memory target even at `300K`: it stayed below `4 GB` and completed the full benchmark successfully.
+
 ## 2026-04-03 Fresh Comparable 30K Rerun
 
 Throughput table:
@@ -141,6 +163,8 @@ The earlier failed optimization attempts from the same day (`cs-wasm-30k-2026040
 - `benchmarks/results/cs-wasm-30k-20260403-opt-rss.log`
 - `benchmarks/results/cs-wasm-30k-20260403-cache.json`
 - `benchmarks/results/cs-wasm-30k-20260403-cache-rss.log`
+- `benchmarks/results/cs-wasm-300k-20260403.json`
+- `benchmarks/results/cs-wasm-300k-20260403-rss.log`
 
 ## How To Reproduce
 
