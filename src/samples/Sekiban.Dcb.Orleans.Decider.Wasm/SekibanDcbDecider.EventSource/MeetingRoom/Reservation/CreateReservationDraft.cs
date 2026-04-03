@@ -38,15 +38,8 @@ public record CreateReservationDraft : ICommandWithHandler<CreateReservationDraf
     {
         var reservationId = command.ReservationId != Guid.Empty ? command.ReservationId : Guid.CreateVersion7();
 
-        // Verify the room exists.
+        // Load the room once and infer existence from the projected state.
         var roomTag = new RoomTag(command.RoomId);
-        var roomExists = await context.TagExistsAsync(roomTag);
-
-        if (!roomExists)
-        {
-            throw new ApplicationException($"Room {command.RoomId} not found");
-        }
-
         var roomStateTyped = await context.GetStateAsync<RoomState, RoomProjector>(roomTag);
         if (roomStateTyped.Payload is not RoomState roomState || roomState.RoomId == Guid.Empty)
         {

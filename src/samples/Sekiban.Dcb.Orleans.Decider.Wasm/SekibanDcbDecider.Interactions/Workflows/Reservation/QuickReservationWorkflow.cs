@@ -1,6 +1,6 @@
 using Dcb.EventSource.MeetingRoom.ApprovalRequest;
-using Dcb.EventSource.MeetingRoom.Queries;
 using Dcb.EventSource.MeetingRoom.Reservation;
+using Dcb.MeetingRoomModels.Events.ApprovalRequest;
 using Sekiban.Dcb;
 
 namespace Dcb.Interactions.Workflows.Reservation;
@@ -41,14 +41,8 @@ public class QuickReservationWorkflow(ISekibanExecutor executor)
         IReadOnlyList<string>? selectedEquipment = null,
         string? approvalRequestComment = null)
     {
-        var room = (await executor.QueryAsync(new GetRoomListQuery()))
-            .Items
-            .FirstOrDefault(item => item.RoomId == roomId)
-            ?? throw new ApplicationException($"Room {roomId} not found");
-
         var reservationId = Guid.CreateVersion7();
-        var requiresApproval = room.RequiresApproval;
-        Guid? approvalRequestId = requiresApproval ? Guid.CreateVersion7() : null;
+        var approvalRequestId = Guid.CreateVersion7();
 
         var executionResult = await executor.ExecuteAsync(new CreateQuickReservation
         {
@@ -60,13 +54,21 @@ public class QuickReservationWorkflow(ISekibanExecutor executor)
             EndTime = endTime,
             Purpose = purpose,
             SelectedEquipment = selectedEquipment?.ToList() ?? [],
-            RequiresApproval = requiresApproval,
             ApprovalRequestId = approvalRequestId,
             ApprovalRequestComment = approvalRequestComment
         });
 
         var sortableUniqueId = executionResult.SortableUniqueId ?? string.Empty;
+        var approvalStarted = executionResult.Events
+            .Select(static writtenEvent => writtenEvent.Payload)
+            .OfType<ApprovalFlowStarted>()
+            .FirstOrDefault();
+        bool requiresApproval = approvalStarted is not null;
 
-        return new QuickReservationResult(reservationId, sortableUniqueId, requiresApproval, approvalRequestId);
+        return new QuickReservationResult(
+            reservationId,
+            sortableUniqueId,
+            requiresApproval,
+            approvalStarted?.ApprovalRequestId);
     }
 }

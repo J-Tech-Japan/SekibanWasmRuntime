@@ -44,6 +44,7 @@ var wasmServerBuilder = builder
     .WithEnvironment("SEKIBAN_WASM_AUTO_COMPACTION_INTERVAL_EVENTS", "20000")
     .WithEnvironment("SEKIBAN_WASM_FORCE_COMPACTING_GC_AFTER_COMPACTION", "true")
     .WithEnvironment("SEKIBAN_WASMTIME_STATIC_MEMORY_MAX_MB", "192")
+    .WithEnvironment("WASM_RUNTIME_ALLOWED_TAG_EVENT_TYPES__RoomProjector", "RoomCreated,RoomUpdated,RoomDeactivated,RoomReactivated")
     .WithReference(wasmPostgres, "SekibanDcb")
     .WaitFor(wasmPostgres)
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");

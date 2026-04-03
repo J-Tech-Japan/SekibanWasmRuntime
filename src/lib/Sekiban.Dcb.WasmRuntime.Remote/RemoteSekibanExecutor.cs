@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -170,60 +171,85 @@ public sealed class RemoteSekibanExecutor(
             throw new SekibanValidationException(validationErrors);
         }
 
-        var context = new RemoteCommandContext(
-            _httpClient,
-            _domainTypes,
-            _loggerFactory.CreateLogger<RemoteCommandContext>());
-        EventOrNone eventOrNone = await handlerFunc(context);
-        IReadOnlyList<EventPayloadWithTags> collectedEvents = CollectEvents(context, eventOrNone);
-        if (collectedEvents.Count == 0)
+        for (int attempt = 1; attempt <= MaxCommitAttempts; attempt++)
         {
-            return new ExecutionResult(Guid.Empty, 0, [], TimeSpan.Zero, []);
+            var context = new RemoteCommandContext(
+                _httpClient,
+                _domainTypes,
+                _loggerFactory.CreateLogger<RemoteCommandContext>());
+            EventOrNone eventOrNone = await handlerFunc(context);
+            IReadOnlyList<EventPayloadWithTags> collectedEvents = CollectEvents(context, eventOrNone);
+            if (collectedEvents.Count == 0)
+            {
+                return new ExecutionResult(Guid.Empty, 0, [], TimeSpan.Zero, []);
+            }
+
+            List<ITag> allTags = collectedEvents
+                .SelectMany(static e => e.Tags)
+                .GroupBy(static tag => tag.GetTag(), StringComparer.Ordinal)
+                .Select(static group => group.First())
+                .ToList();
+            TagValidator.ValidateTagsAndThrow(allTags);
+
+            SerializedCommitRequest commitRequest = BuildCommitRequest(collectedEvents, context.AccessedTagStates);
+            using var response = await _httpClient.PostAsJsonAsync(
+                "/api/sekiban/serialized/commit",
+                commitRequest,
+                TransportJsonOptions,
+                cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                string errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                if (attempt < MaxCommitAttempts && IsRetryableCommitConflict(response.StatusCode, errorBody))
+                {
+                    TimeSpan retryDelay = GetCommitRetryDelay(attempt);
+                    _logger.LogWarning(
+                        "Retrying remote commit for {CommandName} after transient reservation conflict on attempt {Attempt}/{MaxAttempts}. Delay={DelayMs}ms Error={ErrorBody}",
+                        commandName,
+                        attempt,
+                        MaxCommitAttempts,
+                        retryDelay.TotalMilliseconds,
+                        errorBody);
+                    await Task.Delay(retryDelay, cancellationToken);
+                    continue;
+                }
+
+                throw CreateEndpointFailureException(response, "serialized/commit", errorBody);
+            }
+
+            SerializedCommitResult commitResult =
+                await response.Content.ReadFromJsonAsync<SerializedCommitResult>(TransportJsonOptions, cancellationToken)
+                ?? throw new InvalidOperationException("Null response from WASM host commit endpoint.");
+
+            await SerializedCommitResultRepublisher.PublishWrittenEventsAsync(
+                commitResult,
+                _domainTypes,
+                _eventPublisher,
+                cancellationToken);
+
+            List<Event> writtenEvents = commitResult.WrittenEvents
+                .Select(DeserializeEvent)
+                .ToList();
+            SerializableEvent? firstSerializableEvent = commitResult.WrittenEvents.FirstOrDefault();
+
+            return new ExecutionResult(
+                EventId: firstSerializableEvent?.Id ?? Guid.Empty,
+                EventPosition: writtenEvents.Count,
+                TagWrites: commitResult.TagWriteResults,
+                Duration: commitResult.Duration,
+                Events: writtenEvents,
+                Metadata: new Dictionary<string, object>
+                {
+                    ["EventCount"] = writtenEvents.Count,
+                    ["TagCount"] = allTags.Count,
+                    ["CommandName"] = commandName,
+                    ["CommitAttempts"] = attempt
+                },
+                SortableUniqueId: firstSerializableEvent?.SortableUniqueIdValue);
         }
 
-        List<ITag> allTags = collectedEvents
-            .SelectMany(static e => e.Tags)
-            .GroupBy(static tag => tag.GetTag(), StringComparer.Ordinal)
-            .Select(static group => group.First())
-            .ToList();
-        TagValidator.ValidateTagsAndThrow(allTags);
-
-        SerializedCommitRequest commitRequest = BuildCommitRequest(collectedEvents, context.AccessedTagStates);
-        var response = await _httpClient.PostAsJsonAsync(
-            "/api/sekiban/serialized/commit",
-            commitRequest,
-            TransportJsonOptions,
-            cancellationToken);
-        await EnsureSuccessAsync(response, "serialized/commit");
-
-        SerializedCommitResult commitResult =
-            await response.Content.ReadFromJsonAsync<SerializedCommitResult>(TransportJsonOptions, cancellationToken)
-            ?? throw new InvalidOperationException("Null response from WASM host commit endpoint.");
-
-        await SerializedCommitResultRepublisher.PublishWrittenEventsAsync(
-            commitResult,
-            _domainTypes,
-            _eventPublisher,
-            cancellationToken);
-
-        List<Event> writtenEvents = commitResult.WrittenEvents
-            .Select(DeserializeEvent)
-            .ToList();
-        SerializableEvent? firstSerializableEvent = commitResult.WrittenEvents.FirstOrDefault();
-
-        return new ExecutionResult(
-            EventId: firstSerializableEvent?.Id ?? Guid.Empty,
-            EventPosition: writtenEvents.Count,
-            TagWrites: commitResult.TagWriteResults,
-            Duration: commitResult.Duration,
-            Events: writtenEvents,
-            Metadata: new Dictionary<string, object>
-            {
-                ["EventCount"] = writtenEvents.Count,
-                ["TagCount"] = allTags.Count,
-                ["CommandName"] = commandName
-            },
-            SortableUniqueId: firstSerializableEvent?.SortableUniqueIdValue);
+        throw new InvalidOperationException($"Remote commit retry loop exhausted for {commandName}.");
     }
 
     private static IReadOnlyList<EventPayloadWithTags> CollectEvents(
@@ -312,9 +338,39 @@ public sealed class RemoteSekibanExecutor(
         }
 
         string errorBody = await response.Content.ReadAsStringAsync();
-        throw new HttpRequestException(
-            $"WASM host {endpointName} failed with {(int)response.StatusCode} {response.StatusCode}: {errorBody}");
+        throw CreateEndpointFailureException(response, endpointName, errorBody);
     }
+
+    private static bool IsRetryableCommitConflict(HttpStatusCode statusCode, string errorBody)
+    {
+        if (statusCode is not (HttpStatusCode.BadRequest or HttpStatusCode.Conflict))
+        {
+            return false;
+        }
+
+        return errorBody.Contains("Failed to reserve tags", StringComparison.OrdinalIgnoreCase) &&
+               (errorBody.Contains("is currently reserved", StringComparison.OrdinalIgnoreCase) ||
+                errorBody.Contains("has been modified", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static TimeSpan GetCommitRetryDelay(int attempt)
+    {
+        int baseDelayMs = attempt switch
+        {
+            1 => 10,
+            2 => 25,
+            3 => 50,
+            _ => 100
+        };
+        return TimeSpan.FromMilliseconds(baseDelayMs + Random.Shared.Next(0, 10));
+    }
+
+    private static HttpRequestException CreateEndpointFailureException(
+        HttpResponseMessage response,
+        string endpointName,
+        string errorBody) =>
+        new(
+            $"WASM host {endpointName} failed with {(int)response.StatusCode} {response.StatusCode}: {errorBody}");
 
     private sealed record TagStateRequest(string TagStateId);
 
@@ -323,5 +379,6 @@ public sealed class RemoteSekibanExecutor(
         public static AnonymousCommand Instance { get; } = new();
     }
 
+    private const int MaxCommitAttempts = 5;
     private static readonly JsonSerializerOptions TransportJsonOptions = new(JsonSerializerDefaults.Web);
 }
