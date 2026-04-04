@@ -1694,21 +1694,16 @@ sealed class KnownTagTracker
 }
 
 /// <summary>
-/// Pure-function tag-state processor. Holds ONE WASM accumulator per projector type
-/// and reuses it for all tag-state requests via RestoreState→ApplyEvents→SerializeState.
-/// This reduces WASM instance count from 200+ (one per concurrent grain) to ~6 (one per projector).
-/// Memory savings: 200×36.6MB=7.3GB → 6×36.6MB=220MB for C# WASM.
-/// </summary>
-/// <summary>
 /// Pure-function tag-state processor. Creates a fresh WASM accumulator per call but
-/// limits concurrency to 1 per projector type via semaphore. This means at most ~6
-/// WASM instances exist at any time (one per projector), vs 200+ without limiting.
+/// limits concurrency per tag+projector cache key via a keyed semaphore. Global
+/// projector fan-out is still bounded by Wasmtime pooling through
+/// MaxPooledInstancesPerProjector.
 /// Uses in-process state cache with incremental replay (delta events only).
 /// Memory: 6×36.6MB=220MB (vs 200×36.6MB=7.3GB without limiting).
 /// </summary>
 sealed class SharedTagStateProcessor : IDisposable
 {
-    private readonly ConcurrentDictionary<string, SemaphoreSlim> _gates = new();
+    private readonly ConcurrentDictionary<string, GateEntry> _gates = new();
     private readonly ConcurrentDictionary<string, SerializableTagState> _stateCache = new();
     private const int MaxCacheEntries = 10_000;
 
@@ -1748,8 +1743,8 @@ sealed class SharedTagStateProcessor : IDisposable
         }
 
         var cacheKey = tagStateId.GetTagStateId();
-        var gate = _gates.GetOrAdd(cacheKey, _ => new SemaphoreSlim(1, 1));
-        await gate.WaitAsync();
+        var gateEntry = AcquireGate(cacheKey);
+        await gateEntry.Gate.WaitAsync();
         try
         {
             var cachedState = _stateCache.GetValueOrDefault(cacheKey);
@@ -1864,7 +1859,11 @@ sealed class SharedTagStateProcessor : IDisposable
             if (_stateCache.Count >= MaxCacheEntries)
             {
                 var keys = _stateCache.Keys.Take(_stateCache.Count / 2).ToList();
-                foreach (var k in keys) _stateCache.TryRemove(k, out _);
+                foreach (var k in keys)
+                {
+                    _stateCache.TryRemove(k, out _);
+                    TryRemoveGateIfIdle(k);
+                }
             }
             _stateCache[cacheKey] = newState;
 
@@ -1872,7 +1871,8 @@ sealed class SharedTagStateProcessor : IDisposable
         }
         finally
         {
-            gate.Release();
+            gateEntry.Gate.Release();
+            ReleaseGate(cacheKey, gateEntry);
         }
     }
 
@@ -1887,9 +1887,70 @@ sealed class SharedTagStateProcessor : IDisposable
 
     public void Dispose()
     {
-        foreach (var (_, gate) in _gates) gate.Dispose();
+        foreach (var (_, gateEntry) in _gates)
+        {
+            gateEntry.Gate.Dispose();
+        }
         _gates.Clear();
         _stateCache.Clear();
+    }
+
+    private GateEntry AcquireGate(string cacheKey)
+    {
+        while (true)
+        {
+            var gateEntry = _gates.GetOrAdd(cacheKey, _ => new GateEntry());
+            Interlocked.Increment(ref gateEntry.ReferenceCount);
+
+            if (_gates.TryGetValue(cacheKey, out var currentEntry) && ReferenceEquals(currentEntry, gateEntry))
+            {
+                return gateEntry;
+            }
+
+            ReleaseGate(cacheKey, gateEntry);
+        }
+    }
+
+    private void ReleaseGate(string cacheKey, GateEntry gateEntry)
+    {
+        if (Interlocked.Decrement(ref gateEntry.ReferenceCount) != 0)
+        {
+            return;
+        }
+
+        if (_stateCache.ContainsKey(cacheKey))
+        {
+            return;
+        }
+
+        if (_gates.TryRemove(new KeyValuePair<string, GateEntry>(cacheKey, gateEntry)))
+        {
+            gateEntry.Gate.Dispose();
+        }
+    }
+
+    private void TryRemoveGateIfIdle(string cacheKey)
+    {
+        if (!_gates.TryGetValue(cacheKey, out var gateEntry))
+        {
+            return;
+        }
+
+        if (Volatile.Read(ref gateEntry.ReferenceCount) != 0)
+        {
+            return;
+        }
+
+        if (_gates.TryRemove(new KeyValuePair<string, GateEntry>(cacheKey, gateEntry)))
+        {
+            gateEntry.Gate.Dispose();
+        }
+    }
+
+    private sealed class GateEntry
+    {
+        public SemaphoreSlim Gate { get; } = new(1, 1);
+        public int ReferenceCount;
     }
 
     private DeltaPreparation PrepareDeltaEvents(

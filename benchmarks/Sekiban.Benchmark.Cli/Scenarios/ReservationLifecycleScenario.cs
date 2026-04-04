@@ -34,6 +34,7 @@ public static class ReservationLifecycleScenario
         var lastReportedErrors = 0;
         var lastReportedOps = 0;
         var lastReportedAt = TimeSpan.Zero;
+        var progressLock = new object();
 
         var semaphore = new SemaphoreSlim(effectiveConcurrency);
         var tasks = new List<Task>();
@@ -197,16 +198,26 @@ public static class ReservationLifecycleScenario
 
         void ReportProgressIfNeeded()
         {
-            var elapsed = sw.Elapsed;
-            if (elapsed - lastReportedAt >= TimeSpan.FromSeconds(15))
+            lock (progressLock)
             {
-                ReportProgress();
+                var elapsed = sw.Elapsed;
+                if (elapsed - lastReportedAt >= TimeSpan.FromSeconds(15))
+                {
+                    ReportProgressCore(elapsed, force: false);
+                }
             }
         }
 
         void ReportProgress(bool force = false)
         {
-            var elapsed = sw.Elapsed;
+            lock (progressLock)
+            {
+                ReportProgressCore(sw.Elapsed, force);
+            }
+        }
+
+        void ReportProgressCore(TimeSpan elapsed, bool force)
+        {
             if (!force && elapsed - lastReportedAt < TimeSpan.FromSeconds(15))
             {
                 return;
