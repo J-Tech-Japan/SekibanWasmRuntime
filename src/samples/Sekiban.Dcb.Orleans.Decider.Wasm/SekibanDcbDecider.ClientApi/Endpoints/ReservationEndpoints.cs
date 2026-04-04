@@ -6,7 +6,7 @@ using Dcb.MeetingRoomModels.Events.Reservation;
 using Microsoft.AspNetCore.Mvc;
 using Sekiban.Dcb;
 
-namespace SekibanDcbDecider.ApiService.Endpoints;
+namespace SekibanDcbDecider.ClientApi.Endpoints;
 
 public static class ReservationEndpoints
 {

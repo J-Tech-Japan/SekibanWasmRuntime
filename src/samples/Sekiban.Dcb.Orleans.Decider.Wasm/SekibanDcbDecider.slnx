@@ -1,5 +1,4 @@
 <Solution>
-  <Project Path="SekibanDcbDecider.ApiService\SekibanDcbDecider.ApiService.csproj" />
   <Project Path="SekibanDcbDecider.AppHost\SekibanDcbDecider.AppHost.csproj" />
   <Project Path="SekibanDcbDecider.Cli\SekibanDcbDecider.Cli.csproj" />
   <Project Path="SekibanDcbDecider.ClientApi\SekibanDcbDecider.ClientApi.csproj" />

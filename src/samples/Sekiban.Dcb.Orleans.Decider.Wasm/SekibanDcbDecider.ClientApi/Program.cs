@@ -7,7 +7,7 @@ using Sekiban.Dcb;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.WasmRuntime.Remote;
-using SekibanDcbDecider.ApiService.Endpoints;
+using SekibanDcbDecider.ClientApi.Endpoints;
 
 var builder = WebApplication.CreateBuilder(args);
 

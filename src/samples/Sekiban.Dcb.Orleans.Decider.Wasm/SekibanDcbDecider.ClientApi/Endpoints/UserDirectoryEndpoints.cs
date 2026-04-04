@@ -3,7 +3,7 @@ using Dcb.EventSource.MeetingRoom.User;
 using Microsoft.AspNetCore.Mvc;
 using Sekiban.Dcb;
 
-namespace SekibanDcbDecider.ApiService.Endpoints;
+namespace SekibanDcbDecider.ClientApi.Endpoints;
 
 public static class UserDirectoryEndpoints
 {

@@ -3,9 +3,8 @@ using Dcb.EventSource.Weather;
 using Dcb.ImmutableModels.Events.Weather;
 using Microsoft.AspNetCore.Mvc;
 using Sekiban.Dcb;
-using Sekiban.Dcb.Orleans.Grains;
 
-namespace SekibanDcbDecider.ApiService.Endpoints;
+namespace SekibanDcbDecider.ClientApi.Endpoints;
 
 public static class WeatherEndpoints
 {
@@ -33,26 +32,6 @@ public static class WeatherEndpoints
 
         group.MapGet("/single/count", GetWeatherForecastCountSingleAsync)
             .WithName("GetWeatherForecastCountSingle");
-
-        // Status endpoints
-        group.MapGet("/status", GetWeatherForecastStatusAsync)
-            .WithName("GetWeatherForecastStatus");
-
-        group.MapGet("/generic/status", GetWeatherForecastGenericStatusAsync)
-            .WithName("GetWeatherForecastGenericStatus");
-
-        group.MapGet("/single/status", GetWeatherForecastSingleStatusAsync)
-            .WithName("GetWeatherForecastSingleStatus");
-
-        // Event statistics endpoints
-        group.MapGet("/event-statistics", GetEventDeliveryStatisticsAsync)
-            .WithName("GetEventDeliveryStatistics");
-
-        group.MapGet("/generic/event-statistics", GetEventDeliveryStatisticsGenericAsync)
-            .WithName("GetEventDeliveryStatisticsGeneric");
-
-        group.MapGet("/single/event-statistics", GetEventDeliveryStatisticsSingleAsync)
-            .WithName("GetEventDeliveryStatisticsSingle");
 
         // Command endpoints (separate group for clarity)
         var commandGroup = endpoints.MapGroup("")
@@ -179,54 +158,6 @@ public static class WeatherEndpoints
             totalCount = countResult.TotalCount,
             isSingle = true
         });
-    }
-
-    private static async Task<IResult> GetWeatherForecastStatusAsync(
-        [FromServices] IClusterClient client)
-    {
-        var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjection");
-        var status = await grain.GetStatusAsync();
-        return Results.Ok(status);
-    }
-
-    private static async Task<IResult> GetWeatherForecastGenericStatusAsync(
-        [FromServices] IClusterClient client)
-    {
-        var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjection");
-        var status = await grain.GetStatusAsync();
-        return Results.Ok(status);
-    }
-
-    private static async Task<IResult> GetWeatherForecastSingleStatusAsync(
-        [FromServices] IClusterClient client)
-    {
-        var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjectorWithTagStateProjector");
-        var status = await grain.GetStatusAsync();
-        return Results.Ok(status);
-    }
-
-    private static async Task<IResult> GetEventDeliveryStatisticsAsync(
-        [FromServices] IClusterClient client)
-    {
-        var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjection");
-        var stats = await grain.GetEventDeliveryStatisticsAsync();
-        return Results.Ok(stats);
-    }
-
-    private static async Task<IResult> GetEventDeliveryStatisticsGenericAsync(
-        [FromServices] IClusterClient client)
-    {
-        var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjection");
-        var stats = await grain.GetEventDeliveryStatisticsAsync();
-        return Results.Ok(stats);
-    }
-
-    private static async Task<IResult> GetEventDeliveryStatisticsSingleAsync(
-        [FromServices] IClusterClient client)
-    {
-        var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjectorWithTagStateProjector");
-        var stats = await grain.GetEventDeliveryStatisticsAsync();
-        return Results.Ok(stats);
     }
 
     private static async Task<IResult> CreateWeatherForecastAsync(

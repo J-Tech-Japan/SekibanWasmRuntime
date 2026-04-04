@@ -16,7 +16,7 @@
     <ProjectReference Include="..\SekibanDcbDecider.ServiceDefaults\SekibanDcbDecider.ServiceDefaults.csproj" />
     <ProjectReference Include="..\..\..\lib\Sekiban.Dcb.WasmRuntime.Remote\Sekiban.Dcb.WasmRuntime.Remote.csproj" />
     <ProjectReference Include="..\SekibanDcbDecider.EventSource\SekibanDcbDecider.EventSource.csproj" />
-    <ProjectReference Include="..\SekibanDcbDecider.ApiService\SekibanDcbDecider.ApiService.csproj" />
+    <ProjectReference Include="..\SekibanDcbDecider.Interactions\SekibanDcbDecider.Interactions.csproj" />
   </ItemGroup>
 
 </Project>

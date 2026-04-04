@@ -11,7 +11,7 @@ using Microsoft.AspNetCore.Mvc;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Tags;
 
-namespace SekibanDcbDecider.ApiService.Endpoints;
+namespace SekibanDcbDecider.ClientApi.Endpoints;
 
 public static class ApprovalEndpoints
 {

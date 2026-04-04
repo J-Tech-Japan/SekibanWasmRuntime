@@ -58,35 +58,6 @@ clientApiBuilder = clientApiBuilder
 
 var clientApi = clientApiBuilder;
 
-var webPort = ResolveConfiguredPort(5180, "E2E_WEB_PORT");
-var webFrontend = builder
-    .AddProject<SekibanDcbDecider_Web>("webfrontend")
-    .WithReference(clientApi.GetEndpoint("http"))
-    .WithEnvironment("CLIENT_API_URL", "http://127.0.0.1:" + clientApiPort)
-    .WithEnvironment("AUTH_API_URL", "http://127.0.0.1:" + clientApiPort)
-    .WaitFor(clientApi);
-
-webFrontend
-    .WithEndpoint("http", endpoint =>
-    {
-        endpoint.Port = webPort;
-        endpoint.TargetPort = webPort;
-        endpoint.UriScheme = "http";
-        endpoint.IsProxied = false;
-    })
-    .WithExternalHttpEndpoints()
-    .WithEnvironment("ASPNETCORE_URLS", "http://127.0.0.1:" + webPort);
-
-var webNextPort = ResolveConfiguredPort(3000, "E2E_WEBNEXT_PORT", "WEBNEXT_PORT");
-builder
-    .AddJavaScriptApp("webnext", "../SekibanDcbDecider.WebNext")
-    .WithHttpEndpoint(port: webNextPort, env: "PORT")
-    .WithExternalHttpEndpoints()
-    .WithEnvironment("NODE_ENV", "development")
-    .WithEnvironment("API_BASE_URL", "http://127.0.0.1:" + clientApiPort)
-    .WithEnvironment("CLIENT_API_BASE_URL", "http://127.0.0.1:" + clientApiPort)
-    .WaitFor(clientApi);
-
 builder.Build().Run();
 
 static int ResolveConfiguredPort(int defaultPort, params string[] envNames)

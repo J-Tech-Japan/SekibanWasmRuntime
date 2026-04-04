@@ -20,7 +20,7 @@ Older 2026-04-02 and early 2026-04-03 result files are still kept under `benchma
 | Rust WASM | `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs` | Rust/Axum proxy | `sekiban-dcb-decider-rust.wasm` | ~728 KB |
 | MoonBit WASM | `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Mb` | Node proxy | `sekiban-dcb-decider-moonbit.wasm` | ~355 KB |
 
-The C# WASM sample AppHost is now treated as WASM-only. Native benchmark and stability runs should start from the Sekiban template AppHost directly, not from `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm`.
+The C# WASM sample AppHost is now treated as WASM-only. It launches `wasmserver` and `clientapi` only, and the sample-native `SekibanDcbDecider.ApiService` source has been removed from this tree. Native benchmark and stability runs should start from the Sekiban template AppHost directly, not from `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm`.
 
 ## Benchmark Method
 
@@ -48,22 +48,22 @@ The last setting is important for the C# WASM fix: it prevents `RoomProjector` c
 
 ## 2026-04-03 C# WASM 300K Rerun
 
-After adding time-based progress logging to the reservation benchmark phase, a fresh C# WASM `300,000` run was executed again on 2026-04-03.
+After separating the mixed sample host into a WASM-only AppHost, a fresh C# WASM `300,000` run was executed again on 2026-04-04.
 
 Result summary:
 
 | Phase | Events/sec | p50 | p95 | Errors |
 |---|---:|---:|---:|---:|
-| Setup | `238.1` | `3.9 ms` | `6.0 ms` | `0` |
-| WeatherBulk | `1353.3` | `5.6 ms` | `7.6 ms` | `0` |
-| ReservationLifecycle | `1964.5` | `9.7 ms` | `13.2 ms` | `0` |
-| QueryPerformance | `45.8 ops/sec` | `9.1 ms` | `54.1 ms` | `0` |
+| Setup | `122.6` | `7.2 ms` | `11.5 ms` | `0` |
+| WeatherBulk | `1398.2` | `5.5 ms` | `7.5 ms` | `0` |
+| ReservationLifecycle | `1941.4` | `9.9 ms` | `13.2 ms` | `0` |
+| QueryPerformance | `110.5 ops/sec` | `4.5 ms` | `23.3 ms` | `0` |
 
 Additional observations:
 
-- Total wall-clock: `199.7 s`
-- Peak WasmServer RSS: `~3059.6 MB`
-- Reservation progress stayed stable through the full `120,000` target events
+- Total wall-clock: `193.4 s`
+- Peak WasmServer RSS: `~2617.8 MB`
+- Reservation progress stayed stable through the full `120,000` target events at roughly `1.9k-2.0k eps`
 - The earlier “300K reservation phase never finishes and RSS climbs toward 7 GB” regression did not reproduce on this build
 
 This means the current C# WASM path now satisfies the original memory target even at `300K`: it stayed below `4 GB` and completed the full benchmark successfully.
@@ -168,6 +168,8 @@ The earlier failed optimization attempts from the same day (`cs-wasm-30k-2026040
 - `benchmarks/results/cs-wasm-30k-20260403-opt-rss.log`
 - `benchmarks/results/cs-wasm-30k-20260403-cache.json`
 - `benchmarks/results/cs-wasm-30k-20260403-cache-rss.log`
+- `benchmarks/results/cs-wasm-300k-20260403-split-clean.json`
+- `benchmarks/results/cs-wasm-300k-20260403-split-rss.log`
 - `benchmarks/results/cs-wasm-300k-20260403.json`
 - `benchmarks/results/cs-wasm-300k-20260403-rss.log`
 
