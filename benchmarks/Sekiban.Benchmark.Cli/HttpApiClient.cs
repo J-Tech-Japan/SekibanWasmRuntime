@@ -34,9 +34,8 @@ public sealed class HttpApiClient : IDisposable
         _authEmail = $"benchmark-{Guid.NewGuid():N}@test.local";
         _authPassword = "Bench!Mark123$";
 
-        // Register
         var regPayload = new { email = _authEmail, password = _authPassword, displayName = "BenchmarkAdmin" };
-        _ = await PostMeasured("/auth/register", regPayload);
+        await WaitForAuthEndpointAsync("/auth/register", regPayload);
 
         return await RefreshTokenAsync();
     }
@@ -49,7 +48,10 @@ public sealed class HttpApiClient : IDisposable
         if (_authEmail is null || _authPassword is null) return false;
 
         var loginPayload = new { email = _authEmail, password = _authPassword, useCookies = false };
-        var loginResp = await PostMeasured("/auth/login", loginPayload, includeBodyOnSuccess: true);
+        MeasuredResponse loginResp = await WaitForAuthEndpointAsync(
+            "/auth/login",
+            loginPayload,
+            includeBodyOnSuccess: true);
         if (!loginResp.IsSuccessStatusCode || string.IsNullOrWhiteSpace(loginResp.Body)) return false;
 
         using var doc = JsonDocument.Parse(loginResp.Body);
@@ -65,6 +67,42 @@ public sealed class HttpApiClient : IDisposable
 
         Console.WriteLine($"  Authenticated as: {_authEmail} (expires {_tokenExpiresAt:HH:mm:ss})");
         return true;
+    }
+
+    private async Task<MeasuredResponse> WaitForAuthEndpointAsync(
+        string path,
+        object payload,
+        bool includeBodyOnSuccess = false)
+    {
+        Exception? lastException = null;
+        MeasuredResponse? lastResponse = null;
+
+        for (var attempt = 1; attempt <= 20; attempt++)
+        {
+            try
+            {
+                var response = await PostMeasured(path, payload, includeBodyOnSuccess);
+                if (response.IsSuccessStatusCode || response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Unauthorized)
+                {
+                    return response;
+                }
+
+                lastResponse = response;
+            }
+            catch (Exception ex)
+            {
+                lastException = ex;
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(1));
+        }
+
+        if (lastException is not null)
+        {
+            throw lastException;
+        }
+
+        return lastResponse ?? new MeasuredResponse(HttpStatusCode.ServiceUnavailable, 0);
     }
 
     /// <summary>

@@ -56,6 +56,10 @@ public sealed class BenchmarkRunner
         // Detect correct weather endpoint path
         await client.DetectWeatherEndpointAsync();
 
+        // Budget: 60% weather (pure throughput, no contention), 40% reservation lifecycle (complex, with contention)
+        var weatherEvents = (int)(_totalEvents * 0.60);
+        var reservationEvents = _totalEvents - weatherEvents;
+
         // Phase 1: Setup
         List<Guid> roomIds;
         if (_skipSetup)
@@ -71,14 +75,10 @@ public sealed class BenchmarkRunner
         }
         else
         {
-            var (setupResult, rooms) = await SetupScenario.RunAsync(client);
+            var (setupResult, rooms) = await SetupScenario.RunAsync(client, reservationEvents);
             result.Phases.Add(setupResult);
             roomIds = rooms;
         }
-
-        // Budget: 60% weather (pure throughput, no contention), 40% reservation lifecycle (complex, with contention)
-        var weatherEvents = (int)(_totalEvents * 0.60);
-        var reservationEvents = _totalEvents - weatherEvents;
 
         // Phase 2: Weather Bulk
         await client.EnsureAuthenticatedAsync();

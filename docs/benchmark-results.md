@@ -4,11 +4,10 @@ This document tracks the current benchmark status for the Sekiban sample runtime
 
 The current `300,000` event matrix now has fresh reruns for:
 
+- Native C#
 - C# WASM
 - Rust WASM
 - MoonBit WASM
-
-Native C# was rerun on current `main`, but reservation throughput degraded badly during the `300K` pass and the run was intentionally aborted once the slowdown pattern was clear. The historical `native-300k.json` file is still kept as a reference, but it is no longer a trustworthy "good" baseline because it completed with large reservation error counts.
 
 ## Runtime Matrix
 
@@ -53,7 +52,7 @@ The table below uses fresh `300,000` event runs from current `main` where availa
 
 | Runtime | Status | Weather events/sec | Reservation events/sec | Reservation ops/sec | Query ops/sec | Total wall-clock | Peak RSS | Errors |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
-| C# Native | `stalled on current main` | `1910.0` before stall | `133 -> 32` interval trend before abort | `770 -> 182` interval trend before abort | `not reached` | `aborted during reservation phase` | `~1637.2 MB` | `0` before abort |
+| C# Native | `completed` | `2004.1` | `236.7` | `91.0` | `1586.5` | `597.6 s` | `~2626.4 MB` | `0` |
 | C# WASM | `completed` | `1355.3` | `1882.1` | `723.8` | `115.1` | `199.4 s` | `~2594.2 MB` | `0` |
 | Rust WASM | `completed` | `1565.3` | `561.0` | `215.7` | `754.0` | `329.8 s` | `~1312.7 MB` | `0` |
 | MoonBit WASM | `completed` | `1460.5` | `556.8` | `214.1` | `164.5` | `340.9 s` | `~1301.6 MB` | `0` |
@@ -63,7 +62,7 @@ Latency summary:
 
 | Runtime | Weather p50 / p95 | Reservation p50 / p95 | Query p50 / p95 |
 |---|---|---|---|
-| C# Native | `3.9 / 5.8 ms` before stall | `not completed` | `not reached` |
+| C# Native | `3.8 / 5.4 ms` | `66.0 / 225.5 ms` | `0.2 / 0.4 ms` |
 | C# WASM | `5.7 / 7.8 ms` | `10.0 / 14.0 ms` | `4.2 / 22.9 ms` |
 | Rust WASM | `4.9 / 6.7 ms` | `36.4 / 64.8 ms` | `0.8 / 1.5 ms` |
 | MoonBit WASM | `5.3 / 7.3 ms` | `38.7 / 61.2 ms` | `2.0 / 22.1 ms` |
@@ -71,22 +70,28 @@ Latency summary:
 Current takeaways:
 
 - C# WASM remains the fastest command path at `300K` among the runtimes that completed successfully, and it still stays under the original `4 GB` memory target.
+- Native C# now completes `300K` cleanly and stays under `4 GB`, but its reservation phase still decays from roughly `670 eps` at the start to roughly `125 eps` at the end of the run.
 - Rust WASM and MoonBit WASM now both complete `300K` with no errors and with very similar command-side throughput, around `557-561` reservation events/sec.
 - Rust WASM has by far the best query throughput at `300K`, reaching `754 ops/sec`.
 - MoonBit WASM is materially slower on query throughput than Rust WASM, but still clearly faster than C# WASM on the query phase.
-- Native C# is the outlier on current `main`: reservation throughput collapses during the `300K` run even before errors appear. This is a real regression signal, not a timeout artifact.
+- Native C# is no longer blocked by the earlier benchmark setup issue, but it is still the highest-priority scalability target because reservation throughput remains much lower than its `30K` profile.
 
-### Native C# 300K Stall Note
+### Native C# 300K Completion Note
 
-The current native rerun against the Sekiban template AppHost did not complete. It behaved as follows:
+The current native rerun against the Sekiban template AppHost now completes with `0` errors:
 
-- weather phase completed normally at `1910 events/sec`
-- reservation phase started at `133 events/sec` interval throughput
-- reservation interval throughput decayed steadily to `32 events/sec`
-- the run was stopped after only `12,995 / 120,000` reservation events had been produced
-- peak sampled RSS before abort was `~1637.2 MB`
+- weather phase completed at `2004.1 events/sec`
+- reservation phase completed at `236.7 events/sec` overall and `91.0 ops/sec`
+- reservation interval throughput still decayed steadily during the run, from roughly `673 eps` at the start to roughly `124-140 eps` at the end
+- peak sampled RSS was `~2626.4 MB`
+- query phase completed at `1586.5 ops/sec`
 
-This differs from the historical `benchmarks/results/native-300k.json` file, which did complete, but only by emitting `73,156` reservation errors. The conclusion is the same in both cases: native C# does not currently have an acceptable `300K` reservation profile.
+The previous aborted native runs turned out to mix two different problems:
+
+- the benchmark was under-provisioning rooms for `300K`, so conflict-checked implementations eventually ran out of unique reservation slots
+- the native template quick-reservation path and room reservation state were doing more work than necessary per command
+
+That benchmark-side issue is now fixed, so the current native `300K` result is a trustworthy completion result. The remaining issue is throughput decay, not correctness.
 
 ## 2026-04-03 Fresh Comparable 30K Rerun
 
@@ -128,6 +133,17 @@ Observed peak RSS:
 - Rust WASM and MoonBit WASM still keep the smallest RSS footprints, both around `0.55 GB`.
 - C# WASM now fits comfortably under the `4 GB` goal, but query performance is still the weakest measured path.
 
+## Native C# Fixes Applied For 300K Rerun
+
+The current native template rerun includes both benchmark-side and Sekiban template-side fixes:
+
+1. `SetupScenario` now provisions enough rooms for the reservation event target instead of assuming the old fixed `20`-room setup.
+2. `HttpApiClient` now retries native auth endpoints during startup, so fresh AppHost launches do not lose the setup phase to transient `401` responses.
+3. `QuickReservationWorkflow` now uses a single `CreateQuickReservation` command instead of executing draft, hold, and confirm as separate round trips.
+4. `RoomReservationTag` separates room reservation conflict tracking from `RoomTag`, so room metadata state is no longer polluted by all reservation writes.
+5. `RoomReservationsState` now mutates in place and keeps a day index, reducing per-command copying and limiting conflict scans to relevant day buckets.
+6. `ReservationListProjection` and `ApprovalRequestListProjection` now update their dictionaries in place instead of cloning the full map for every event.
+
 ## C# WASM Regression Fixes Applied
 
 The following changes were applied before the 2026-04-03 rerun:
@@ -167,14 +183,14 @@ The earlier failed optimization attempts from the same day (`cs-wasm-30k-2026040
 
 ### Current 2026-04-04 300K reruns
 
+- `benchmarks/results/native-300k-20260404-fix10.json`
+- `benchmarks/results/native-300k-20260404-fix10-rss.log`
 - `benchmarks/results/cs-wasm-300k-20260404.json`
 - `benchmarks/results/cs-wasm-300k-20260404-rss.log`
 - `benchmarks/results/rs-wasm-300k-20260404.json`
 - `benchmarks/results/rs-wasm-300k-20260404-rss.log`
 - `benchmarks/results/mb-wasm-300k-20260404.json`
 - `benchmarks/results/mb-wasm-300k-20260404-rss.log`
-- `benchmarks/results/native-300k-20260404.benchmark.log`
-- `benchmarks/results/native-300k-20260404-rss.log`
 
 ### Current 2026-04-03 comparable 30K reruns
 
