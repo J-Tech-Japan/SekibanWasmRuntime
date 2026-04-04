@@ -404,7 +404,7 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
             byte[] stateJsonUtf8 = await ReadStateJsonUtf8FromSnapshotPayloadAsync(
                 inlineState,
                 payloadBytes);
-            EnsureInstance().RestoreStateUtf8(stateJsonUtf8);
+            EnsureRestorableInstance().RestoreStateUtf8(stateJsonUtf8);
             _version = inlineState.Version;
             _lastSortableUniqueId = inlineState.LastSortableUniqueId;
             _lastEventId = inlineState.LastEventId;
@@ -671,7 +671,7 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
 
     public void RestoreCheckpointState(WasmCheckpointState checkpoint)
     {
-        EnsureInstance().RestoreState(checkpoint.StateJson);
+        EnsureRestorableInstance().RestoreState(checkpoint.StateJson);
         _version = checkpoint.Version;
         _lastSortableUniqueId = checkpoint.LastSortableUniqueId;
         _lastEventId = checkpoint.LastEventId;
@@ -695,6 +695,22 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
 
         _instance = _host.CreateInstance(_projectorName);
         _logger.LogDebug("Created WASM projection instance for {ProjectorName}", _projectorName);
+        return _instance;
+    }
+
+    private IPrimitiveProjectionInstance EnsureRestorableInstance()
+    {
+        if (_instance is not null)
+        {
+            return _instance;
+        }
+
+        _instance = _host is IFreshPrimitiveProjectionHost freshHost
+            ? freshHost.CreateFreshInstance(_projectorName)
+            : _host.CreateInstance(_projectorName);
+        _logger.LogDebug(
+            "Created restorable WASM projection instance for {ProjectorName}",
+            _projectorName);
         return _instance;
     }
 

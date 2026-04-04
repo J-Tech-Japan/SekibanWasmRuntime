@@ -195,6 +195,41 @@ public class WasmProjectionActorHostTests
     }
 
     [Fact]
+    public async Task RestoreSnapshot_ShouldUse_FreshInstance_WhenHostSupportsIt()
+    {
+        var sourceInstance = new StubPrimitiveProjectionInstance();
+        var sourceHost = CreateHost(sourceInstance);
+
+        await sourceHost.AddSerializableEventsAsync(
+        [
+            new SerializableEvent(
+                Payload: Encoding.UTF8.GetBytes("""{"forecastId":"f-5","location":"Kyoto"}"""),
+                SortableUniqueIdValue: "20260316010101000000000000000005",
+                Id: Guid.NewGuid(),
+                EventMetadata: new EventMetadata("cause", "correlation", "user"),
+                Tags: ["WeatherForecast:f-5"],
+                EventPayloadName: "WeatherForecastCreated")
+        ]);
+
+        await using var snapshotStream = new MemoryStream();
+        var writeResult = await sourceHost.WriteSnapshotToStreamAsync(snapshotStream, canGetUnsafeState: true, CancellationToken.None);
+        Assert.True(writeResult.IsSuccess);
+
+        snapshotStream.Position = 0;
+
+        var restoredInstance = new StubPrimitiveProjectionInstance();
+        var restoreAwareHost = new RestoreAwarePrimitiveProjectionHost(restoredInstance);
+        var restoredHost = CreateHost(restoreAwareHost, "WeatherForecastMultiProjection");
+        var restoreResult = await restoredHost.RestoreSnapshotFromStreamAsync(snapshotStream, CancellationToken.None);
+
+        Assert.True(
+            restoreResult.IsSuccess,
+            restoreResult.IsSuccess ? string.Empty : restoreResult.GetException().ToString());
+        Assert.Equal(0, restoreAwareHost.CreateInstanceCallCount);
+        Assert.Equal(1, restoreAwareHost.CreateFreshInstanceCallCount);
+    }
+
+    [Fact]
     public async Task Snapshot_Write_ShouldUse_CompressedWasmPayload_Format()
     {
         var instance = new StubPrimitiveProjectionInstance();
@@ -549,6 +584,28 @@ public class WasmProjectionActorHostTests
             }
 
             return _instances.Dequeue();
+        }
+    }
+
+    private sealed class RestoreAwarePrimitiveProjectionHost(StubPrimitiveProjectionInstance instance) :
+        IPrimitiveProjectionHost,
+        IFreshPrimitiveProjectionHost
+    {
+        private readonly StubPrimitiveProjectionInstance _instance = instance;
+
+        public int CreateInstanceCallCount { get; private set; }
+        public int CreateFreshInstanceCallCount { get; private set; }
+
+        public IPrimitiveProjectionInstance CreateInstance(string projectorName)
+        {
+            CreateInstanceCallCount++;
+            return _instance;
+        }
+
+        public IPrimitiveProjectionInstance CreateFreshInstance(string projectorName)
+        {
+            CreateFreshInstanceCallCount++;
+            return _instance;
         }
     }
 

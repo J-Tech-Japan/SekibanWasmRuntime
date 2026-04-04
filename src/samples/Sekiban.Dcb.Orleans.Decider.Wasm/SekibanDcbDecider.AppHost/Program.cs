@@ -4,32 +4,10 @@ using System.Text.Json.Nodes;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
-var apiServicePort = ResolveConfiguredPort(5141, "E2E_API_SERVICE_PORT", "API_SERVICE_PORT");
-
-var storage = builder
-    .AddAzureStorage("azurestorage")
-    .RunAsEmulator();
-var clusteringTable = storage.AddTables("DcbOrleansClusteringTable");
-var grainTable = storage.AddTables("DcbOrleansGrainTable");
-var grainStorage = storage.AddBlobs("DcbOrleansGrainState");
-var queue = storage.AddQueues("DcbOrleansQueue");
-var multiProjectionOffload = storage.AddBlobs("MultiProjectionOffload");
-
 var postgresServer = builder
     .AddPostgres("dcbOrleansPostgres")
     .WithDbGate();
-var postgres = postgresServer.AddDatabase("DcbPostgres");
-var identityPostgres = postgresServer.AddDatabase("IdentityPostgres");
 var wasmPostgres = postgresServer.AddDatabase("SekibanCSharpDb");
-
-var orleans = builder
-    .AddOrleans("default")
-    .WithClustering(clusteringTable)
-    .WithGrainStorage("Default", grainStorage)
-    .WithGrainStorage("OrleansStorage", grainStorage)
-    .WithGrainStorage("dcb-orleans-queue", grainStorage)
-    .WithGrainStorage("DcbOrleansGrainTable", grainTable)
-    .WithStreaming(queue);
 
 var csharpWasmModulePath = ResolveCSharpWasmModulePath();
 var csharpManifestPath = ResolveCSharpManifestPath(csharpWasmModulePath);
@@ -44,6 +22,7 @@ var wasmServerBuilder = builder
     .WithEnvironment("SEKIBAN_WASM_AUTO_COMPACTION_INTERVAL_EVENTS", "20000")
     .WithEnvironment("SEKIBAN_WASM_FORCE_COMPACTING_GC_AFTER_COMPACTION", "true")
     .WithEnvironment("SEKIBAN_WASMTIME_STATIC_MEMORY_MAX_MB", "192")
+    .WithEnvironment("WASM_RUNTIME_ALLOWED_TAG_EVENT_TYPES__RoomProjector", "RoomCreated,RoomUpdated,RoomDeactivated,RoomReactivated")
     .WithReference(wasmPostgres, "SekibanDcb")
     .WaitFor(wasmPostgres)
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
@@ -59,27 +38,6 @@ wasmServerBuilder = wasmServerBuilder
     .WithEnvironment("ASPNETCORE_URLS", "http://127.0.0.1:" + wasmApiPort);
 
 var wasmServer = wasmServerBuilder;
-
-var apiServiceBuilder = builder
-    .AddProject<SekibanDcbDecider_ApiService>("apiservice")
-    .WithReference(postgres)
-    .WithReference(identityPostgres)
-    .WithReference(orleans)
-    .WithReference(multiProjectionOffload)
-    .WaitFor(postgres)
-    .WaitFor(identityPostgres);
-
-apiServiceBuilder = apiServiceBuilder
-    .WithEndpoint("http", endpoint =>
-    {
-        endpoint.Port = apiServicePort;
-        endpoint.TargetPort = apiServicePort;
-        endpoint.UriScheme = "http";
-        endpoint.IsProxied = false;
-    })
-    .WithEnvironment("ASPNETCORE_URLS", "http://127.0.0.1:" + apiServicePort);
-
-var apiService = apiServiceBuilder;
 
 var clientApiPort = ResolveConfiguredPort(5198, "E2E_CLIENT_API_PORT");
 var clientApiBuilder = builder
@@ -99,38 +57,6 @@ clientApiBuilder = clientApiBuilder
     .WithEnvironment("WASM_SERVER_URL", "http://127.0.0.1:" + wasmApiPort);
 
 var clientApi = clientApiBuilder;
-
-var webPort = ResolveConfiguredPort(5180, "E2E_WEB_PORT");
-var webFrontend = builder
-    .AddProject<SekibanDcbDecider_Web>("webfrontend")
-    .WithReference(clientApi.GetEndpoint("http"))
-    .WithReference(apiService.GetEndpoint("http"))
-    .WithEnvironment("CLIENT_API_URL", "http://127.0.0.1:" + clientApiPort)
-    .WithEnvironment("AUTH_API_URL", "http://127.0.0.1:" + apiServicePort)
-    .WaitFor(clientApi)
-    .WaitFor(apiService);
-
-webFrontend
-    .WithEndpoint("http", endpoint =>
-    {
-        endpoint.Port = webPort;
-        endpoint.TargetPort = webPort;
-        endpoint.UriScheme = "http";
-        endpoint.IsProxied = false;
-    })
-    .WithExternalHttpEndpoints()
-    .WithEnvironment("ASPNETCORE_URLS", "http://127.0.0.1:" + webPort);
-
-var webNextPort = ResolveConfiguredPort(3000, "E2E_WEBNEXT_PORT", "WEBNEXT_PORT");
-builder
-    .AddJavaScriptApp("webnext", "../SekibanDcbDecider.WebNext")
-    .WithHttpEndpoint(port: webNextPort, env: "PORT")
-    .WithExternalHttpEndpoints()
-    .WithEnvironment("NODE_ENV", "development")
-    .WithEnvironment("API_BASE_URL", "http://127.0.0.1:" + apiServicePort)
-    .WithEnvironment("CLIENT_API_BASE_URL", "http://127.0.0.1:" + clientApiPort)
-    .WaitFor(apiService)
-    .WaitFor(clientApi);
 
 builder.Build().Run();
 

@@ -1,377 +1,228 @@
-# Event Sourcing Runtime Comparison
+# Event Sourcing Runtime Benchmark Report
 
-Comprehensive comparison of Sekiban event sourcing across three runtime modes: C# Native, C# WebAssembly, and Rust WebAssembly.
+This document tracks the current benchmark status for the Sekiban sample runtimes after the 2026-04-03 optimization pass.
 
-## Runtime Architecture Overview
+The main comparable data set is now the fresh `30,000` event rerun from 2026-04-03 across:
 
-| | C# Native | C# WebAssembly | Rust WebAssembly |
+- C# Native
+- C# WASM
+- Rust WASM
+- MoonBit WASM
+
+Older 2026-04-02 and early 2026-04-03 result files are still kept under `benchmarks/results/` as historical references, especially for the pre-fix C# WASM regression.
+
+## Runtime Matrix
+
+| Runtime | Host Path | Client API | WASM Module | Module Size |
+|---|---|---|---|---|
+| C# Native | `submodules/Sekiban/templates/Sekiban.Dcb.Templates/content/Sekiban.Dcb.Orleans.Decider` | ASP.NET Core | N/A | N/A |
+| C# WASM | `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm` | ASP.NET Core proxy | `sekiban-dcb-decider.wasm` | ~35 MB |
+| Rust WASM | `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs` | Rust/Axum proxy | `sekiban-dcb-decider-rust.wasm` | ~728 KB |
+| MoonBit WASM | `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Mb` | Node proxy | `sekiban-dcb-decider-moonbit.wasm` | ~355 KB |
+
+The C# WASM sample AppHost is now treated as WASM-only. It launches `wasmserver` and `clientapi` only, and the sample-native `SekibanDcbDecider.ApiService` source has been removed from this tree. Native benchmark and stability runs should start from the Sekiban template AppHost directly, not from `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm`.
+
+## Benchmark Method
+
+- Tool: `benchmarks/Sekiban.Benchmark.Cli`
+- Scenario split:
+  - Setup
+  - Weather bulk write: 60%
+  - Reservation lifecycle: 40%
+  - Query performance: 250 queries
+- Concurrency: `8`
+- Target events: `30,000`
+- Database: Aspire-managed PostgreSQL
+- Storage provider: `postgres`
+
+All three WASM AppHosts now use the same WasmServer tuning:
+
+- `SEKIBAN_WASM_CATCHUP_CONCURRENCY=4`
+- `SEKIBAN_WASM_MULTIPROJECTION_CATCHUP_BATCH_SIZE=250`
+- `SEKIBAN_WASM_AUTO_COMPACTION_INTERVAL_EVENTS=20000`
+- `SEKIBAN_WASM_FORCE_COMPACTING_GC_AFTER_COMPACTION=true`
+- `SEKIBAN_WASMTIME_STATIC_MEMORY_MAX_MB=192`
+- `WASM_RUNTIME_ALLOWED_TAG_EVENT_TYPES__RoomProjector=RoomCreated,RoomUpdated,RoomDeactivated,RoomReactivated`
+
+The last setting is important for the C# WASM fix: it prevents `RoomProjector` cached tag-state replay from reapplying reservation-tagged events that do not belong to room-state evolution.
+
+## 2026-04-03 C# WASM 300K Rerun
+
+After separating the mixed sample host into a WASM-only AppHost, a fresh C# WASM `300,000` run was executed again on 2026-04-04.
+
+Result summary:
+
+| Phase | Events/sec | p50 | p95 | Errors |
+|---|---:|---:|---:|---:|
+| Setup | `122.6` | `7.2 ms` | `11.5 ms` | `0` |
+| WeatherBulk | `1398.2` | `5.5 ms` | `7.5 ms` | `0` |
+| ReservationLifecycle | `1941.4` | `9.9 ms` | `13.2 ms` | `0` |
+| QueryPerformance | `110.5 ops/sec` | `4.5 ms` | `23.3 ms` | `0` |
+
+Additional observations:
+
+- Total wall-clock: `193.4 s`
+- Peak WasmServer RSS: `~2617.8 MB`
+- Reservation progress stayed stable through the full `120,000` target events at roughly `1.9k-2.0k eps`
+- The earlier “300K reservation phase never finishes and RSS climbs toward 7 GB” regression did not reproduce on this build
+
+This means the current C# WASM path now satisfies the original memory target even at `300K`: it stayed below `4 GB` and completed the full benchmark successfully.
+
+## 2026-04-03 Fresh Comparable 30K Rerun
+
+The native row below now comes from a direct run against the Sekiban template AppHost. It no longer uses the mixed `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm` host.
+
+Throughput table:
+
+| Runtime | Weather events/sec | Reservation events/sec | Query ops/sec | Total wall-clock | Errors |
+|---|---:|---:|---:|---:|---:|
+| C# Native | `1855.5` | `1719.6` | `1723.6` | `17.2 s` | `0` |
+| C# WASM | `1329.6` | `1907.2` | `38.2` | `26.5 s` | `0` |
+| Rust WASM | `1336.8` | `1111.6` | `702.1` | `25.1 s` | `0` |
+| MoonBit WASM | `1284.1` | `1020.0` | `151.9` | `27.9 s` | `0` |
+
+Latency table:
+
+| Runtime | Weather p50 / p95 | Reservation p50 / p95 | Query p50 / p95 |
 |---|---|---|---|
-| **Projection Engine** | In-process .NET | Wasmtime (C# WASI) | Wasmtime (Rust WASI) |
-| **ClientApi** | ASP.NET Core (direct Orleans) | ASP.NET Core (HTTP proxy) | Rust Axum (HTTP proxy) |
-| **Command Handling** | In-process Orleans executor | Remote via WasmServer | Remote via WasmServer |
-| **Query Routing** | Orleans grain (local) | HTTP to WasmServer → Orleans | HTTP to WasmServer → Orleans |
-| **WASM Module Size** | N/A | 36.6 MB | 0.7 MB (Rust), 30.1 MB (shared) |
-| **Authentication** | JWT (ASP.NET Identity) | X-Debug-User-Id header | X-Debug-User-Id header |
-| **Tag State Resolution** | In-process Orleans grain | Orleans grain via HTTP | Orleans grain via HTTP |
+| C# Native | `4.1 / 5.7 ms` | `11.4 / 15.7 ms` | `0.2 / 0.4 ms` |
+| C# WASM | `5.8 / 7.8 ms` | `10.2 / 14.0 ms` | `13.3 / 52.9 ms` |
+| Rust WASM | `5.7 / 8.2 ms` | `19.6 / 25.1 ms` | `0.8 / 1.7 ms` |
+| MoonBit WASM | `6.0 / 8.4 ms` | `21.9 / 27.9 ms` | `2.5 / 22.9 ms` |
 
-## Test Environment
+Observed peak RSS:
 
-- **Machine**: Apple Silicon Mac (local development)
-- **Database**: PostgreSQL (Aspire container)
-- **Orleans**: In-memory clustering (development mode)
-- **Benchmark CLI**: `benchmarks/Sekiban.Benchmark.Cli`
-- **Concurrency**: 8 parallel HTTP clients
-- **Date**: 2026-04-01 (CS WASM updated 2026-04-01)
+| Runtime | Peak RSS | Note |
+|---|---:|---|
+| C# Native | `not remeasured` | the template-direct separation pass reran throughput only; the older mixed-host follow-up had `~1879.6 MB` peak RSS |
+| C# WASM | `~2041.3 MB` | sampled during `cs-wasm-30k-20260403-fixed-rss` |
+| Rust WASM | `~558.0 MB` | sampled during `rs-wasm-30k-20260403` |
+| MoonBit WASM | `~545.6 MB` | sampled during `mb-wasm-30k-20260403` |
 
-## 1. Command Throughput (Weather Bulk Write)
+### Current Takeaways
 
-Pure event write throughput with UUID-based aggregates (no tag contention).
+- The major C# WASM reservation regression is fixed. Reservation throughput improved from `60.6` events/sec on the earlier 2026-04-03 baseline to `1907.2` events/sec on the current run.
+- C# WASM no longer fails reservation progression by corrupting `RoomProjector` tag-state after reservation writes.
+- Native C# remains the strongest overall implementation after moving native measurement onto the template AppHost directly.
+- Rust WASM currently has the best query throughput by a large margin.
+- Rust WASM and MoonBit WASM still keep the smallest RSS footprints, both around `0.55 GB`.
+- C# WASM now fits comfortably under the `4 GB` goal, but query performance is still the weakest measured path.
 
-### 300K Events (180,000 weather events)
+## C# WASM Regression Fixes Applied
 
-| Metric | C# Native | C# WASM | Rust WASM |
-|--------|-----------|---------|-----------|
-| **Events/sec** | **1,939** | 1,511 | 1,730 |
-| **Duration** | **92.8s** | 119.1s | 104.0s |
-| **p50 latency** | **3.9ms** | 5.0ms | 4.4ms |
-| **p95 latency** | **5.3ms** | 6.8ms | 5.9ms |
-| **p99 latency** | **9.7ms** | 11.5ms | 10.7ms |
-| **Errors** | 0 | 0 | 0 |
-| **Stability** | Stable ~1,939/s | Stable ~1,511/s | Stable ~1,730/s |
+The following changes were applied before the 2026-04-03 rerun:
 
-### Relative Performance
+1. `RemoteCommandContext` now caches tag-state and latest-sortable lookups within a single remote command execution.
+2. `QuickReservationWorkflow` no longer issues a full room-list read before every quick reservation.
+3. `CreateQuickReservation` and `CreateReservationDraft` no longer perform redundant room existence lookups before loading room state.
+4. `KnownTagExistenceProbe` replaces the unsafe direct tracker-only fast path so tag existence is backfilled from the actor layer when needed.
+5. `SharedTagStateProcessor` now supports projector-scoped allowlists for delta replay, and `RoomProjector` is restricted to room lifecycle events only.
+6. The C#, Rust, and MoonBit AppHosts all pass the same `RoomProjector` allowlist into WasmServer.
 
-| Comparison | Overhead |
-|------------|----------|
-| C# WASM vs Native | -22% throughput, +28% p50 latency |
-| Rust WASM vs Native | -11% throughput, +13% p50 latency |
-| Rust WASM vs C# WASM | **+15% throughput**, -12% p50 latency |
+### C# WASM Before / After
 
-### Key Observations
+This compares the broken 2026-04-03 baseline (`cs-wasm-30k-20260403`) with the fixed run (`cs-wasm-30k-20260403-fixed-rss`):
 
-- **Native is fastest** as expected (no serialization or network boundary)
-- **Rust WASM surpasses C# WASM** by 15% in throughput despite both using the same WasmServer backend
-- All three maintain **flat throughput curves** at 180K events (no degradation at scale)
-- Rust WASM's previous scalability issue (960→267 events/sec) has been **fully resolved** by KnownTagTracker and TagStateResponseCache optimizations
+| Metric | Before | After |
+|---|---:|---:|
+| Reservation events/sec | `60.6` | `1907.2` |
+| Reservation p95 | `620.6 ms` | `14.0 ms` |
+| Total wall-clock | `213.7 s` | `26.5 s` |
+| Peak RSS | `~2536.1 MB` | `~2041.3 MB` |
+| Reservation errors | `0` | `0` |
 
-## 2. Complex Command Workflow (Reservation Lifecycle)
+The earlier failed optimization attempts from the same day (`cs-wasm-30k-20260403-opt` and `cs-wasm-30k-20260403-cache`) showed why the final fix needed projector-aware filtering:
 
-QuickReservation workflow: creates draft + hold + confirm (3 events per call), with room availability checks and user monthly limit validation.
+- they produced very low reported reservation event throughput because most reservation operations failed immediately
+- they emitted `7980` reservation errors
+- they did not preserve valid room-state after reservation-tagged writes
 
-### 5K Events (2,000 reservation events, 20 rooms)
+## Remaining Bottlenecks
 
-| Metric | C# Native | C# WASM | Rust WASM |
-|--------|-----------|---------|-----------|
-| **Events/sec** | 203 | 932 | **1,167** |
-| **p50 latency** | 102.9ms | 18.3ms | **18.4ms** |
-| **p95 latency** | 138.2ms | 35.7ms | **24.7ms** |
-| **Errors** | **0** | 27 | **0** |
+- C# WASM query throughput is still far below native and Rust WASM. The main remaining gap is query-side state access rather than reservation command execution.
+- Rust WASM and MoonBit WASM now look memory-efficient, but their reservation lifecycle throughput trails the fixed C# WASM path.
+- Native C# had one noisy follow-up RSS rerun with `8` transient reservation `500` responses; the clean throughput rerun did not reproduce that. This needs separate investigation if native stability becomes a priority.
 
-### 300K Events (120,000 reservation events, 20 rooms)
+## Result Files
 
-| Metric | C# Native | C# WASM | Rust WASM |
-|--------|-----------|---------|-----------|
-| **Events/sec** | ~100* | **123** | **292** |
-| **p50 latency** | ~100ms* | 150.0ms | **74.0ms** |
-| **p95 latency** | ~140ms* | 328.4ms | **116.0ms** |
-| **Errors** | 0* | 60 (500) | **0** |
-| **Duration** | N/A | 971.9s | 313.3s |
+### Current 2026-04-03 comparable reruns
 
-*Native 300K reservation estimated from 5K performance curve. Full 300K run not completed due to execution time (>2 hours).
+- `benchmarks/results/native-template-30k-20260403.json`
+- `benchmarks/results/cs-wasm-30k-20260403-fixed.json`
+- `benchmarks/results/cs-wasm-30k-20260403-fixed-rss.json`
+- `benchmarks/results/cs-wasm-30k-20260403-fixed-rss.log`
+- `benchmarks/results/rs-wasm-30k-20260403.json`
+- `benchmarks/results/rs-wasm-30k-20260403-rss.log`
+- `benchmarks/results/mb-wasm-30k-20260403.json`
+- `benchmarks/results/mb-wasm-30k-20260403-rss.log`
 
-> **CS WASM improvement**: Previously 1,559 errors (before memory optimization) → 60 errors (after optimization). Error reduction of 96%. The remaining 60 errors are tag contention 500s under sustained high load.
+### Historical regression reference files
 
-### Why Native Reservations Are Slower
+- `benchmarks/results/native-30k-20260403-rerun.json`
+- `benchmarks/results/native-30k-20260403-rerun-rss.log`
+- `benchmarks/results/cs-wasm-30k-20260402.json`
+- `benchmarks/results/mb-wasm-30k-20260402.json`
+- `benchmarks/results/cs-wasm-30k-20260403.json`
+- `benchmarks/results/cs-wasm-30k-20260403-rss.log`
+- `benchmarks/results/cs-wasm-30k-20260403-opt.json`
+- `benchmarks/results/cs-wasm-30k-20260403-opt-rss.log`
+- `benchmarks/results/cs-wasm-30k-20260403-cache.json`
+- `benchmarks/results/cs-wasm-30k-20260403-cache-rss.log`
+- `benchmarks/results/cs-wasm-300k-20260403-split-clean.json`
+- `benchmarks/results/cs-wasm-300k-20260403-split-rss.log`
+- `benchmarks/results/cs-wasm-300k-20260403.json`
+- `benchmarks/results/cs-wasm-300k-20260403-rss.log`
 
-Native QuickReservation executes **3 sequential Orleans commands** (draft → hold → confirm), each performing:
-1. Tag state queries (Room, Reservation, UserAccess, UserDirectory, UserMonthlyReservation)
-2. Optimistic concurrency consistency checks
-3. Event persistence
-
-Each command is a **separate Orleans grain call** with full consistency semantics. WASM samples execute the same workflow but through a single HTTP request to the ClientApi which batches the tag-state lookups with client-side caching.
-
-### Error Analysis
-
-| Error Type | C# Native | C# WASM | Rust WASM |
-|------------|-----------|---------|-----------|
-| Time slot conflict (400) | Present at scale | Occasional | **0** |
-| Tag contention (500) | 0 | 27 (5K) / 1,559 (300K) | **0** |
-| Auth expiry (401) | 0 (with token refresh) | 0 | 0 |
-
-Rust WASM achieves **zero errors** across all test runs due to:
-- Better time slot distribution in benchmark scenario
-- Tag-state caching reducing concurrent access conflicts
-- No optimistic concurrency retries needed
-
-## 3. Query Performance
-
-Query execution after all writes: room list, reservation list, reservations-by-room, weather count, weather list (5 queries × 50 iterations = 250 queries).
-
-### After 5K Events
-
-| Metric | C# Native | C# WASM | Rust WASM |
-|--------|-----------|---------|-----------|
-| **Queries/sec** | **1,680** | 162* | 162 |
-| **p50 latency** | **0.3ms** | 2.6ms | 2.8ms |
-| **p95 latency** | **0.5ms** | 4.0ms | 13.0ms |
-| **Errors** | 0 | 0 | 0 |
-
-### After 300K Events
-
-| Metric | C# Native | C# WASM | Rust WASM |
-|--------|-----------|---------|-----------|
-| **Queries/sec** | **1,742** | 476 | **1,119** |
-| **p50 latency** | **0.1ms** | 1.8ms | 0.4ms |
-| **p95 latency** | **0.5ms** | 3.1ms | 0.6ms |
-| **Errors** | 0 | **0** | **0** |
-
-> Queries after 300K events work reliably for all 3 runtimes. DirectReplayQuery is disabled (`return null;`), so queries use DirectSnapshotQuery (cached Orleans grain state). Rust WASM queries are 2.3x faster than CS WASM due to smaller WASM module overhead.
-
-### Why Native Queries Are Sub-Millisecond
-
-- Native queries execute **in-process** on Orleans grains that hold projection state in memory
-- No serialization, no network hop, no WASM boundary crossing
-- Grain state is incrementally maintained via Orleans streaming — no replay needed
-
-### Why WASM Queries Improved Dramatically After Optimization
-
-- **Before**: DirectReplayQuery re-projected all events from scratch on each query (O(n) with n = total events), causing 30s timeouts
-- **After**: DirectReplayQuery disabled; DirectSnapshotQuery exclusively used → Orleans grain serves projection state from snapshot cache
-- Remaining overhead is HTTP serialization between ClientApi ↔ WasmServer ↔ Orleans grain (1-3ms round trip)
-
-## 4. Scalability Characteristics
-
-### Throughput Stability Over Time (Weather Bulk, 180K events)
-
-| Events Processed | C# Native | C# WASM | Rust WASM |
-|-----------------|-----------|---------|-----------|
-| 10K | ~1,700 | ~1,500 | ~1,700 |
-| 50K | ~1,930 | ~1,560 | ~1,735 |
-| 100K | ~1,965 | ~1,560 | ~1,739 |
-| 150K | ~1,970 | ~1,560 | ~1,733 |
-| 180K | ~1,939 | ~1,566 | ~1,730 |
-| **Trend** | Stable/improving | Stable | Stable |
-
-All three runtimes maintain stable throughput across the full 180K event run with no degradation.
-
-## 5. WASM Sandboxing Overhead
-
-Based on Weather Bulk (fairest comparison — identical domain logic, no contention):
-
-| Comparison | Throughput Impact | Latency Impact |
-|------------|-------------------|----------------|
-| C# WASM vs Native | **-19%** | **+21%** (p50) |
-| Rust WASM vs Native | **-11%** | **+13%** (p50) |
-
-The WASM sandbox overhead is modest (11-22% throughput reduction), making it viable for production use where sandboxing or multi-tenant isolation is desired.
-
-## 6. Reliability and Error Handling
-
-### Total Errors Across 300K Event Runs (After All Optimizations)
-
-| Metric | C# Native | C# WASM (before opt) | C# WASM (after opt) | Rust WASM |
-|--------|-----------|---------------------|---------------------|-----------|
-| **Weather errors** | 0 | 0 | 0 | 0 |
-| **Reservation errors** | 0* | 1,559 | 60 (500) | **0** |
-| **Query errors** | 0 | 35 (timeout) | **0** | **0** |
-| **Total errors** | 0* | 1,594 | **60** | **0** |
-
-*With benchmark fixes (X-Debug-User-Id, JWT refresh, slot distribution).
-
-Rust WASM maintains **zero errors across all phases**. CS WASM improved from 1,594 → 60 errors (-96%) after memory optimization. The remaining 60 are tag-contention 500s under sustained concurrent writes at 300K scale.
-
-### Error Type Analysis
-
-| Error Type | C# Native | C# WASM | Rust WASM |
-|------------|-----------|---------|-----------|
-| Time slot conflict (400) | Present at scale | 0 | **0** |
-| Tag contention (500) | 0 | 60 (at 300K) | **0** |
-| DirectReplay timeout (5xx) | 0 | 0 (after opt) | 0 |
-| Auth expiry (401) | 0 (with token refresh) | 0 | 0 |
-
-## 7. Development Experience
-
-| Aspect | C# Native | C# WASM | Rust WASM |
-|--------|-----------|---------|-----------|
-| **Language** | C# | C# | Rust |
-| **Build time** | Fast (~3s) | Moderate (~10s WASM compile) | Slow (~30s release build) |
-| **Module portability** | None (in-process) | WASI module (36.6 MB) | WASI module (0.7 MB) |
-| **Debugging** | Full IDE support | Limited (WASM boundary) | Limited (WASM boundary) |
-| **Type safety** | Compile-time | Compile-time | Compile-time + ownership |
-| **Hot reload** | Supported | Requires WASM rebuild | Requires WASM rebuild |
-
-## 8. Summary: When to Use Each Runtime
+## How To Reproduce
 
 ### C# Native
-- **Best for**: Maximum performance, in-process projections, single-tenant deployments
-- **Strengths**: Fastest queries (sub-ms), highest write throughput, full .NET ecosystem
-- **Trade-offs**: No WASM sandboxing, projections coupled to host process
-
-### C# WebAssembly
-- **Best for**: C# teams wanting WASM sandboxing with familiar language
-- **Strengths**: Same language for domain + host, mature tooling, memory now held below 4 GB with a measured ~2.2 GB peak in the latest tuned run
-- **Trade-offs**: Largest WASM module (36.6 MB), some tag contention errors at 300K scale (60 errors)
-
-### Rust WebAssembly
-- **Best for**: Maximum WASM performance, smallest module size, zero-error reliability
-- **Strengths**: Smallest module (0.7 MB), highest WASM throughput, zero errors, stable at scale
-- **Trade-offs**: Rust learning curve, slower build times
-
-## 9. Query Validation After 300K Events
-
-After writing 300K events, we validated that each runtime can still serve queries and return the latest data.
-
-### Data Retrieval Capability
-
-| Query | C# Native | C# WASM | Rust WASM |
-|-------|-----------|---------|-----------|
-| **Weather count** | 180,001 (after catch-up) | 180,001 | 180,001 |
-| **Weather list (5 items)** | OK (2ms) | OK (88ms) | OK (720ms) |
-| **Room list (20 rooms)** | OK (2ms) | OK (5ms) | OK (4ms) |
-| **Reservation list** | OK (after catch-up) | OK (40ms) | OK (400ms) |
-| **Latest data visible** | Delayed (async catch-up) | Immediate | Immediate |
-| **Errors** | 0 | 0 | 0 |
-
-### Query Latency After 300K Events (warm cache, pageSize=5)
-
-| Query | C# Native | C# WASM | Rust WASM |
-|-------|-----------|---------|-----------|
-| **Weather list** | **2ms** | 88ms | 720ms |
-| **Reservation list** | **1ms** | 40ms | 400ms |
-| **Room list** | **2ms** | 5ms | 4ms |
-
-### Key Findings
-
-- **All three runtimes can successfully query all data after 300K events**
-- **Native** queries are sub-millisecond but require catch-up time — multi-projection grains asynchronously process events, so immediately after writes, safeVersion may lag behind. After catch-up completes (~30-60s for 180K events), all data is accessible.
-- **CS WASM** queries work at ~88ms for weather, but during benchmark's QueryPerformance phase, some queries hit the 30-second DirectReplayQuery timeout (36 errors out of 250). Individual queries after warm-up work reliably.
-- **Rust WASM** queries are slower (720ms for full weather list) because the full projection state (180K items) is serialized over HTTP. Small pages (5 items) work within the same latency. Zero errors.
-
-### Why Rust WASM Weather Queries Are Slow
-
-The Rust WASM weather query returns the full `WeatherForecastListState` containing 180,001 items. This state must be:
-1. Serialized in the WASM module → JSON
-2. Transferred from WasmServer through the Orleans grain
-3. Deserialized in the query handler
-
-For paginated results, only a subset is needed, but the current architecture serializes the entire projection state before pagination. Room queries (20 items) return in 4ms, demonstrating that small projections are fast.
-
-## 10. Memory Usage
-
-Memory usage (RSS) re-measured on 2026-04-02 by sampling the `wasmserver` process every 2 seconds with `ps`.
-
-### Current Memory Ceiling
-
-| Scenario | Previous optimized baseline | Current tuned runtime |
-|---------|-----------------------------|-----------------------|
-| **Startup RSS** | 223 MB | ~223 MB |
-| **Peak RSS during 300K benchmark run** | 9,711 MB | **2,179 MB** |
-| **RSS after entering reservation phase** | 6,458 MB retained | **~1.9-2.1 GB** |
-
-The old post-compaction RSS retention issue is no longer reproducible in the current runtime path. In the latest run, C# WASM stayed below 4 GB for the entire observed 300K benchmark window and peaked at roughly 2.2 GB.
-
-### Latest CS WASM Timeline
-
-Observed with the current runtime changes:
-
-| Phase | WasmServer RSS |
-|------|----------------|
-| Startup | ~223 MB |
-| Weather bulk ramp | 0.6→1.0 GB |
-| End of 180K weather events | **~2.18 GB** |
-| Early reservation lifecycle | **~1.9-2.1 GB** |
-
-### What Changed
-
-| # | Optimization | Impact | Location |
-|---|---|---|---|
-| 1 | **Warmup disabled** | Removes idle startup instance allocation | WasmtimeProjectionWarmupService |
-| 2 | **Tag projector filtering** | Avoids unnecessary MultiProjection grains | `Sekiban.Dcb.WasmRuntime.Host/Program.cs` |
-| 3 | **SharedTagStateProcessor** | Keeps tag-state instance count bounded | `Sekiban.Dcb.WasmRuntime.Host/Program.cs` |
-| 4 | **DirectReplayQuery disabled** | Avoids duplicate in-process replay state | `Sekiban.Dcb.WasmRuntime.Host/Program.cs` |
-| 5 | **Direct snapshot cache eviction under RSS pressure** | Drops restored query hosts before they become sticky RSS | `Sekiban.Dcb.WasmRuntime.Host/Program.cs` |
-| 6 | **MultiProjection catch-up tuning** | Lower batch/pending limits reduce concurrent in-flight state | `Sekiban.Dcb.WasmRuntime.Host/Program.cs` |
-| 7 | **Configurable catch-up concurrency gate** | Allows the host/app to cap cross-projector catch-up memory | `WasmProjectionActorHost` |
-| 8 | **Auto-compaction every 20K events** | Resets linear memory earlier than the old 50K boundary | `WasmProjectionActorHost` |
-| 9 | **Forced LOH compaction after host compaction** | Releases disposed store buffers much more aggressively | `WasmProjectionActorHost` |
-| 10 | **Wasmtime static memory cap (192 MB in sample AppHost)** | Lowers reserved linear-memory footprint per instance | `WasmtimeRuntime`, sample AppHost |
-
-### Current Status
-
-- **Resolved**: C# WASM memory usage is now below the 4 GB target. The measured peak in the latest 300K benchmark run was ~2.18 GB.
-- **Resolved**: The old 5.5 GB "disposed store RSS retention" explanation is no longer the dominant behavior after 20K compaction + forced LOH compaction.
-- **Open**: Reservation throughput now needs a separate tuning pass. The memory-focused configuration keeps RSS low, but the reservation phase remains the main runtime bottleneck.
-
-## Performance Tuning Applied
-
-### WasmServer Optimizations (Program.cs)
-
-1. **KnownTagTracker**: Tags without committed events return empty state immediately, bypassing Orleans grain activation and WASM instance creation. Impact: eliminated ~180K unnecessary grain activations per weather bulk run.
-
-2. **TagStateResponseCache**: Caches computed tag-state responses; invalidated on commit for affected tags. Impact: repeated tag-state queries for the same tag (e.g., room lookups) return instantly.
-
-### Rust Executor Optimizations (sekiban-executor)
-
-3. **Tag state caching**: `HttpCommandContext` caches tag-state HTTP responses per command execution, matching C#'s `_accessedTagStates` pattern. Impact: +49% throughput.
-
-4. **Connection pooling**: `pool_max_idle_per_host(16)`, `pool_idle_timeout(300s)`, `tcp_nodelay(true)` for reduced connection overhead.
-
-### Rust WASM Module Optimizations (domain code)
-
-5. **HashMap-based projectors**: Converted all multi-projector states from `Vec<T>` to `HashMap<Uuid, T>` for O(1) lookups instead of O(n).
-
-6. **Registry caching**: Projector factory registry cached in thread-local storage, built once per domain type.
-
-7. **Clone elimination**: Query execution uses references instead of cloning state collections.
-
-### Benchmark CLI Improvements
-
-8. **JWT token auto-refresh**: Monitors token expiry and refreshes 60 seconds before expiration, eliminating 401 errors in long-running benchmarks.
-
-9. **X-Debug-User-Id support**: Native template now respects debug header for per-request user identity, enabling fair reservation benchmarking.
-
-10. **Time slot distribution**: Reservations distributed across (room, day, hour) triples to minimize time conflict errors.
-
-### Cumulative Rust WASM Improvement
-
-| Metric | Original | After All Optimizations | Improvement |
-|--------|----------|------------------------|-------------|
-| Weather events/sec (300K) | 267 | **1,730** | **+548%** |
-| Weather stability | 960→267 (degrading) | **1,730 stable** | Resolved |
-| Reservation events/sec | 100 | **292** | **+192%** |
-| Total 300K time | 1,929s | **571s** | **-70%** |
-| Total errors | 0 | **0** | Maintained |
-
-### Cumulative CS WASM Improvement
-
-| Metric | Original | After All Optimizations | Improvement |
-|--------|----------|------------------------|-------------|
-| **WasmServer startup** | 2,416 MB | **223 MB** | **-91%** |
-| **WasmServer peak (latest tuned run)** | 10,552 MB | **2,179 MB** | **-79%** |
-| **WasmServer during reservation phase** | 6,458 MB retained | **~1.9-2.1 GB** | RSS retention resolved |
-| Weather events/sec (300K) | 1,566 | **1,580** | Stable |
-| Query perf after 300K | 0.2 q/s (timeouts) | **553 q/s** | **+2765x** |
-| Reservation errors (300K) | 840 | **120** | **-86%** |
-| Query timeout errors | 35 | **0** | Eliminated |
-
-## How to Run
 
 ```bash
-# C# Native
-aspire start --isolated --project submodules/Sekiban/.../SekibanDcbDecider.AppHost.csproj
-dotnet run --project benchmarks/Sekiban.Benchmark.Cli -- \
-  --base-url http://localhost:<PORT> --mode-label native \
-  --total-events 300000 --concurrency 8
+dotnet run --project submodules/Sekiban/templates/Sekiban.Dcb.Templates/content/Sekiban.Dcb.Orleans.Decider/SekibanDcbDecider.AppHost/SekibanDcbDecider.AppHost.csproj
 
-# C# WASM
-aspire start --isolated --project src/samples/.../Wasm/SekibanDcbDecider.AppHost.csproj
-dotnet run --project benchmarks/Sekiban.Benchmark.Cli -- \
-  --base-url http://localhost:<PORT> --mode-label cs-wasm \
-  --total-events 300000 --concurrency 8
+dotnet run --project benchmarks/Sekiban.Benchmark.Cli/Sekiban.Benchmark.Cli.csproj -- \
+  --base-url http://127.0.0.1:5141 \
+  --mode-label native-30k-local \
+  --total-events 30000 \
+  --concurrency 8 \
+  --output benchmarks/results/native-30k-local.json
+```
 
-# Rust WASM
-aspire start --isolated --project src/samples/.../Wasm.Rs/SekibanDcbDecider.AppHost.csproj
-dotnet run --project benchmarks/Sekiban.Benchmark.Cli -- \
-  --base-url http://localhost:<PORT> --mode-label rs-wasm \
-  --total-events 300000 --concurrency 8
+### C# WASM
+
+```bash
+dotnet run --project src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/SekibanDcbDecider.AppHost/SekibanDcbDecider.AppHost.csproj
+
+dotnet run --project benchmarks/Sekiban.Benchmark.Cli/Sekiban.Benchmark.Cli.csproj -- \
+  --base-url http://127.0.0.1:5198 \
+  --mode-label cs-wasm-30k-local \
+  --total-events 30000 \
+  --concurrency 8 \
+  --output benchmarks/results/cs-wasm-30k-local.json
+```
+
+### Rust WASM
+
+```bash
+dotnet run --project src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/SekibanDcbDecider.AppHost/SekibanDcbDecider.AppHost.csproj
+
+dotnet run --project benchmarks/Sekiban.Benchmark.Cli/Sekiban.Benchmark.Cli.csproj -- \
+  --base-url http://127.0.0.1:6198 \
+  --mode-label rs-wasm-30k-local \
+  --total-events 30000 \
+  --concurrency 8 \
+  --output benchmarks/results/rs-wasm-30k-local.json
+```
+
+### MoonBit WASM
+
+```bash
+dotnet run --project src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Mb/SekibanDcbDecider.AppHost/SekibanDcbDecider.AppHost.csproj
+
+dotnet run --project benchmarks/Sekiban.Benchmark.Cli/Sekiban.Benchmark.Cli.csproj -- \
+  --base-url http://127.0.0.1:6198 \
+  --mode-label mb-wasm-30k-local \
+  --total-events 30000 \
+  --concurrency 8 \
+  --output benchmarks/results/mb-wasm-30k-local.json
 ```

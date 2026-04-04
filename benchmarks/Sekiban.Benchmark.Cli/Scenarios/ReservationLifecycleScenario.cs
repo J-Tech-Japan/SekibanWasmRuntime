@@ -30,16 +30,32 @@ public static class ReservationLifecycleScenario
         var opsCount = 0;
         var latencies = new List<double>();
         var statusCounts = new Dictionary<int, int>();
+        var lastReportedEvents = 0;
+        var lastReportedErrors = 0;
+        var lastReportedOps = 0;
+        var lastReportedAt = TimeSpan.Zero;
+        var progressLock = new object();
 
         var semaphore = new SemaphoreSlim(effectiveConcurrency);
         var tasks = new List<Task>();
         var callIndex = 0;
 
-        // Keep within this month and next month to satisfy validation
         var now = DateTime.UtcNow;
-        var daysInRange = DateTime.DaysInMonth(now.Year, now.Month)
-            + DateTime.DaysInMonth(now.AddMonths(1).Year, now.AddMonths(1).Month)
-            - now.Day;
+        // Keep within this month and next month to satisfy validation.
+        // If today's benchmark slots (08:00-21:00 UTC) have already started, advance to tomorrow
+        // so we don't generate a fixed block of "past reservation" failures.
+        var benchmarkStartDate = now < now.Date.AddHours(8)
+            ? now.Date
+            : now.Date.AddDays(1);
+        var lastReservableDate = new DateTime(
+            now.AddMonths(1).Year,
+            now.AddMonths(1).Month,
+            DateTime.DaysInMonth(now.AddMonths(1).Year, now.AddMonths(1).Month),
+            0,
+            0,
+            0,
+            DateTimeKind.Utc);
+        var daysInRange = Math.Max((lastReservableDate.Date - benchmarkStartDate.Date).Days + 1, 1);
 
         // Generate enough unique time slots to avoid room reservation conflicts.
         // Each reservation occupies 1 hour, so we can fit ~14 per day (8:00-22:00).
@@ -51,6 +67,7 @@ public static class ReservationLifecycleScenario
 
         while (Volatile.Read(ref eventsCreated) < targetEvents && Volatile.Read(ref callIndex) < maxCalls)
         {
+            ReportProgressIfNeeded();
             await semaphore.WaitAsync();
             var idx = Interlocked.Increment(ref callIndex) - 1;
 
@@ -67,7 +84,7 @@ public static class ReservationLifecycleScenario
             {
                 try
                 {
-                    var baseTime = now.Date.AddDays(dayOffset).AddHours(8 + hourSlot);
+                    var baseTime = benchmarkStartDate.AddDays(dayOffset).AddHours(8 + hourSlot);
 
                     // Use unique organizerId per request to avoid UserMonthlyReservation tag contention
                     var organizerId = Guid.NewGuid();
@@ -112,12 +129,7 @@ public static class ReservationLifecycleScenario
                             Interlocked.Increment(ref eventsCreated);
                     }
 
-                    var current = Volatile.Read(ref eventsCreated);
-                    if (current % 10000 == 0 && current > 0)
-                    {
-                        var elapsed = sw.Elapsed.TotalSeconds;
-                        Console.WriteLine($"  Progress: ~{current:N0}/{targetEvents:N0} events ({current / elapsed:F0} events/sec)");
-                    }
+                    ReportProgressIfNeeded();
                 }
                 catch (Exception ex)
                 {
@@ -143,6 +155,7 @@ public static class ReservationLifecycleScenario
 
         await Task.WhenAll(tasks);
         sw.Stop();
+        ReportProgress(force: true);
 
         foreach (var ms in latencies) phase.CommandLatency.Record(ms);
         phase.CommandLatency.Compute();
@@ -167,7 +180,73 @@ public static class ReservationLifecycleScenario
                 statusCounts[code] = statusCounts.GetValueOrDefault(code) + 1;
             Interlocked.Increment(ref opsCount);
             if (!resp.IsSuccessStatusCode)
+            {
                 Interlocked.Increment(ref errorCount);
+                var currentErrors = Volatile.Read(ref errorCount);
+                if (currentErrors <= 5)
+                {
+                    var body = string.IsNullOrWhiteSpace(resp.Body) ? "<empty>" : resp.Body;
+                    if (body.Length > 400)
+                    {
+                        body = body[..400];
+                    }
+
+                    Console.WriteLine($"  [HTTP {(int)resp.StatusCode}] {body}");
+                }
+            }
+        }
+
+        void ReportProgressIfNeeded()
+        {
+            lock (progressLock)
+            {
+                var elapsed = sw.Elapsed;
+                if (elapsed - lastReportedAt >= TimeSpan.FromSeconds(15))
+                {
+                    ReportProgressCore(elapsed, force: false);
+                }
+            }
+        }
+
+        void ReportProgress(bool force = false)
+        {
+            lock (progressLock)
+            {
+                ReportProgressCore(sw.Elapsed, force);
+            }
+        }
+
+        void ReportProgressCore(TimeSpan elapsed, bool force)
+        {
+            if (!force && elapsed - lastReportedAt < TimeSpan.FromSeconds(15))
+            {
+                return;
+            }
+
+            var currentEvents = Volatile.Read(ref eventsCreated);
+            var currentErrors = Volatile.Read(ref errorCount);
+            var currentOps = Volatile.Read(ref opsCount);
+            var intervalSeconds = Math.Max((elapsed - lastReportedAt).TotalSeconds, 0.001);
+            var intervalEvents = currentEvents - lastReportedEvents;
+            var intervalErrors = currentErrors - lastReportedErrors;
+            var intervalOps = currentOps - lastReportedOps;
+            var averageEventsPerSecond = currentEvents / Math.Max(elapsed.TotalSeconds, 0.001);
+            var intervalEventsPerSecond = intervalEvents / intervalSeconds;
+
+            Console.WriteLine(
+                $"  Progress: events={currentEvents:N0}/{targetEvents:N0} ops={currentOps:N0} " +
+                $"avg={averageEventsPerSecond:F0} eps interval={intervalEventsPerSecond:F0} eps " +
+                $"deltaEvents={intervalEvents:N0} deltaOps={intervalOps:N0} errors={currentErrors:N0} deltaErrors={intervalErrors:N0}");
+
+            if (intervalEvents == 0 && currentEvents < targetEvents)
+            {
+                Console.WriteLine("  [STALL] No reservation events completed in the last interval.");
+            }
+
+            lastReportedAt = elapsed;
+            lastReportedEvents = currentEvents;
+            lastReportedErrors = currentErrors;
+            lastReportedOps = currentOps;
         }
     }
 }

@@ -18,6 +18,8 @@ public sealed class RemoteCommandContext(
     private readonly DcbDomainTypes _domainTypes = domainTypes;
     private readonly ILogger<RemoteCommandContext> _logger = logger;
     private readonly Dictionary<ITag, TagState> _accessedTagStates = [];
+    private readonly Dictionary<string, TagState> _tagStatesById = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _latestSortableByTag = new(StringComparer.Ordinal);
     private readonly List<EventPayloadWithTags> _appendedEvents = [];
 
     public IReadOnlyDictionary<ITag, TagState> AccessedTagStates => _accessedTagStates;
@@ -64,6 +66,12 @@ public sealed class RemoteCommandContext(
 
     private async Task<TagState> GetTagStateAsync(ITag tag, TagStateId tagStateId)
     {
+        if (_tagStatesById.TryGetValue(tagStateId.GetTagStateId(), out TagState? cachedState))
+        {
+            _accessedTagStates[tag] = cachedState;
+            return cachedState;
+        }
+
         var response = await _httpClient.PostAsJsonAsync(
             "/api/sekiban/serialized/tag-state",
             new TagStateRequest(tagStateId.GetTagStateId()),
@@ -108,19 +116,31 @@ public sealed class RemoteCommandContext(
             serializableState.TagProjector,
             serializableState.ProjectorVersion);
         _accessedTagStates[tag] = tagState;
+        _tagStatesById[tagStateId.GetTagStateId()] = tagState;
+        _latestSortableByTag[tag.GetTag()] = tagState.LastSortedUniqueId;
         return tagState;
     }
 
     private async Task<TagLatestSortableResponse> GetLatestSortableAsync(ITag tag)
     {
+        if (_latestSortableByTag.TryGetValue(tag.GetTag(), out string? cachedLatestSortable))
+        {
+            return new TagLatestSortableResponse(
+                !string.IsNullOrWhiteSpace(cachedLatestSortable),
+                cachedLatestSortable);
+        }
+
         var response = await _httpClient.PostAsJsonAsync(
             "/api/sekiban/serialized/tag-latest-sortable",
             new TagLatestSortableRequest(tag.GetTag()),
             TransportJsonOptions);
         await EnsureSuccessAsync(response, "serialized/tag-latest-sortable");
 
-        return await response.Content.ReadFromJsonAsync<TagLatestSortableResponse>(TransportJsonOptions)
+        TagLatestSortableResponse latestSortableResponse =
+            await response.Content.ReadFromJsonAsync<TagLatestSortableResponse>(TransportJsonOptions)
             ?? throw new InvalidOperationException("Null response from WASM host tag-latest-sortable endpoint.");
+        _latestSortableByTag[tag.GetTag()] = latestSortableResponse.LastSortableUniqueId;
+        return latestSortableResponse;
     }
 
     private static async Task EnsureSuccessAsync(HttpResponseMessage response, string endpointName)

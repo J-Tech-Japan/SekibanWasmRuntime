@@ -14,6 +14,7 @@ using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.ColdEvents;
 using Sekiban.Dcb.Commands;
+using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Orleans;
 using Sekiban.Dcb.Orleans.Grains;
@@ -103,6 +104,7 @@ builder.Services.AddSingleton<ProjectionInstanceStore>();
 builder.Services.AddSingleton(directSnapshotQueryCacheOptions);
 builder.Services.AddSingleton<DirectSnapshotQueryCache>();
 builder.Services.AddSingleton<KnownTagTracker>();
+builder.Services.AddSingleton<KnownTagExistenceProbe>();
 builder.Services.AddSingleton<TagStateResponseCache>();
 builder.Services.AddSingleton<DirectTagStateCache>();
 builder.Services.AddSingleton(new WaitForSortableUniqueIdTimeoutOptions
@@ -261,6 +263,7 @@ var sharedTagStateProcessor = new SharedTagStateProcessor(
     app.Services.GetRequiredService<IActorObjectAccessor>(),
     app.Services.GetRequiredService<WasmProjectorRegistry>(),
     domainTypes,
+    builder.Configuration,
     app.Services.GetRequiredService<ILoggerFactory>());
 
 app.MapPost("/api/sekiban/serialized/tag-state", async (HttpContext http, TagStateRequest request) =>
@@ -279,9 +282,9 @@ app.MapPost("/api/sekiban/serialized/tag-state", async (HttpContext http, TagSta
 
     // Fast path: if this tag has never had events committed, return empty state immediately.
     // This avoids Orleans grain activation and WASM instance creation for brand-new tags.
-    var tagTracker = http.RequestServices.GetRequiredService<KnownTagTracker>();
+    var tagProbe = http.RequestServices.GetRequiredService<KnownTagExistenceProbe>();
     var tagGroupContent = $"{tagStateId.TagGroup}:{tagStateId.TagContent}";
-    if (!tagTracker.HasKnownEvents(tagGroupContent))
+    if (await tagProbe.ProbeAsync(tagGroupContent) == KnownTagExistence.Missing)
     {
         var projectorVersionResult = domainTypes.TagProjectorTypes.GetProjectorVersion(tagStateId.TagProjectorName);
         var projectorVersion = projectorVersionResult.IsSuccess ? projectorVersionResult.GetValue() : string.Empty;
@@ -326,8 +329,8 @@ app.MapPost("/api/sekiban/serialized/tag-latest-sortable", async (
     TagLatestSortableRequest request) =>
 {
     // Fast path: if the tag has never had events committed, it doesn't exist.
-    var tagTracker = http.RequestServices.GetRequiredService<KnownTagTracker>();
-    if (!tagTracker.HasKnownEvents(request.Tag))
+    var tagProbe = http.RequestServices.GetRequiredService<KnownTagExistenceProbe>();
+    if (await tagProbe.ProbeAsync(request.Tag) == KnownTagExistence.Missing)
     {
         return Results.Ok(new TagLatestSortableResponse(false, string.Empty));
     }
@@ -346,6 +349,11 @@ app.MapPost("/api/sekiban/serialized/tag-latest-sortable", async (
     }
 
     string lastSortableUniqueId = latestSortableResult.GetValue();
+    if (!string.IsNullOrWhiteSpace(lastSortableUniqueId))
+    {
+        tagProbe.MarkTagsAsWritten([request.Tag]);
+    }
+
     return Results.Ok(new TagLatestSortableResponse(
         !string.IsNullOrWhiteSpace(lastSortableUniqueId),
         lastSortableUniqueId));
@@ -367,8 +375,8 @@ app.MapPost("/api/sekiban/serialized/commit", async (
 
         // Track committed tags so the tag-state fast-path knows which tags have events.
         var committedTags = request.EventCandidates.SelectMany(static e => e.Tags).Distinct().ToList();
-        var tagTracker = http.RequestServices.GetRequiredService<KnownTagTracker>();
-        tagTracker.MarkTagsAsWritten(committedTags);
+        var tagProbe = http.RequestServices.GetRequiredService<KnownTagExistenceProbe>();
+        tagProbe.MarkTagsAsWritten(committedTags);
 
         // Invalidate SharedTagStateProcessor's cache for affected tags
         // so the next tag-state request re-computes from the event store.
@@ -1686,29 +1694,25 @@ sealed class KnownTagTracker
 }
 
 /// <summary>
-/// Pure-function tag-state processor. Holds ONE WASM accumulator per projector type
-/// and reuses it for all tag-state requests via RestoreState→ApplyEvents→SerializeState.
-/// This reduces WASM instance count from 200+ (one per concurrent grain) to ~6 (one per projector).
-/// Memory savings: 200×36.6MB=7.3GB → 6×36.6MB=220MB for C# WASM.
-/// </summary>
-/// <summary>
 /// Pure-function tag-state processor. Creates a fresh WASM accumulator per call but
-/// limits concurrency to 1 per projector type via semaphore. This means at most ~6
-/// WASM instances exist at any time (one per projector), vs 200+ without limiting.
+/// limits concurrency per tag+projector cache key via a keyed semaphore. Global
+/// projector fan-out is still bounded by Wasmtime pooling through
+/// MaxPooledInstancesPerProjector.
 /// Uses in-process state cache with incremental replay (delta events only).
 /// Memory: 6×36.6MB=220MB (vs 200×36.6MB=7.3GB without limiting).
 /// </summary>
 sealed class SharedTagStateProcessor : IDisposable
 {
-    private readonly SemaphoreSlim _globalGate = new(1, 1);
-    private readonly ConcurrentDictionary<string, SemaphoreSlim> _gates = new();
+    private readonly ConcurrentDictionary<string, GateEntry> _gates = new();
     private readonly ConcurrentDictionary<string, SerializableTagState> _stateCache = new();
     private const int MaxCacheEntries = 10_000;
 
     private readonly ITagStateProjectionPrimitive _primitive;
     private readonly IEventStore _eventStore;
     private readonly IActorObjectAccessor _actorAccessor;
+    private readonly DcbDomainTypes _domainTypes;
     private readonly WasmProjectorRegistry _registry;
+    private readonly IReadOnlyDictionary<string, HashSet<string>> _allowedTagEventTypesByProjector;
     private readonly ILogger _logger;
 
     public SharedTagStateProcessor(
@@ -1717,12 +1721,15 @@ sealed class SharedTagStateProcessor : IDisposable
         IActorObjectAccessor actorAccessor,
         WasmProjectorRegistry registry,
         DcbDomainTypes domainTypes,
+        IConfiguration configuration,
         ILoggerFactory loggerFactory)
     {
         _primitive = primitive;
         _eventStore = eventStore;
         _actorAccessor = actorAccessor;
+        _domainTypes = domainTypes;
         _registry = registry;
+        _allowedTagEventTypesByProjector = LoadAllowedTagEventTypes(configuration);
         _logger = loggerFactory.CreateLogger("SharedTagState");
     }
 
@@ -1735,12 +1742,11 @@ sealed class SharedTagStateProcessor : IDisposable
             return null;
         }
 
-        // Global lock: only 1 tag-state WASM operation at a time to prevent
-        // pool/instance interference between concurrent requests.
-        await _globalGate.WaitAsync();
+        var cacheKey = tagStateId.GetTagStateId();
+        var gateEntry = AcquireGate(cacheKey);
+        await gateEntry.Gate.WaitAsync();
         try
         {
-            var cacheKey = tagStateId.GetTagStateId();
             var cachedState = _stateCache.GetValueOrDefault(cacheKey);
 
             // Get latest sortable unique ID from Orleans
@@ -1774,7 +1780,7 @@ sealed class SharedTagStateProcessor : IDisposable
             }
 
             var tag = new FallbackTag(tagStateId.TagGroup, tagStateId.TagContent);
-            _logger.LogInformation("SharedTagState: Loading events for {Tag} since={Since}",
+            _logger.LogDebug("SharedTagState: Loading events for {Tag} since={Since}",
                 $"{tagStateId.TagGroup}:{tagStateId.TagContent}", since?.ToString() ?? "null");
             var eventsResult = await _eventStore.ReadSerializableEventsByTagAsync(tag, since);
             if (!eventsResult.IsSuccess)
@@ -1785,31 +1791,27 @@ sealed class SharedTagStateProcessor : IDisposable
             }
 
             var events = eventsResult.GetValue().ToList();
-            _logger.LogInformation("SharedTagState: Loaded {EventCount} events for {Tag}, cachedState={HasCached}, latestSortableId={Latest}",
+            _logger.LogDebug("SharedTagState: Loaded {EventCount} events for {Tag}, cachedState={HasCached}, latestSortableId={Latest}",
                 events.Count,
                 $"{tagStateId.TagGroup}:{tagStateId.TagContent}:{tagStateId.TagProjectorName}",
                 cachedState != null,
                 latestSortableUniqueId ?? "null");
 
+            var deltaPreparation = PrepareDeltaEvents(projectorName, cachedState, events, latestSortableUniqueId);
+            if (deltaPreparation.ShortCircuitedState is not null)
+            {
+                _stateCache[cacheKey] = deltaPreparation.ShortCircuitedState;
+                return deltaPreparation.ShortCircuitedState;
+            }
+
+            var eventsToApply = deltaPreparation.EventsToApply;
+
             // Create fresh accumulator (gets pooled instance if available).
             using var accumulator = _primitive.CreateAccumulator(tagStateId);
 
-            // Log event details for debugging
-            foreach (var ev in events.Take(3))
-            {
-                var payloadPreview = ev.Payload.Length > 0
-                    ? System.Text.Encoding.UTF8.GetString(ev.Payload)[..Math.Min(200, ev.Payload.Length)]
-                    : "<empty>";
-                _logger.LogInformation("SharedTagState: Event type={EventType} tags=[{Tags}] payloadLen={PayloadLen} payload={Payload}",
-                    ev.EventPayloadName,
-                    string.Join(",", ev.Tags),
-                    ev.Payload.Length,
-                    payloadPreview);
-            }
-
             // Pure function: RestoreState → ApplyEvents → SerializeState
             var applyStateResult = accumulator.ApplyState(cachedState);
-            _logger.LogInformation("SharedTagState: ApplyState(cached={HasCached}) returned {Result}",
+            _logger.LogDebug("SharedTagState: ApplyState(cached={HasCached}) returned {Result}",
                 cachedState != null, applyStateResult);
             if (!applyStateResult)
             {
@@ -1817,11 +1819,11 @@ sealed class SharedTagStateProcessor : IDisposable
                 return null;
             }
 
-            if (events.Count > 0)
+            if (eventsToApply.Count > 0)
             {
-                var applyEventsResult = accumulator.ApplyEvents(events, latestSortableUniqueId);
-                _logger.LogInformation("SharedTagState: ApplyEvents({Count} events) returned {Result}",
-                    events.Count, applyEventsResult);
+                var applyEventsResult = accumulator.ApplyEvents(eventsToApply, latestSortableUniqueId);
+                _logger.LogDebug("SharedTagState: ApplyEvents({Count} events) returned {Result}",
+                    eventsToApply.Count, applyEventsResult);
                 if (!applyEventsResult)
                 {
                     _logger.LogWarning("ApplyEvents failed for {TagStateId}", tagStateId);
@@ -1830,11 +1832,6 @@ sealed class SharedTagStateProcessor : IDisposable
             }
 
             var rawState = accumulator.GetSerializedState();
-            var rawPayloadPreview = rawState.Payload.Length > 0
-                ? System.Text.Encoding.UTF8.GetString(rawState.Payload)[..Math.Min(150, rawState.Payload.Length)]
-                : "<empty>";
-            _logger.LogWarning("SharedTagState: RESULT version={Version} payloadLen={PayloadLen} name={PayloadName} payload={Payload}",
-                rawState.Version, rawState.Payload.Length, rawState.TagPayloadName, rawPayloadPreview);
 
             // Override metadata from tagStateId (accumulator may pick up wrong metadata
             // from multi-tagged events, e.g., Room events tagged with both Room and Reservation).
@@ -1849,6 +1846,9 @@ sealed class SharedTagStateProcessor : IDisposable
 
             var newState = rawState with
             {
+                LastSortedUniqueId = string.IsNullOrWhiteSpace(latestSortableUniqueId)
+                    ? rawState.LastSortedUniqueId
+                    : latestSortableUniqueId,
                 TagGroup = tagStateId.TagGroup,
                 TagContent = tagStateId.TagContent,
                 TagProjector = projectorName,
@@ -1859,7 +1859,11 @@ sealed class SharedTagStateProcessor : IDisposable
             if (_stateCache.Count >= MaxCacheEntries)
             {
                 var keys = _stateCache.Keys.Take(_stateCache.Count / 2).ToList();
-                foreach (var k in keys) _stateCache.TryRemove(k, out _);
+                foreach (var k in keys)
+                {
+                    _stateCache.TryRemove(k, out _);
+                    TryRemoveGateIfIdle(k);
+                }
             }
             _stateCache[cacheKey] = newState;
 
@@ -1867,33 +1871,196 @@ sealed class SharedTagStateProcessor : IDisposable
         }
         finally
         {
-            _globalGate.Release();
+            gateEntry.Gate.Release();
+            ReleaseGate(cacheKey, gateEntry);
         }
     }
 
     /// <summary>
-    /// Invalidate cached tag states for the given tags after a commit.
-    /// The next request will re-compute from the event store.
+    /// Cached states already validate against the latest sortable unique ID and replay deltas.
+    /// Keep warm entries across commits so repeated reads do not fall back to full replays.
     /// </summary>
     public void InvalidateForTags(IEnumerable<string> tags)
     {
-        foreach (var tag in tags)
-        {
-            var prefix = tag + ":";
-            foreach (var key in _stateCache.Keys)
-            {
-                if (key.StartsWith(prefix, StringComparison.Ordinal) || key.Contains($":{tag}:"))
-                {
-                    _stateCache.TryRemove(key, out _);
-                }
-            }
-        }
+        _ = tags;
     }
 
     public void Dispose()
     {
-        foreach (var (_, gate) in _gates) gate.Dispose();
+        foreach (var (_, gateEntry) in _gates)
+        {
+            gateEntry.Gate.Dispose();
+        }
         _gates.Clear();
         _stateCache.Clear();
     }
+
+    private GateEntry AcquireGate(string cacheKey)
+    {
+        while (true)
+        {
+            var gateEntry = _gates.GetOrAdd(cacheKey, _ => new GateEntry());
+            Interlocked.Increment(ref gateEntry.ReferenceCount);
+
+            if (_gates.TryGetValue(cacheKey, out var currentEntry) && ReferenceEquals(currentEntry, gateEntry))
+            {
+                return gateEntry;
+            }
+
+            ReleaseGate(cacheKey, gateEntry);
+        }
+    }
+
+    private void ReleaseGate(string cacheKey, GateEntry gateEntry)
+    {
+        if (Interlocked.Decrement(ref gateEntry.ReferenceCount) != 0)
+        {
+            return;
+        }
+
+        if (_stateCache.ContainsKey(cacheKey))
+        {
+            return;
+        }
+
+        if (_gates.TryRemove(new KeyValuePair<string, GateEntry>(cacheKey, gateEntry)))
+        {
+            gateEntry.Gate.Dispose();
+        }
+    }
+
+    private void TryRemoveGateIfIdle(string cacheKey)
+    {
+        if (!_gates.TryGetValue(cacheKey, out var gateEntry))
+        {
+            return;
+        }
+
+        if (Volatile.Read(ref gateEntry.ReferenceCount) != 0)
+        {
+            return;
+        }
+
+        if (_gates.TryRemove(new KeyValuePair<string, GateEntry>(cacheKey, gateEntry)))
+        {
+            gateEntry.Gate.Dispose();
+        }
+    }
+
+    private sealed class GateEntry
+    {
+        public SemaphoreSlim Gate { get; } = new(1, 1);
+        public int ReferenceCount;
+    }
+
+    private DeltaPreparation PrepareDeltaEvents(
+        string projectorName,
+        SerializableTagState? cachedState,
+        List<SerializableEvent> events,
+        string? latestSortableUniqueId)
+    {
+        if (cachedState is null || events.Count == 0)
+        {
+            return new DeltaPreparation(events, null);
+        }
+
+        if (_allowedTagEventTypesByProjector.TryGetValue(projectorName, out var allowedEventTypes))
+        {
+            var allowlistedEvents = events
+                .Where(e => allowedEventTypes.Contains(e.EventPayloadName))
+                .ToList();
+            if (allowlistedEvents.Count == 0)
+            {
+                var advancedState = string.IsNullOrWhiteSpace(latestSortableUniqueId)
+                    ? cachedState
+                    : cachedState with { LastSortedUniqueId = latestSortableUniqueId };
+                return new DeltaPreparation([], advancedState);
+            }
+
+            return new DeltaPreparation(allowlistedEvents, null);
+        }
+
+        var projectorResult = _domainTypes.TagProjectorTypes.GetProjectorFunction(projectorName);
+        if (!projectorResult.IsSuccess)
+        {
+            return new DeltaPreparation(events, null);
+        }
+
+        ITagStatePayload currentPayload = RestoreCachedPayload(cachedState);
+        var relevantEvents = new List<SerializableEvent>(events.Count);
+        var projector = projectorResult.GetValue();
+
+        foreach (var serializableEvent in events)
+        {
+            var eventResult = serializableEvent.ToEvent(_domainTypes.EventTypes);
+            if (!eventResult.IsSuccess)
+            {
+                return new DeltaPreparation(events, null);
+            }
+
+            var nextPayload = projector(currentPayload, eventResult.GetValue());
+            if (!ReferenceEquals(nextPayload, currentPayload))
+            {
+                relevantEvents.Add(serializableEvent);
+            }
+
+            currentPayload = nextPayload;
+        }
+
+        if (relevantEvents.Count == 0)
+        {
+            var advancedState = string.IsNullOrWhiteSpace(latestSortableUniqueId)
+                ? cachedState
+                : cachedState with { LastSortedUniqueId = latestSortableUniqueId };
+            return new DeltaPreparation([], advancedState);
+        }
+
+        return new DeltaPreparation(relevantEvents, null);
+    }
+
+    private ITagStatePayload RestoreCachedPayload(SerializableTagState cachedState)
+    {
+        if (cachedState.Payload.Length == 0 ||
+            string.IsNullOrWhiteSpace(cachedState.TagPayloadName) ||
+            string.Equals(cachedState.TagPayloadName, nameof(EmptyTagStatePayload), StringComparison.Ordinal))
+        {
+            return new EmptyTagStatePayload();
+        }
+
+        var deserializeResult = _domainTypes.TagStatePayloadTypes.DeserializePayload(
+            cachedState.TagPayloadName,
+            cachedState.Payload);
+        return deserializeResult.IsSuccess
+            ? deserializeResult.GetValue()
+            : new EmptyTagStatePayload();
+    }
+
+    private static IReadOnlyDictionary<string, HashSet<string>> LoadAllowedTagEventTypes(IConfiguration configuration)
+    {
+        var allowed = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal)
+        {
+            ["RoomProjector"] = new HashSet<string>(
+                ["RoomCreated", "RoomUpdated", "RoomDeactivated", "RoomReactivated"],
+                StringComparer.Ordinal)
+        };
+
+        var section = configuration.GetSection("WASM_RUNTIME_ALLOWED_TAG_EVENT_TYPES");
+        foreach (var child in section.GetChildren())
+        {
+            var values = child.Value?
+                .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                .Where(static value => !string.IsNullOrWhiteSpace(value))
+                .ToHashSet(StringComparer.Ordinal);
+            if (values is { Count: > 0 })
+            {
+                allowed[child.Key] = values;
+            }
+        }
+
+        return allowed;
+    }
+
+    private readonly record struct DeltaPreparation(
+        List<SerializableEvent> EventsToApply,
+        SerializableTagState? ShortCircuitedState);
 }
