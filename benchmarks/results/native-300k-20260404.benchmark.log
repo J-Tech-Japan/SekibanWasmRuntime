@@ -1,0 +1,70 @@
+╔══════════════════════════════════════════════════════╗
+║  Sekiban Event Sourcing Benchmark                    ║
+║  Mode: native-300k-20260404-054230                       ║
+║  Target:    300,000 events                      ║
+║  Concurrency:   8                                ║
+║  URL: http://127.0.0.1:5141                      ║
+╚══════════════════════════════════════════════════════╝
+
+--- Attempting authentication (for Native template) ---
+  Authenticated as: benchmark-d1746b43f32247bcaa70445433c0323c@test.local (expires 05:57:48)
+
+=== Phase 1: Setup (rooms) ===
+  Created 20 rooms in 0.1s
+
+=== Phase 2: Weather Bulk (180,000 events, concurrency=8) ===
+  Progress: 5,000/180,000 (1513 ops/sec)
+  Progress: 10,000/180,000 (1586 ops/sec)
+  Progress: 15,000/180,000 (1632 ops/sec)
+  Progress: 20,000/180,000 (1462 ops/sec)
+  Progress: 25,000/180,000 (1529 ops/sec)
+  Progress: 30,000/180,000 (1594 ops/sec)
+  Progress: 35,000/180,000 (1639 ops/sec)
+  Progress: 40,000/180,000 (1670 ops/sec)
+  Progress: 45,000/180,000 (1698 ops/sec)
+  Progress: 50,000/180,000 (1723 ops/sec)
+  Progress: 55,000/180,000 (1743 ops/sec)
+  Progress: 60,000/180,000 (1764 ops/sec)
+  Progress: 65,000/180,000 (1781 ops/sec)
+  Progress: 70,000/180,000 (1791 ops/sec)
+  Progress: 75,000/180,000 (1792 ops/sec)
+  Progress: 80,000/180,000 (1796 ops/sec)
+  Progress: 85,000/180,000 (1799 ops/sec)
+  Progress: 90,000/180,000 (1807 ops/sec)
+  Progress: 95,000/180,000 (1816 ops/sec)
+  Progress: 100,000/180,000 (1824 ops/sec)
+  Progress: 105,000/180,000 (1828 ops/sec)
+  Progress: 110,000/180,000 (1837 ops/sec)
+  Progress: 115,000/180,000 (1844 ops/sec)
+  Progress: 120,000/180,000 (1852 ops/sec)
+  Progress: 125,000/180,000 (1861 ops/sec)
+  Progress: 130,000/180,000 (1869 ops/sec)
+  Progress: 135,000/180,000 (1870 ops/sec)
+  Progress: 140,000/180,000 (1876 ops/sec)
+  Progress: 145,000/180,000 (1882 ops/sec)
+  Progress: 150,000/180,000 (1885 ops/sec)
+  Progress: 155,000/180,000 (1890 ops/sec)
+  Progress: 160,000/180,000 (1894 ops/sec)
+  Progress: 165,000/180,000 (1899 ops/sec)
+  Progress: 170,000/180,000 (1903 ops/sec)
+  Progress: 175,000/180,000 (1907 ops/sec)
+  Progress: 180,000/180,000 (1910 ops/sec)
+  Completed: 180,000 events in 94.3s (1910 events/sec), errors=0
+  Latency: p50=3.9ms p95=5.8ms p99=9.9ms max=66.6ms
+
+=== Phase 3: Reservation Lifecycle (~40,000 quick reservations, target 120,000 events, concurrency=8) ===
+  Progress: events=2,000/120,000 ops=770 avg=133 eps interval=133 eps deltaEvents=2,000 deltaOps=770 errors=0 deltaErrors=0
+  Progress: events=3,398/120,000 ops=1,308 avg=113 eps interval=93 eps deltaEvents=1,398 deltaOps=538 errors=0 deltaErrors=0
+  Progress: events=4,499/120,000 ops=1,731 avg=100 eps interval=73 eps deltaEvents=1,101 deltaOps=423 errors=0 deltaErrors=0
+  Progress: events=5,568/120,000 ops=2,142 avg=93 eps interval=71 eps deltaEvents=1,069 deltaOps=411 errors=0 deltaErrors=0
+  Progress: events=6,472/120,000 ops=2,490 avg=86 eps interval=60 eps deltaEvents=904 deltaOps=348 errors=0 deltaErrors=0
+  Progress: events=7,229/120,000 ops=2,781 avg=80 eps interval=50 eps deltaEvents=757 deltaOps=291 errors=0 deltaErrors=0
+  Progress: events=8,078/120,000 ops=3,108 avg=77 eps interval=56 eps deltaEvents=849 deltaOps=327 errors=0 deltaErrors=0
+  Progress: events=8,829/120,000 ops=3,397 avg=73 eps interval=50 eps deltaEvents=751 deltaOps=289 errors=0 deltaErrors=0
+  Progress: events=9,543/120,000 ops=3,671 avg=70 eps interval=47 eps deltaEvents=714 deltaOps=274 errors=0 deltaErrors=0
+  Progress: events=10,223/120,000 ops=3,933 avg=68 eps interval=45 eps deltaEvents=680 deltaOps=262 errors=0 deltaErrors=0
+  Progress: events=10,883/120,000 ops=4,187 avg=66 eps interval=44 eps deltaEvents=660 deltaOps=254 errors=0 deltaErrors=0
+  Progress: events=11,494/120,000 ops=4,422 avg=64 eps interval=40 eps deltaEvents=611 deltaOps=235 errors=0 deltaErrors=0
+  Progress: events=12,030/120,000 ops=4,628 avg=61 eps interval=35 eps deltaEvents=536 deltaOps=206 errors=0 deltaErrors=0
+  Progress: events=12,521/120,000 ops=4,817 avg=59 eps interval=33 eps deltaEvents=491 deltaOps=189 errors=0 deltaErrors=0
+  Progress: events=12,995/120,000 ops=4,999 avg=58 eps interval=32 eps deltaEvents=474 deltaOps=182 errors=0 deltaErrors=0
