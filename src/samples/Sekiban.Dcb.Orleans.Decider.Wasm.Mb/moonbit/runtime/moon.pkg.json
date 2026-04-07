@@ -1,11 +1,11 @@
 {
   "warn-list": "-44",
-  "supported-targets": ["wasm"],
+  "supported-targets": "wasm",
   "import": [
     { "path": "moonbitlang/core/json", "alias": "json" },
     { "path": "moonbitlang/core/ref", "alias": "ref" },
-    { "path": "moonbitlang/core/encoding/utf8", "alias": "encoding/utf8" },
-    { "path": "sekiban/sekiban-dcb-decider-moonbit/ffi", "alias": "ffi" }
+    { "path": "sekiban/sekiban-wasm-runtime/core", "alias": "core" },
+    { "path": "sekiban/sekiban-wasm-runtime/projector", "alias": "projector" }
   ],
   "link": {
     "wasm": {

@@ -1,102 +1,45 @@
-fn pack_ptr_len(ptr : Int, len : Int) -> Int64 {
-  ((ptr.to_int64()) << 32) | (len.to_int64())
+// Memory management and WASM exports are now provided by
+// sekiban/sekiban-wasm-runtime shared library.
+// This file contains re-exported WASM functions and type aliases.
+
+// Type aliases for shared library types used throughout domain code
+pub type WasmResult = @core.WasmResult
+pub type CommandOutput = @core.CommandOutput
+pub type EventPayload = @core.EventPayload
+pub type WasmEventMetadata = @core.WasmEventMetadata
+
+// Delegate local helpers for commands.mbt convenience
+fn read_utf8(ptr : Int, len : Int) -> String { @core.read_utf8(ptr, len) }
+fn write_utf8(s : String) -> Int64 { @core.write_utf8(s) }
+
+// Re-export WASM runtime functions so they appear in this package's link exports
+pub fn alloc(size : UInt) -> UInt { @core.alloc(size) }
+pub fn dealloc(ptr : UInt, len : UInt) -> Unit { @core.dealloc(ptr, len) }
+
+pub fn create_instance(pt_ptr : UInt, pt_len : UInt) -> UInt {
+  @projector.create_instance(pt_ptr, pt_len)
 }
 
-fn read_utf8(ptr : Int, len : Int) -> String {
-  @ffi.ptr2str(ptr, len)
+pub fn apply_event(id : UInt, et_ptr : UInt, et_len : UInt, p_ptr : UInt, p_len : UInt) -> Unit {
+  @projector.apply_event(id, et_ptr, et_len, p_ptr, p_len)
 }
 
-fn write_utf8(s : String) -> Int64 {
-  if s == "" {
-    return pack_ptr_len(0, 0)
-  }
-  let bytes = @encoding/utf8.encode(s[:])
-  let len = bytes.length()
-  if len <= 0 {
-    return pack_ptr_len(0, 0)
-  }
-  let ptr = @ffi.malloc(len)
-  for i in 0..<len {
-    @ffi.store8(ptr + i, bytes[i].to_int())
-  }
-  pack_ptr_len(ptr, len)
+pub fn apply_event_with_metadata(id : UInt, et_ptr : UInt, et_len : UInt, p_ptr : UInt, p_len : UInt, m_ptr : UInt, m_len : UInt) -> Unit {
+  @projector.apply_event_with_metadata(id, et_ptr, et_len, p_ptr, p_len, m_ptr, m_len)
 }
 
-pub fn alloc(size : UInt) -> UInt {
-  if size == 0 {
-    return 0
-  }
-  (@ffi.malloc(size.reinterpret_as_int())).reinterpret_as_uint()
+pub fn execute_query(id : UInt, qt_ptr : UInt, qt_len : UInt, p_ptr : UInt, p_len : UInt) -> Int64 {
+  @projector.execute_query(id, qt_ptr, qt_len, p_ptr, p_len)
 }
 
-pub fn dealloc(ptr : UInt, _len : UInt) -> Unit {
-  if ptr == 0 {
-    return
-  }
-  @ffi.free(ptr.reinterpret_as_int())
+pub fn execute_list_query(id : UInt, qt_ptr : UInt, qt_len : UInt, p_ptr : UInt, p_len : UInt) -> Int64 {
+  @projector.execute_list_query(id, qt_ptr, qt_len, p_ptr, p_len)
 }
 
-pub fn create_instance(projector_type_ptr : UInt, projector_type_len : UInt) -> UInt {
-  let projector_type = read_utf8(projector_type_ptr.reinterpret_as_int(), projector_type_len.reinterpret_as_int())
-  let kind = resolve_kind(projector_type)
-  if kind == Unknown {
-    return 0
-  }
-  let id = take_next_id()
-  put_instance(id, instance_new(kind))
-  id
+pub fn serialize_state(id : UInt) -> Int64 {
+  @projector.serialize_state(id)
 }
 
-pub fn apply_event(instance_id : UInt, event_type_ptr : UInt, event_type_len : UInt, payload_ptr : UInt, payload_len : UInt) -> Unit {
-  let event_type = read_utf8(event_type_ptr.reinterpret_as_int(), event_type_len.reinterpret_as_int())
-  let payload_json = read_utf8(payload_ptr.reinterpret_as_int(), payload_len.reinterpret_as_int())
-  match get_instance(instance_id) {
-    None => ()
-    Some(inst) => put_instance(instance_id, apply_event_to_instance(inst, event_type, payload_json))
-  }
-}
-
-pub fn apply_event_with_metadata(
-  instance_id : UInt,
-  event_type_ptr : UInt,
-  event_type_len : UInt,
-  payload_ptr : UInt,
-  payload_len : UInt,
-  _metadata_ptr : UInt,
-  _metadata_len : UInt
-) -> Unit {
-  apply_event(instance_id, event_type_ptr, event_type_len, payload_ptr, payload_len)
-}
-
-pub fn execute_query(instance_id : UInt, query_type_ptr : UInt, query_type_len : UInt, params_ptr : UInt, params_len : UInt) -> Int64 {
-  let query_type = read_utf8(query_type_ptr.reinterpret_as_int(), query_type_len.reinterpret_as_int())
-  let params_json = read_utf8(params_ptr.reinterpret_as_int(), params_len.reinterpret_as_int())
-  match get_instance(instance_id) {
-    None => write_utf8("null")
-    Some(inst) => write_utf8(execute_query_json(inst, query_type, params_json))
-  }
-}
-
-pub fn execute_list_query(instance_id : UInt, query_type_ptr : UInt, query_type_len : UInt, params_ptr : UInt, params_len : UInt) -> Int64 {
-  let query_type = read_utf8(query_type_ptr.reinterpret_as_int(), query_type_len.reinterpret_as_int())
-  let params_json = read_utf8(params_ptr.reinterpret_as_int(), params_len.reinterpret_as_int())
-  match get_instance(instance_id) {
-    None => write_utf8("[]")
-    Some(inst) => write_utf8(execute_list_query_json(inst, query_type, params_json))
-  }
-}
-
-pub fn serialize_state(instance_id : UInt) -> Int64 {
-  match get_instance(instance_id) {
-    None => write_utf8("{}")
-    Some(inst) => write_utf8(serialize_instance_state(inst))
-  }
-}
-
-pub fn restore_state(instance_id : UInt, state_ptr : UInt, state_len : UInt) -> Unit {
-  let state_json = read_utf8(state_ptr.reinterpret_as_int(), state_len.reinterpret_as_int())
-  match get_instance(instance_id) {
-    None => ()
-    Some(inst) => put_instance(instance_id, restore_instance_state(inst, state_json))
-  }
+pub fn restore_state(id : UInt, s_ptr : UInt, s_len : UInt) -> Unit {
+  @projector.restore_state(id, s_ptr, s_len)
 }

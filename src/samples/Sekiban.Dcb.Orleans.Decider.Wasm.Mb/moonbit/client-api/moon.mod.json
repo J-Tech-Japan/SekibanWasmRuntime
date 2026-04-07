@@ -1,0 +1,8 @@
+{
+  "name": "sekiban/sekiban-dcb-decider-client-api",
+  "preferred-target": "native",
+  "deps": {
+    "sekiban/sekiban-client": { "path": "../../../../lib/sekiban-moonbit/client" },
+    "moonbitlang/async": "0.6.4"
+  }
+}

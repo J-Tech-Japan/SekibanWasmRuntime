@@ -1,0 +1,5 @@
+{
+  "name": "sekiban/sekiban-wasm-runtime",
+  "version": "0.1.0",
+  "preferred-target": "wasm"
+}
