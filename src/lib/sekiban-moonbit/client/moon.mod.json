@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "preferred-target": "native",
   "deps": {
-    "moonbitlang/async": "0.6.4"
+    "moonbitlang/async": "0.6.4",
+    "moonbitlang/x": "0.4.41"
   }
 }

@@ -11,16 +11,16 @@ pub fn cors_headers() -> Map[String, String] {
 }
 
 // Parse a JSON body string into a typed value.
-pub fn[T : @json.FromJson] parse_request_body(body : String, fallback : T) -> T {
+pub fn[T : @json.FromJson] parse_request_body(body : String, fallback : T) -> T? {
   if body == "" {
-    return fallback
+    return Some(fallback)
   }
   try {
     let j = @json.parse(body[:])
     let v : T = @json.from_json(j)
-    v
+    Some(v)
   } catch {
-    _ => fallback
+    _ => None
   }
 }
 
@@ -29,17 +29,18 @@ pub fn normalize_id(id : String) -> String {
   id.trim().to_lower().to_string()
 }
 
+let generated_id_counter : Ref[Int] = @ref.new(0)
+
 // Generate a simple UUID v4-like string.
 // Note: MoonBit may not have crypto-random, so this is a placeholder.
 // In production, use a proper UUID library or pass from the server.
 pub fn generate_id() -> String {
-  // Placeholder - real implementation needs random bytes
-  "00000000-0000-0000-0000-000000000000"
+  generated_id_counter.val = generated_id_counter.val + 1
+  "generated-\{generated_id_counter.val}"
 }
 
 // Get current ISO timestamp string.
 // Note: Placeholder - real implementation needs system clock access.
-pub fn now_iso() -> String {
-  // Placeholder - real implementation needs @time or system call
-  "1970-01-01T00:00:00.000Z"
+pub fn now_iso() -> String? {
+  None
 }

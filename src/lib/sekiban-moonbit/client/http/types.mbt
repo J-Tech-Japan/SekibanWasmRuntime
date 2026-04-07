@@ -11,6 +11,17 @@ pub(all) struct TagStateResponse {
   lastSortableUniqueId : String
 } derive(ToJson, @json.FromJson, Show)
 
+pub(all) struct HttpError {
+  status : Int
+  message : String
+  body : String
+} derive(ToJson, @json.FromJson, Show)
+
+pub(all) struct RequestResult[T] {
+  value : T?
+  error : HttpError?
+}
+
 pub(all) struct CommitEventCandidate {
   eventPayloadName : String
   payloadBase64 : String
@@ -27,9 +38,13 @@ pub(all) struct CommitRequest {
   consistencyTags : Array[ConsistencyTagEntry]
 } derive(ToJson, @json.FromJson, Show)
 
+pub(all) struct WrittenEvent {
+  id : String
+  sortableUniqueIdValue : String
+} derive(ToJson, @json.FromJson, Show)
+
 pub(all) struct CommitResponse {
-  eventId : String
-  sortableUniqueId : String
+  writtenEvents : Array[WrittenEvent]
 } derive(ToJson, @json.FromJson, Show)
 
 pub(all) struct QueryRequest {

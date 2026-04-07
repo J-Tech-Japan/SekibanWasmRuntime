@@ -47,7 +47,16 @@ pub async fn handle_get_weather_forecasts(
     query_params.stringify(),
     None,
   )
-  @server.Response::{ status: 200, content_type: "application/json", body: result }
+  match result.value {
+    Some(body) => @server.Response::{ status: 200, content_type: "application/json", body }
+    None => {
+      let error = match result.error {
+        Some(details) => details
+        None => { status: 500, message: "query failed", body: "" }
+      }
+      @server.error_response(error.status, "RuntimeQueryFailed", error.message)
+    }
+  }
 }
 
 // GET /api/weatherforecast/count
@@ -68,7 +77,16 @@ pub async fn handle_get_weather_count(
     query_params.stringify(),
     None,
   )
-  @server.Response::{ status: 200, content_type: "application/json", body: result }
+  match result.value {
+    Some(body) => @server.Response::{ status: 200, content_type: "application/json", body }
+    None => {
+      let error = match result.error {
+        Some(details) => details
+        None => { status: 500, message: "query failed", body: "" }
+      }
+      @server.error_response(error.status, "RuntimeQueryFailed", error.message)
+    }
+  }
 }
 
 // POST /api/weatherforecast - Create weather forecast
@@ -76,10 +94,13 @@ pub async fn handle_create_weather(
   req : @server.Request,
   client : @http.SekibanRuntimeClient
 ) -> @server.Response {
-  let body : CreateWeatherRequest = @server.parse_request_body(
+  let body = match @server.parse_request_body(
     req.body,
     { forecastId: None, location: "", date: "", temperatureC: 0, summary: None },
-  )
+  ) {
+    Some(parsed) => parsed
+    None => return @server.error_response(400, "InvalidJson", "request body must be valid JSON")
+  }
   let forecast_id = match body.forecastId {
     Some(id) => id
     None => @server.generate_id()
@@ -94,7 +115,10 @@ pub async fn handle_create_weather(
       None => (None : String?).to_json()
       Some(v) => v.to_json()
     },
-    "nowIso": @server.now_iso().to_json(),
+    "nowIso": match @server.now_iso() {
+      Some(value) => value.to_json()
+      None => (None : String?).to_json()
+    },
   }
   // For now, return the command that would be executed
   // Full integration requires WASM bridge or serialized command endpoint
@@ -123,7 +147,16 @@ pub async fn handle_get_students(
     "{}",
     None,
   )
-  @server.Response::{ status: 200, content_type: "application/json", body: result }
+  match result.value {
+    Some(body) => @server.Response::{ status: 200, content_type: "application/json", body }
+    None => {
+      let error = match result.error {
+        Some(details) => details
+        None => { status: 500, message: "query failed", body: "" }
+      }
+      @server.error_response(error.status, "RuntimeQueryFailed", error.message)
+    }
+  }
 }
 
 // POST /api/students
@@ -131,10 +164,13 @@ pub async fn handle_create_student(
   req : @server.Request,
   client : @http.SekibanRuntimeClient
 ) -> @server.Response {
-  let body : CreateStudentRequest = @server.parse_request_body(
+  let body = match @server.parse_request_body(
     req.body,
     { studentId: None, name: "", maxClassCount: 3 },
-  )
+  ) {
+    Some(parsed) => parsed
+    None => return @server.error_response(400, "InvalidJson", "request body must be valid JSON")
+  }
   let student_id = match body.studentId {
     Some(id) => id
     None => @server.generate_id()

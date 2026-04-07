@@ -59,13 +59,17 @@ pub fn get_query_param(query : String, name : String) -> String? {
   }
   let parts = query.split("&")
   for part in parts {
-    let kv = part.to_string().split("=")
-    let items : Array[String] = []
-    for s in kv {
-      items.push(s.to_string())
+    let item = part.to_string()
+    let eq_pos = find_char_in_string(item, '=')
+    if eq_pos == -1 {
+      if item == name {
+        return Some("")
+      }
+      continue
     }
-    if items.length() >= 2 && items[0] == name {
-      return Some(items[1])
+    let key = item[:eq_pos].to_string()
+    if key == name {
+      return Some(item[eq_pos + 1:].to_string())
     }
   }
   None

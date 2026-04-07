@@ -11,6 +11,7 @@ pub struct CommandOutput {
   events : Array[EventEntry]
   tags : Array[String]
   consistencyTags : Array[String]
+  expectedVersions : Map[String, Int]?
 } derive(ToJson, @json.FromJson, Show)
 
 pub struct EventEntry {
@@ -72,19 +73,22 @@ pub async fn finalize_command(
   // Build commit request
   let event_candidates : Array[@http.CommitEventCandidate] = []
   for ev in output.events {
+    let payload_bytes = @encoding/utf8.encode(ev.payload[:])
     event_candidates.push({
       eventPayloadName: ev.eventType,
-      payloadBase64: ev.payload,  // Note: payload may need base64 encoding depending on server contract
+      payloadBase64: @base64.encode(payload_bytes[:]),
       tags: output.tags,
     })
   }
   let consistency_tags : Array[@http.ConsistencyTagEntry] = []
-  for state in loaded_states {
-    if state.lastSortableUniqueId != "" {
-      consistency_tags.push({
-        tag: "\{state.tagGroup}:\{state.tagContent}",
-        lastSortableUniqueId: state.lastSortableUniqueId,
-      })
+  for tag in output.consistencyTags {
+    for state in loaded_states {
+      if "\{state.tagGroup}:\{state.tagContent}" == tag {
+        consistency_tags.push({
+          tag,
+          lastSortableUniqueId: state.lastSortableUniqueId,
+        })
+      }
     }
   }
   let commit_request : @http.CommitRequest = {
@@ -92,10 +96,42 @@ pub async fn finalize_command(
     consistencyTags: consistency_tags,
   }
   let commit_response = client.commit(commit_request)
+  let commit_value = match commit_response.value {
+    Some(response) => response
+    None => {
+      let error = match commit_response.error {
+        Some(details) => details
+        None => { status: 500, message: "commit request failed", body: "" }
+      }
+      return {
+        success: false,
+        eventId: "",
+        sortableUniqueId: "",
+        statusCode: error.status,
+        error: Some(error.message),
+      }
+    }
+  }
+  let first_written = if commit_value.writtenEvents.length() == 0 {
+    None
+  } else {
+    Some(commit_value.writtenEvents[0])
+  }
+  let last_written = if commit_value.writtenEvents.length() == 0 {
+    None
+  } else {
+    Some(commit_value.writtenEvents[commit_value.writtenEvents.length() - 1])
+  }
   {
     success: true,
-    eventId: commit_response.eventId,
-    sortableUniqueId: commit_response.sortableUniqueId,
+    eventId: match first_written {
+      Some(written) => written.id
+      None => ""
+    },
+    sortableUniqueId: match last_written {
+      Some(written) => written.sortableUniqueIdValue
+      None => ""
+    },
     statusCode: 200,
     error: None,
   }
