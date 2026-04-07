@@ -883,33 +883,9 @@ fn apply_event_to_instance(inst : Instance, event_type : String, payload_json : 
   }
 }
 
-fn matches_optional_filter(value : String, filter : String?) -> Bool {
-  match filter {
-    None => true
-    Some(f) => value.to_lower().contains(f.to_lower())
-  }
-}
-
-fn apply_paging[T](items : Array[T], page_number : Int?, page_size : Int?) -> Array[T] {
-  match page_size {
-    None => items
-    Some(ps) => {
-      if ps <= 0 {
-        return items
-      }
-      let pn = match page_number {
-        None => 1
-        Some(v) => if v > 0 { v } else { 1 }
-      }
-      let start = (pn - 1) * ps
-      if start >= items.length() {
-        []
-      } else {
-        items[start:start + ps].to_array()
-      }
-    }
-  }
-}
+// Query helpers delegated to @projector shared library
+fn matches_optional_filter(value : String, filter : String?) -> Bool { @projector.matches_optional_filter(value, filter) }
+fn[T] apply_paging(items : Array[T], page_number : Int?, page_size : Int?) -> Array[T] { @projector.apply_paging(items, page_number, page_size) }
 
 fn weather_items(state : WeatherForecastListState, query : WeatherListQuery) -> Array[WeatherForecastItem] {
   let items : Array[WeatherForecastItem] = []

@@ -16,11 +16,34 @@ The current `300,000` event matrix now has fresh reruns for:
 | C# Native | `submodules/Sekiban/templates/Sekiban.Dcb.Templates/content/Sekiban.Dcb.Orleans.Decider` | ASP.NET Core | N/A | N/A |
 | C# WASM | `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm` | ASP.NET Core proxy | `sekiban-dcb-decider.wasm` | ~35 MB |
 | Rust WASM | `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs` | Rust/Axum proxy | `sekiban-dcb-decider-rust.wasm` | ~728 KB |
-| MoonBit WASM | `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Mb` | Node proxy | `sekiban-dcb-decider-moonbit.wasm` | ~355 KB |
+| MoonBit WASM | `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Mb` | Node proxy | `sekiban-dcb-decider-moonbit.wasm` | ~358 KB |
 
 There is currently no C-language WASM sample in this repository. No `C WASM` row is benchmarked below because there is no corresponding AppHost, module, or build pipeline under `src/samples/` or `src/wasm-projectors/`.
 
 The C# WASM sample AppHost is now treated as WASM-only. It launches `wasmserver` and `clientapi` only, and the sample-native `SekibanDcbDecider.ApiService` source has been removed from this tree. Native benchmark and stability runs should start from the Sekiban template AppHost directly, not from `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm`.
+
+## MoonBit Shared Library Migration
+
+As of 2026-04-07, MoonBit WASM now uses shared libraries extracted to `src/lib/sekiban-moonbit/`:
+
+- **wasm-runtime** (`src/lib/sekiban-moonbit/wasm-runtime/`): FFI, memory management, generic types, projector callback registry, WASM exports, query helpers
+- **client** (`src/lib/sekiban-moonbit/client/`): HTTP client (`SekibanRuntimeClient`), executor (`StaticTagProjectorResolver`, `finalize_command`), server framework (router, handlers)
+
+The domain sample at `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Mb/moonbit/runtime/` now imports these shared libraries via path dependencies. A verification 5K benchmark confirms the shared-library build produces identical runtime behavior to the previous monolithic build (0 errors, comparable throughput).
+
+A full 300K benchmark was also run to validate at scale:
+
+| Metric | Shared-lib 300K | Previous 300K (monolithic) |
+|---|---:|---:|
+| Weather events/sec | `1479` | `1461` |
+| Reservation events/sec | `580` | `557` |
+| Reservation ops/sec | `223` | `214` |
+| Query ops/sec | `4` | `165` |
+| Total wall-clock | `427.0 s` | `340.9 s` |
+| Peak RSS | `~1389 MB` | `~1302 MB` |
+| Errors | `0` | `0` |
+
+Command-side throughput is comparable or slightly improved after the shared library migration. Query throughput was lower in this run, likely due to host load variability rather than the migration itself. The WASM module size remains ~358 KB (release build), unchanged from the pre-migration build.
 
 ## Benchmark Method
 
@@ -180,6 +203,13 @@ The earlier failed optimization attempts from the same day (`cs-wasm-30k-2026040
 - Native C# now has the highest-priority scalability issue in this repo. The `300K` reservation path needs profiling before it can be treated as a valid baseline again.
 
 ## Result Files
+
+### 2026-04-07 Shared Library Migration Verification (5K + 300K)
+
+- `benchmarks/results/mb-wasm-5k-shared-lib.json`
+- `benchmarks/results/mb-wasm-5k-shared-lib-rss.log`
+- `benchmarks/results/mb-wasm-300k-shared-lib.json`
+- `benchmarks/results/mb-wasm-300k-shared-lib-rss.log`
 
 ### Current 2026-04-04 300K reruns
 
