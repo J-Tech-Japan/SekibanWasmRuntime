@@ -11,6 +11,7 @@ Runtime:
   cs-wasm  - C# WASM sample
   rs-wasm  - Rust WASM sample
   mb-wasm  - MoonBit WASM sample
+  go-wasm  - Go WASM sample
 EOF
   exit 1
 fi
@@ -65,6 +66,14 @@ case "$runtime" in
     rss_port="6199"
     runtime_process_pattern='Sekiban\.Dcb\.WasmRuntime\.Host|wasmserver'
     mode_label="mb-wasm-${events_label}-${run_timestamp}"
+    ;;
+  go-wasm)
+    apphost_project="$repo_root/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Go/SekibanDcbDecider.AppHost/SekibanDcbDecider.AppHost.csproj"
+    base_url="http://127.0.0.1:7198"
+    ready_port="7198"
+    rss_port="7199"
+    runtime_process_pattern='Sekiban\.Dcb\.WasmRuntime\.Host|wasmserver'
+    mode_label="go-wasm-${events_label}-${run_timestamp}"
     ;;
   *)
     echo "Unknown runtime: $runtime" >&2
