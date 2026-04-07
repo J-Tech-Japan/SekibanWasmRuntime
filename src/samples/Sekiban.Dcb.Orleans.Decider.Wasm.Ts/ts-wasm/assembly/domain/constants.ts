@@ -1,0 +1,58 @@
+// Event type constants
+export const EventWeatherForecastCreated = "WeatherForecastCreated";
+export const EventWeatherForecastLocationUpdated = "WeatherForecastLocationUpdated";
+export const EventWeatherForecastDeleted = "WeatherForecastDeleted";
+export const EventStudentCreated = "StudentCreated";
+export const EventClassRoomCreated = "ClassRoomCreated";
+export const EventStudentEnrolledInClassRoom = "StudentEnrolledInClassRoom";
+export const EventStudentDroppedFromClassRoom = "StudentDroppedFromClassRoom";
+export const EventUserRegistered = "UserRegistered";
+export const EventUserProfileUpdated = "UserProfileUpdated";
+export const EventUserAccessGranted = "UserAccessGranted";
+export const EventUserRoleGranted = "UserRoleGranted";
+export const EventRoomCreated = "RoomCreated";
+export const EventRoomUpdated = "RoomUpdated";
+export const EventReservationDraftCreated = "ReservationDraftCreated";
+export const EventReservationHoldCommitted = "ReservationHoldCommitted";
+export const EventReservationConfirmed = "ReservationConfirmed";
+export const EventReservationCancelled = "ReservationCancelled";
+export const EventReservationRejected = "ReservationRejected";
+export const EventApprovalFlowStarted = "ApprovalFlowStarted";
+export const EventApprovalDecisionRecorded = "ApprovalDecisionRecorded";
+
+// Projector name constants
+export const ProjectorWeatherTag = "WeatherForecastProjector";
+export const ProjectorStudentTag = "StudentProjector";
+export const ProjectorClassRoomTag = "ClassRoomProjector";
+export const ProjectorUserDirectoryTag = "UserDirectoryProjector";
+export const ProjectorUserAccessTag = "UserAccessProjector";
+export const ProjectorRoomTag = "RoomProjector";
+export const ProjectorReservationTag = "ReservationProjector";
+export const ProjectorApprovalRequestTag = "ApprovalRequestProjector";
+export const ProjectorWeatherList = "WeatherForecastMultiProjection";
+export const ProjectorStudentList = "StudentListProjection";
+export const ProjectorClassRoomList = "ClassRoomListProjection";
+export const ProjectorUserDirectoryList = "UserDirectoryListProjection";
+export const ProjectorUserAccessList = "UserAccessListProjection";
+export const ProjectorRoomList = "RoomListProjection";
+export const ProjectorReservationList = "ReservationListProjection";
+export const ProjectorApprovalRequestList = "ApprovalRequestListProjection";
+
+// Projector kinds
+export const KIND_UNKNOWN: i32 = 0;
+export const KIND_WEATHER_TAG: i32 = 1;
+export const KIND_STUDENT_TAG: i32 = 2;
+export const KIND_CLASSROOM_TAG: i32 = 3;
+export const KIND_USER_DIRECTORY_TAG: i32 = 4;
+export const KIND_USER_ACCESS_TAG: i32 = 5;
+export const KIND_ROOM_TAG: i32 = 6;
+export const KIND_RESERVATION_TAG: i32 = 7;
+export const KIND_APPROVAL_TAG: i32 = 8;
+export const KIND_WEATHER_LIST: i32 = 9;
+export const KIND_STUDENT_LIST: i32 = 10;
+export const KIND_CLASSROOM_LIST: i32 = 11;
+export const KIND_USER_DIRECTORY_LIST: i32 = 12;
+export const KIND_USER_ACCESS_LIST: i32 = 13;
+export const KIND_ROOM_LIST: i32 = 14;
+export const KIND_RESERVATION_LIST: i32 = 15;
+export const KIND_APPROVAL_LIST: i32 = 16;

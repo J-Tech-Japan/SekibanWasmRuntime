@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <IsPackable>true</IsPackable>
+        <RootNamespace>SekibanDcbDecider.ApiService</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.BlobStorage.AzureStorage\Sekiban.Dcb.BlobStorage.AzureStorage.csproj" />
+        <ProjectReference Include="..\..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.CosmosDb\Sekiban.Dcb.CosmosDb.csproj" />
+        <ProjectReference Include="..\..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.Orleans.WithoutResult\Sekiban.Dcb.Orleans.WithoutResult.csproj" />
+        <ProjectReference Include="..\..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.Postgres\Sekiban.Dcb.Postgres.csproj" />
+        <ProjectReference Include="..\..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.Sqlite\Sekiban.Dcb.Sqlite.csproj" />
+        <ProjectReference Include="..\SekibanDcbDecider.Interactions\SekibanDcbDecider.Interactions.csproj" />
+        <ProjectReference Include="..\SekibanDcbDecider.ServiceDefaults\SekibanDcbDecider.ServiceDefaults.csproj" />
+        <ProjectReference Include="..\..\..\lib\Sekiban.Dcb.WasmRuntime\Sekiban.Dcb.WasmRuntime.csproj" />
+        <ProjectReference Include="..\..\..\lib\Sekiban.Dcb.WasmRuntime.Wasmtime\Sekiban.Dcb.WasmRuntime.Wasmtime.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- Authentication / Identity -->
+        <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.3" />
+        <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.3" />
+
+        <PackageReference Include="Microsoft.Extensions.Azure" Version="1.13.1" />
+        <PackageReference Include="Aspire.Azure.Data.Tables" Version="13.2.0" />
+        <PackageReference Include="Aspire.Azure.Storage.Blobs" Version="13.2.0" />
+        <PackageReference Include="Aspire.Azure.Storage.Queues" Version="13.2.0" />
+        <PackageReference Include="Aspire.Microsoft.Azure.Cosmos" Version="13.2.0" />
+        <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.2.0" />
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.3" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.5" />
+        <PackageReference Include="Microsoft.Orleans.Clustering.AzureStorage" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Orleans.Clustering.Cosmos" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Orleans.Persistence.AzureStorage" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Orleans.Persistence.Cosmos" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Orleans.Reminders.Cosmos" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Orleans.Persistence.Memory" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Orleans.Server" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Orleans.Streaming" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Orleans.Streaming.AzureStorage" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Orleans.Streaming.EventHubs" Version="10.0.1" />
+        <!-- Note: Aspire.Azure.Messaging.EventHubs is NOT used. Orleans handles EventHub directly -->
+        <!-- via Microsoft.Orleans.Streaming.EventHubs. The Aspire package adds health checks that -->
+        <!-- require extra configuration (EventHubName or EntityPath in ConnectionString). -->
+        <PackageReference Include="Scalar.AspNetCore" Version="2.12.50" />
+        <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
+    </ItemGroup>
+
+</Project>

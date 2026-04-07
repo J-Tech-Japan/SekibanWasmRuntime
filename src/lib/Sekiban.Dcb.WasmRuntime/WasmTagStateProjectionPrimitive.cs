@@ -74,7 +74,13 @@ public class WasmTagStateProjectionPrimitive : ITagStateProjectionAccumulator, I
 
         try
         {
-            _instance.RestoreState(BuildRestoreSnapshotJson(state));
+            // Send raw state JSON to WASM – not the snapshot wrapper.
+            // WASM projectors (Go, Rust, MoonBit, TS) all expect raw state,
+            // and the snapshot metadata is tracked on the C# side only.
+            string payloadJson = state.Payload.Length == 0
+                ? "{}"
+                : Encoding.UTF8.GetString(state.Payload);
+            _instance.RestoreState(payloadJson);
             _version = state.Version;
             _lastSortedUniqueId = state.LastSortedUniqueId;
             _tagPayloadName = state.TagPayloadName;
