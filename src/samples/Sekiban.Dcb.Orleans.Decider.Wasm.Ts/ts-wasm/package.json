@@ -1,0 +1,16 @@
+{
+  "name": "sekiban-dcb-decider-ts-wasm",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "asbuild": "asc assembly/index.ts --outFile ../modules/ts-weather.wasm --optimize --exportStart _initialize --runtime incremental --exportRuntime",
+    "build": "npm run asbuild"
+  },
+  "devDependencies": {
+    "assemblyscript": "^0.27.32",
+    "json-as": "^0.9.28"
+  },
+  "dependencies": {
+    "visitor-as": "^0.11.4"
+  }
+}

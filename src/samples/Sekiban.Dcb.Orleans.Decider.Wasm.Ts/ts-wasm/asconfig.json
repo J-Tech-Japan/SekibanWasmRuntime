@@ -1,0 +1,14 @@
+{
+  "targets": {
+    "release": {
+      "outFile": "../modules/ts-weather.wasm",
+      "optimize": true,
+      "exportStart": "_initialize",
+      "runtime": "incremental",
+      "exportRuntime": true
+    }
+  },
+  "options": {
+    "transform": ["json-as/transform"]
+  }
+}

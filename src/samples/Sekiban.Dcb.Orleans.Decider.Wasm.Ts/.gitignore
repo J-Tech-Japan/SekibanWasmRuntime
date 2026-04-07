@@ -1,0 +1,11 @@
+bin/
+obj/
+.vs/
+**/bin/
+**/obj/
+target/
+**/target/
+.env
+secrets.json
+node_modules/
+dist/
