@@ -8,6 +8,8 @@ The current `300,000` event matrix now has fresh reruns for:
 - C# WASM
 - Rust WASM
 - MoonBit WASM
+- Go WASM
+- TypeScript WASM
 
 ## Runtime Matrix
 
@@ -16,7 +18,10 @@ The current `300,000` event matrix now has fresh reruns for:
 | C# Native | `submodules/Sekiban/templates/Sekiban.Dcb.Templates/content/Sekiban.Dcb.Orleans.Decider` | ASP.NET Core | N/A | N/A |
 | C# WASM | `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm` | ASP.NET Core proxy | `sekiban-dcb-decider.wasm` | ~35 MB |
 | Rust WASM | `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs` | Rust/Axum proxy | `sekiban-dcb-decider-rust.wasm` | ~728 KB |
-| MoonBit WASM | `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Mb` | Node proxy | `sekiban-dcb-decider-moonbit.wasm` | ~358 KB |
+<<<<<<< HEAD
+| MoonBit WASM | `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Mb` | Node proxy | `sekiban-dcb-decider-moonbit.wasm` | ~355 KB |
+| Go WASM | `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Go` | Go/net-http proxy | `go-weather.wasm` | ~1.3 MB |
+| TypeScript WASM | `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Ts` | Hono/Node proxy | `ts-weather.wasm` | ~239 KB |
 
 There is currently no C-language WASM sample in this repository. No `C WASM` row is benchmarked below because there is no corresponding AppHost, module, or build pipeline under `src/samples/` or `src/wasm-projectors/`.
 
@@ -78,7 +83,9 @@ The table below uses fresh `300,000` event runs from current `main` where availa
 | C# Native | `completed` | `2004.1` | `236.7` | `91.0` | `1586.5` | `597.6 s` | `~2626.4 MB` | `0` |
 | C# WASM | `completed` | `1355.3` | `1882.1` | `723.8` | `115.1` | `199.4 s` | `~2594.2 MB` | `0` |
 | Rust WASM | `completed` | `1565.3` | `561.0` | `215.7` | `754.0` | `329.8 s` | `~1312.7 MB` | `0` |
-| MoonBit WASM | `completed` | `1460.5` | `556.8` | `214.1` | `164.5` | `340.9 s` | `~1301.6 MB` | `0` |
+| MoonBit WASM | `completed` | `1460.5` | `556.8` | `214.1` | `164.5` | `340.9 s` | `~1961.6 MB` | `0` |
+| Go WASM | `completed` | `1547.8` | `520.1` | `200.0` | `335.8` | `388.5 s` | `~2502.4 MB` | `0` |
+| TypeScript WASM | `completed` | `1494.7` | `559.3` | `215.1` | `2.0` | `498.7 s` | `~1724.1 MB` | `0` |
 | C WASM | `not implemented in repo` | `n/a` | `n/a` | `n/a` | `n/a` | `n/a` | `n/a` | `n/a` |
 
 Latency summary:
@@ -89,13 +96,18 @@ Latency summary:
 | C# WASM | `5.7 / 7.8 ms` | `10.0 / 14.0 ms` | `4.2 / 22.9 ms` |
 | Rust WASM | `4.9 / 6.7 ms` | `36.4 / 64.8 ms` | `0.8 / 1.5 ms` |
 | MoonBit WASM | `5.3 / 7.3 ms` | `38.7 / 61.2 ms` | `2.0 / 22.1 ms` |
+| Go WASM | `5.0 / 6.7 ms` | `37.6 / 66.2 ms` | `1.3 / 7.2 ms` |
+| TypeScript WASM | `5.2 / 7.1 ms` | `36.8 / 64.6 ms` | `7.1 / 3999.2 ms` |
 
 Current takeaways:
 
-- C# WASM remains the fastest command path at `300K` among the runtimes that completed successfully, and it still stays under the original `4 GB` memory target.
+- All six runtimes now complete `300K` with zero errors.
+- C# WASM remains the fastest command path at `300K` among all runtimes, and it still stays under the original `4 GB` memory target.
 - Native C# now completes `300K` cleanly and stays under `4 GB`, but its reservation phase still decays from roughly `670 eps` at the start to roughly `125 eps` at the end of the run.
-- Rust WASM and MoonBit WASM now both complete `300K` with no errors and with very similar command-side throughput, around `557-561` reservation events/sec.
-- Rust WASM has by far the best query throughput at `300K`, reaching `754 ops/sec`.
+- Rust WASM, MoonBit WASM, Go WASM, and TypeScript WASM all have very similar command-side throughput, around `520-561` reservation events/sec.
+- Rust WASM has the smallest memory footprint at `~1313 MB` and the best query throughput at `754 ops/sec`.
+- Go WASM has strong query performance (`335.8 ops/sec`) but the highest memory usage among WASM runtimes at `~2502 MB`.
+- TypeScript WASM has the smallest WASM module size (`~239 KB`) and competitive command throughput, but its query phase is severely degraded (`2.0 ops/sec`, p95 `~4 s`) — likely a cold-start or GC issue in the Hono/Node client API layer.
 - MoonBit WASM is materially slower on query throughput than Rust WASM, but still clearly faster than C# WASM on the query phase.
 - Native C# is no longer blocked by the earlier benchmark setup issue, but it is still the highest-priority scalability target because reservation throughput remains much lower than its `30K` profile.
 
@@ -199,7 +211,9 @@ The earlier failed optimization attempts from the same day (`cs-wasm-30k-2026040
 ## Remaining Bottlenecks
 
 - C# WASM query throughput is still far below Rust WASM and still below MoonBit WASM. The main remaining gap is query-side state access rather than reservation command execution.
-- Rust WASM and MoonBit WASM now complete `300K` cleanly, but their reservation lifecycle throughput trails the fixed C# WASM path by roughly `3.4x`.
+- Rust WASM, MoonBit WASM, Go WASM, and TypeScript WASM now all complete `300K` cleanly, but their reservation lifecycle throughput trails the fixed C# WASM path by roughly `3.4x`.
+- TypeScript WASM query throughput is extremely low (`2.0 ops/sec`) at `300K`. The command phase performs well, so the bottleneck is likely in the Hono/Node client API query path or garbage collection pauses under high state volume.
+- Go WASM has the highest memory usage among WASM runtimes (`~2502 MB`), close to C# WASM. The TinyGo runtime and linear memory growth likely account for this.
 - Native C# now has the highest-priority scalability issue in this repo. The `300K` reservation path needs profiling before it can be treated as a valid baseline again.
 
 ## Result Files
@@ -213,14 +227,12 @@ The earlier failed optimization attempts from the same day (`cs-wasm-30k-2026040
 
 ### Current 2026-04-04 300K reruns
 
-- `benchmarks/results/native-300k-20260404-fix10.json`
-- `benchmarks/results/native-300k-20260404-fix10-rss.log`
-- `benchmarks/results/cs-wasm-300k-20260404.json`
-- `benchmarks/results/cs-wasm-300k-20260404-rss.log`
-- `benchmarks/results/rs-wasm-300k-20260404.json`
-- `benchmarks/results/rs-wasm-300k-20260404-rss.log`
-- `benchmarks/results/mb-wasm-300k-20260404.json`
-- `benchmarks/results/mb-wasm-300k-20260404-rss.log`
+- `benchmarks/results/native-300k-20260404-fix10.json` / `-rss.log` (2026-04-04)
+- `benchmarks/results/cs-wasm-300k-20260404.json` / `-rss.log` (2026-04-04)
+- `benchmarks/results/rs-wasm-300k-20260404.json` / `-rss.log` (2026-04-04)
+- `benchmarks/results/mb-wasm-300k-20260404.json` / `-rss.log` (2026-04-04)
+- `benchmarks/results/go-wasm-300k.json` / `-rss.log` (2026-04-07)
+- `benchmarks/results/ts-wasm-300k.json` / `-rss.log` (2026-04-07)
 
 ### Current 2026-04-03 comparable 30K reruns
 
@@ -286,4 +298,20 @@ For one-command local reproduction, use `scripts/run-benchmark-runtime.sh`.
 ./scripts/run-benchmark-runtime.sh mb-wasm 300000 \
   benchmarks/results/mb-wasm-300k-local.json \
   benchmarks/results/mb-wasm-300k-local-rss.log
+```
+
+### Go WASM
+
+```bash
+./scripts/run-benchmark-runtime.sh go-wasm 300000 \
+  benchmarks/results/go-wasm-300k-local.json \
+  benchmarks/results/go-wasm-300k-local-rss.log
+```
+
+### TypeScript WASM
+
+```bash
+./scripts/run-benchmark-runtime.sh ts-wasm 300000 \
+  benchmarks/results/ts-wasm-300k-local.json \
+  benchmarks/results/ts-wasm-300k-local-rss.log
 ```
