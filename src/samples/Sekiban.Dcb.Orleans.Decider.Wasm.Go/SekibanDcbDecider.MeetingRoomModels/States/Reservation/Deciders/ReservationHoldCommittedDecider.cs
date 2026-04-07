@@ -6,12 +6,15 @@ namespace Dcb.MeetingRoomModels.States.Reservation.Deciders;
 /// </summary>
 public static class ReservationHoldCommittedDecider
 {
+    public static Func<DateTime> UtcNowProvider { get; set; } = () => DateTime.UtcNow;
+
     /// <summary>
     ///     Validate preconditions for committing hold
     /// </summary>
     public static void Validate(this ReservationState.ReservationDraft state)
     {
-        if (state.StartTime <= DateTime.UtcNow)
+        var now = UtcNowProvider();
+        if (state.StartTime <= now)
         {
             throw new InvalidOperationException("Cannot commit hold for past or current time");
         }

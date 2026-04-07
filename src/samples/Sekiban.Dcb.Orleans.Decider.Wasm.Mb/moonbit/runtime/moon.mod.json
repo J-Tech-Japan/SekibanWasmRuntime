@@ -1,1 +1,7 @@
-{ "name": "sekiban/sekiban-dcb-decider-moonbit", "preferred-target": "wasm" }
+{
+  "name": "sekiban/sekiban-dcb-decider-moonbit",
+  "preferred-target": "wasm",
+  "deps": {
+    "sekiban/sekiban-wasm-runtime": { "path": "../../../../lib/sekiban-moonbit/wasm-runtime" }
+  }
+}

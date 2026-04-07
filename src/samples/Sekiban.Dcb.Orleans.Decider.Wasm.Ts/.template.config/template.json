@@ -4,7 +4,7 @@
   "classifications": ["Aspire", "Orleans", "Sekiban", "Dcb", "EventSourcing", "Decider"],
   "name": "Sekiban Dcb Decider Aspire Template (Decider)",
   "description": "SekibanDcbDeciderAspireDecider - Template with ImmutableModels project for Decider pattern",
-  "precedence": "0",
+  "precedence": 0,
   "identity": "Sekiban.Dcb.Orleans.Aspire.Decider",
   "shortName": "sekiban-dcb-decider",
   "tags": {

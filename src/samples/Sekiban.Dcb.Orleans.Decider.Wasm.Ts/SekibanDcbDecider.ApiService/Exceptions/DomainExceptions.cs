@@ -28,11 +28,11 @@ public class NotFoundException : DomainException
 /// <summary>
 /// Exception thrown when a business rule validation fails
 /// </summary>
-public class ValidationException : DomainException
+public class DomainValidationException : DomainException
 {
-    public ValidationException(string message) : base(message) { }
+    public DomainValidationException(string message) : base(message) { }
 
-    public ValidationException(string message, Dictionary<string, string[]> errors) : base(message)
+    public DomainValidationException(string message, Dictionary<string, string[]> errors) : base(message)
     {
         Errors = errors;
     }

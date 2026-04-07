@@ -8,13 +8,10 @@ public record GetWeatherForecastListQuery :
     IWaitForSortableUniqueId,
     IQueryPagingParameter
 {
-    [Id(0)]
-    public bool IncludeDeleted { get; init; } = false;
-
     // Paging parameters (from IQueryPagingParameter)
-    [Id(1)]
+    [Id(0)]
     public int? PageNumber { get; init; }
-    [Id(2)]
+    [Id(1)]
     public int? PageSize { get; init; }
 
     // Required static methods for IMultiProjectionListQuery
@@ -23,8 +20,6 @@ public record GetWeatherForecastListQuery :
         GetWeatherForecastListQuery query,
         IQueryContext context)
     {
-        // Always use GetCurrentForecasts() for queries (includes unsafe state)
-        // GetSafeForecasts() should only be used for special cases requiring guaranteed consistency
         var forecasts = projector.GetCurrentForecasts();
         return forecasts.Values.AsEnumerable();
     }
@@ -36,6 +31,6 @@ public record GetWeatherForecastListQuery :
         filteredList.OrderByDescending(f => f.Date);
 
     // Wait for sortable unique ID (from IWaitForSortableUniqueId)
-    [Id(3)]
+    [Id(2)]
     public string? WaitForSortableUniqueId { get; init; }
 }

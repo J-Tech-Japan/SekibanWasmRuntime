@@ -19,7 +19,7 @@ public class RoomDailyActivityProjector : ITagProjector<RoomDailyActivityProject
 
         return ev.Payload switch
         {
-            ReservationConfirmed confirmed => ProjectConfirmed(state, confirmed, ev),
+            ReservationConfirmed confirmed => ProjectConfirmed(state, confirmed),
             ReservationCancelled cancelled => state.RemoveReservation(cancelled.ReservationId),
             ReservationRejected rejected => state.RemoveReservation(rejected.ReservationId),
             ReservationExpiredCommitted expired => state.RemoveReservation(expired.ReservationId),
@@ -29,8 +29,7 @@ public class RoomDailyActivityProjector : ITagProjector<RoomDailyActivityProject
 
     private static RoomDailyActivityState ProjectConfirmed(
         RoomDailyActivityState state,
-        ReservationConfirmed confirmed,
-        Event ev)
+        ReservationConfirmed confirmed)
     {
         // The event now carries the full reservation details
         return state.AddReservation(

@@ -38,31 +38,6 @@ let tag_group_room = "Room"
 let tag_group_reservation = "Reservation"
 let tag_group_approval_request = "ApprovalRequest"
 
-struct EventPayload {
-  eventType : String
-  payload : String
-} derive(ToJson, FromJson, Show, Eq)
-
-struct CommandOutput {
-  events : Array[EventPayload]
-  tags : Array[String]
-  consistencyTags : Array[String]
-  expectedVersions : Map[String, Int]
-} derive(ToJson, FromJson, Show, Eq)
-
-struct WasmResult {
-  ok : Bool
-  status : Int
-  error : String?
-  message : String?
-  output : CommandOutput?
-} derive(ToJson, FromJson, Show, Eq)
-
-struct WasmEventMetadata {
-  tags : Array[String]?
-  sortableUniqueId : String?
-} derive(ToJson, FromJson, Show, Eq)
-
 struct WeatherForecastCreated {
   forecastId : String
   location : String
@@ -620,69 +595,15 @@ struct RecordApprovalDecisionReq {
   nowIso : String
 } derive(ToJson, FromJson, Show, Eq)
 
-fn is_empty_json(s : String) -> Bool {
-  let t = s.trim()
-  t == "" || t == "{}" || t == "null"
-}
-
-fn json_stringify(j : Json) -> String {
-  j.stringify()
-}
-
-fn[T : @json.FromJson] parse_json(s : String, fallback : T) -> T {
-  if is_empty_json(s) {
-    return fallback
-  }
-  try {
-    let j = @json.parse(s[:])
-    let v : T = @json.from_json(j)
-    v
-  } catch {
-    _ => fallback
-  }
-}
-
-fn contains(items : Array[String], v : String) -> Bool {
-  for x in items {
-    if x == v {
-      return true
-    }
-  }
-  false
-}
-
-fn remove(items : Array[String], v : String) -> Array[String] {
-  let out : Array[String] = []
-  for x in items {
-    if x != v {
-      out.push(x)
-    }
-  }
-  out
-}
-
-fn add_unique(items : Array[String], v : String) -> Array[String] {
-  if contains(items, v) {
-    return items
-  }
-  let out : Array[String] = []
-  for x in items {
-    out.push(x)
-  }
-  out.push(v)
-  out
-}
-
-fn option_string(value : String?) -> String {
-  match value {
-    None => ""
-    Some(v) => v
-  }
-}
-
-fn tag_string(tag_group : String, tag_id : String) -> String {
-  tag_group + ":" + tag_id
-}
+// Helpers delegated to @core shared library
+fn is_empty_json(s : String) -> Bool { @core.is_empty_json(s) }
+fn json_stringify(j : Json) -> String { @core.json_stringify(j) }
+fn[T : @json.FromJson] parse_json(s : String, fallback : T) -> T { @core.parse_json(s, fallback) }
+fn contains(items : Array[String], v : String) -> Bool { @core.contains(items, v) }
+fn remove(items : Array[String], v : String) -> Array[String] { @core.remove(items, v) }
+fn add_unique(items : Array[String], v : String) -> Array[String] { @core.add_unique(items, v) }
+fn option_string(value : String?) -> String { @core.option_string(value) }
+fn tag_string(tag_group : String, tag_id : String) -> String { @core.tag_string(tag_group, tag_id) }
 
 fn empty_weather_state() -> WeatherForecastState {
   {
@@ -799,23 +720,8 @@ fn empty_approval_inbox_state() -> ApprovalInboxState {
   { items: Map::new() }
 }
 
-fn ok(output : CommandOutput) -> WasmResult {
-  { ok: true, status: 200, error: None, message: None, output: Some(output) }
-}
-
-fn ok_noop() -> WasmResult {
-  ok({ events: [], tags: [], consistencyTags: [], expectedVersions: Map::new() })
-}
-
-fn err(status : Int, code : String, message : String) -> WasmResult {
-  { ok: false, status, error: Some(code), message: Some(message), output: None }
-}
-
-fn new_command_output(event_type : String, payload_json : String, tags : Array[String]) -> CommandOutput {
-  {
-    events: [{ eventType: event_type, payload: payload_json }],
-    tags,
-    consistencyTags: tags,
-    expectedVersions: Map::new(),
-  }
-}
+// Result helpers delegated to @core shared library
+fn ok(output : CommandOutput) -> WasmResult { @core.ok(output) }
+fn ok_noop() -> WasmResult { @core.ok_noop() }
+fn err(status : Int, code : String, message : String) -> WasmResult { @core.err(status, code, message) }
+fn new_command_output(event_type : String, payload_json : String, tags : Array[String]) -> CommandOutput { @core.new_command_output(event_type, payload_json, tags) }

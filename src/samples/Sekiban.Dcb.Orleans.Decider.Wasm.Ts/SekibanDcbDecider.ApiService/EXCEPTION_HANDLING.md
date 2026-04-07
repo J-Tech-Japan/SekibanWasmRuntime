@@ -14,7 +14,7 @@ public abstract class DomainException : Exception
 
 // 具体的な例外タイプ
 - NotFoundException        → 404 Not Found
-- ValidationException      → 400 Bad Request (with validation errors)
+- DomainValidationException → 400 Bad Request (with validation errors)
 - ConflictException        → 409 Conflict
 - UnauthorizedException    → 401 Unauthorized
 - ApplicationException     → 400 Bad Request
@@ -105,7 +105,7 @@ async (Guid studentId, [FromServices] ISekibanExecutorWithoutResult executor) =>
 // ドメインロジックで検証失敗時
 if (classroom.IsFull)
 {
-    throw new ValidationException("ClassRoom is full");
+    throw new DomainValidationException("ClassRoom is full");
 }
 
 // 複数のエラーがある場合
@@ -114,7 +114,7 @@ var errors = new Dictionary<string, string[]>
     ["classRoomId"] = new[] { "ClassRoom is full" },
     ["studentId"] = new[] { "Student already enrolled" }
 };
-throw new ValidationException("Enrollment validation failed", errors);
+throw new DomainValidationException("Enrollment validation failed", errors);
 ```
 
 ### パターン4: 既存リソースの競合

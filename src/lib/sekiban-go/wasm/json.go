@@ -2,11 +2,11 @@ package wasm
 
 import "encoding/json"
 
-// MustJSON marshals a value to JSON string, returning "{}" on error.
+// MustJSON marshals a value to JSON string, returning "null" on error.
 func MustJSON(value any) string {
 	data, err := json.Marshal(value)
 	if err != nil {
-		return "{}"
+		return "null"
 	}
 	return string(data)
 }

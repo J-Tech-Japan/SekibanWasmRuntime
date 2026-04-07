@@ -1,3 +1,5 @@
+namespace SekibanDcbDecider.Cli;
+
 internal enum SimpleCacheMode
 {
     Auto,

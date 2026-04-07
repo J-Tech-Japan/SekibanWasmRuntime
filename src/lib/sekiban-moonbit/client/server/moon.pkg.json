@@ -1,0 +1,11 @@
+{
+  "warn-list": "-44",
+  "import": [
+    { "path": "moonbitlang/core/json", "alias": "json" },
+    { "path": "moonbitlang/core/ref", "alias": "ref" },
+    { "path": "moonbitlang/async/http", "alias": "ahttp" },
+    { "path": "moonbitlang/async/socket", "alias": "socket" },
+    { "path": "sekiban/sekiban-client/http", "alias": "http" },
+    { "path": "sekiban/sekiban-client/executor", "alias": "executor" }
+  ]
+}

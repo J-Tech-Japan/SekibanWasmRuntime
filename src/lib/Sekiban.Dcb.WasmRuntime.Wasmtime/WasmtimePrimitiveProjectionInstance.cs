@@ -77,6 +77,7 @@ public class WasmtimePrimitiveProjectionInstance :
     private readonly Func<int, long>? _serializeState;
     private readonly Action<int, int, int>? _restoreState;
     private readonly Action? _collectGarbage;
+    private readonly Action? _resetAllocations;
     private readonly Func<int, int>? _alloc;
     private readonly Action<int, int>? _free;
     private readonly int _instanceId = -1;
@@ -164,6 +165,7 @@ public class WasmtimePrimitiveProjectionInstance :
             _serializeState = instance.GetFunction<int, long>("serialize_state");
             _restoreState = instance.GetAction<int, int, int>("restore_state");
             _collectGarbage = instance.GetAction("collect_garbage");
+            _resetAllocations = instance.GetAction("reset_allocations");
 
             _alloc = instance.GetFunction<int, int>("alloc");
             _free = instance.GetAction<int, int>("dealloc") ?? instance.GetAction<int, int>("free");
@@ -1668,6 +1670,7 @@ public class WasmtimePrimitiveProjectionInstance :
             return;
         }
         _free(ptr, len);
+        _resetAllocations?.Invoke();
     }
 
     private static void Trace(string message)

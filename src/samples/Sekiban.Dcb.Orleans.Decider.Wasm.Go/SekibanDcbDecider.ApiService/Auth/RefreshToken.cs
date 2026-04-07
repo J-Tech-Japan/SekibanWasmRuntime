@@ -11,10 +11,10 @@ public class RefreshToken
     public Guid Id { get; set; } = Guid.NewGuid();
 
     /// <summary>
-    ///     The refresh token string
+    ///     SHA-256 hash of the refresh token string
     /// </summary>
     [Required]
-    public string Token { get; set; } = string.Empty;
+    public string TokenHash { get; set; } = string.Empty;
 
     /// <summary>
     ///     The user this token belongs to

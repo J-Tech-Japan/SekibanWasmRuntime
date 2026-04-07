@@ -14,7 +14,7 @@ public class CreateClassRoomHandler : ICommandHandler<CreateClassRoom>
         var exists = await context.TagExistsAsync(tag);
         if (exists)
         {
-            throw new ApplicationException("ClassRoom Already Exists");
+            throw new ApplicationException($"ClassRoom {command.ClassRoomId} already exists");
         }
 
         return new ClassRoomCreated(command.ClassRoomId, command.Name, command.MaxStudents)

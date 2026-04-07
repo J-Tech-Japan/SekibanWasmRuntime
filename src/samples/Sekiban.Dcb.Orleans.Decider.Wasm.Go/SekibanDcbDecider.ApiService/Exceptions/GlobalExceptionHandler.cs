@@ -35,7 +35,7 @@ public class GlobalExceptionHandler : IExceptionHandler
                 }
             },
 
-            ValidationException validation => new ProblemDetails
+            DomainValidationException validation => new ProblemDetails
             {
                 Status = StatusCodes.Status400BadRequest,
                 Title = "Validation Error",
