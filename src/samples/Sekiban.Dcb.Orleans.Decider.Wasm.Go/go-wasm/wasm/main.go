@@ -70,7 +70,7 @@ func (inst *instance) reset() {
 }
 
 var (
-	instances = make(map[int32]*instance)
+	instances       = make(map[int32]*instance)
 	nextID    int32 = 1
 )
 
@@ -132,6 +132,9 @@ func alloc(size uint32) uint32 { return wasm.Alloc(size) }
 
 //export dealloc
 func dealloc(ptr, length uint32) { wasm.Dealloc(ptr, length) }
+
+//export reset_allocations
+func reset_allocations() { wasm.ResetAllocations() }
 
 // ---------------------------------------------------------------------------
 // Instance lifecycle exports
@@ -390,15 +393,15 @@ func execute_list_query(instanceId int32, qtPtr, qtLen, pPtr, pLen uint32) int64
 // ---------------------------------------------------------------------------
 
 const (
-	queryWeatherList        = "GetWeatherForecastListQuery"
-	queryWeatherCount       = "GetWeatherForecastCountQuery"
-	queryStudentList        = "GetStudentListQuery"
-	queryClassRoomList      = "GetClassRoomListQuery"
-	queryUserDirectoryList  = "GetUserDirectoryListQuery"
-	queryUserAccessList     = "GetUserAccessListQuery"
-	queryRoomList           = "GetRoomListQuery"
-	queryReservationList    = "GetReservationListQuery"
-	queryApprovalInbox      = "GetApprovalInboxQuery"
+	queryWeatherList       = "GetWeatherForecastListQuery"
+	queryWeatherCount      = "GetWeatherForecastCountQuery"
+	queryStudentList       = "GetStudentListQuery"
+	queryClassRoomList     = "GetClassRoomListQuery"
+	queryUserDirectoryList = "GetUserDirectoryListQuery"
+	queryUserAccessList    = "GetUserAccessListQuery"
+	queryRoomList          = "GetRoomListQuery"
+	queryReservationList   = "GetReservationListQuery"
+	queryApprovalInbox     = "GetApprovalInboxQuery"
 )
 
 type weatherListQuery struct {
@@ -1736,7 +1739,7 @@ func handleCommitReservationHold(stateJSON string, _ int, reqJSON string) string
 		OrganizerId: state.OrganizerId, OrganizerName: state.OrganizerName,
 		StartTime: state.StartTime, EndTime: state.EndTime,
 		Purpose: state.Purpose, SelectedEquipment: state.SelectedEquipment,
-		RequiresApproval: req.RequiresApproval,
+		RequiresApproval:  req.RequiresApproval,
 		ApprovalRequestId: req.ApprovalRequestId, ApprovalRequestComment: req.ApprovalRequestComment,
 	}
 	return wasmOk(domain.EventReservationHoldCommitted, wasm.MustJSON(ev),
@@ -1759,7 +1762,7 @@ func handleConfirmReservation(stateJSON string, _ int, reqJSON string) string {
 		OrganizerId: state.OrganizerId, OrganizerName: state.OrganizerName,
 		StartTime: state.StartTime, EndTime: state.EndTime,
 		Purpose: state.Purpose, SelectedEquipment: state.SelectedEquipment,
-		ConfirmedAt: req.NowIso,
+		ConfirmedAt:       req.NowIso,
 		ApprovalRequestId: state.ApprovalRequestId, ApprovalRequestComment: state.ApprovalRequestComment,
 		ApprovalDecisionComment: state.ApprovalDecisionComment,
 	}
@@ -1781,7 +1784,7 @@ func handleCancelReservation(stateJSON string, _ int, reqJSON string) string {
 		StartTime: state.StartTime, EndTime: state.EndTime,
 		Purpose: state.Purpose, SelectedEquipment: state.SelectedEquipment,
 		ApprovalRequestComment: state.ApprovalRequestComment,
-		Reason: req.Reason, CancelledAt: req.NowIso,
+		Reason:                 req.Reason, CancelledAt: req.NowIso,
 	}
 	return wasmOk(domain.EventReservationCancelled, wasm.MustJSON(ev),
 		[]string{tagString(domain.TagGroupReservation, state.ReservationId)})
@@ -1800,9 +1803,9 @@ func handleRejectReservation(stateJSON string, _ int, reqJSON string) string {
 		OrganizerId: state.OrganizerId, OrganizerName: state.OrganizerName,
 		StartTime: state.StartTime, EndTime: state.EndTime,
 		Purpose: state.Purpose, SelectedEquipment: state.SelectedEquipment,
-		ApprovalRequestId: req.ApprovalRequestId,
+		ApprovalRequestId:      req.ApprovalRequestId,
 		ApprovalRequestComment: state.ApprovalRequestComment,
-		Reason: req.Reason, RejectedAt: req.NowIso,
+		Reason:                 req.Reason, RejectedAt: req.NowIso,
 	}
 	return wasmOk(domain.EventReservationRejected, wasm.MustJSON(ev),
 		[]string{tagString(domain.TagGroupReservation, state.ReservationId)})

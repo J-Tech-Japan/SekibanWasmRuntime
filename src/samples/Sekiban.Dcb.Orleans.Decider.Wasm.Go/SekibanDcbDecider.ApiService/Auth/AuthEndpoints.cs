@@ -157,11 +157,12 @@ public static class AuthEndpoints
             // JWT authentication for Next.js BFF
             var accessToken = tokenService.GenerateAccessToken(user, roles);
             var refreshToken = tokenService.GenerateRefreshToken();
+            var refreshTokenHash = tokenService.HashRefreshToken(refreshToken);
 
             // Store refresh token
             var refreshTokenEntity = new RefreshToken
             {
-                Token = refreshToken,
+                TokenHash = refreshTokenHash,
                 UserId = user.Id,
                 ExpiresAt = DateTime.UtcNow.AddDays(jwtSettings.Value.RefreshTokenExpirationDays)
             };
@@ -228,9 +229,11 @@ public static class AuthEndpoints
             return Results.Unauthorized();
         }
 
+        var refreshTokenHash = tokenService.HashRefreshToken(request.RefreshToken);
+
         // Find the refresh token
         var storedToken = await dbContext.RefreshTokens
-            .FirstOrDefaultAsync(t => t.Token == request.RefreshToken && t.UserId == userId);
+            .FirstOrDefaultAsync(t => t.TokenHash == refreshTokenHash && t.UserId == userId);
 
         if (storedToken == null || !storedToken.IsValid)
         {
@@ -253,11 +256,12 @@ public static class AuthEndpoints
         // Generate new tokens
         var newAccessToken = tokenService.GenerateAccessToken(user, roles);
         var newRefreshToken = tokenService.GenerateRefreshToken();
+        var newRefreshTokenHash = tokenService.HashRefreshToken(newRefreshToken);
 
         // Store new refresh token
         var newRefreshTokenEntity = new RefreshToken
         {
-            Token = newRefreshToken,
+            TokenHash = newRefreshTokenHash,
             UserId = user.Id,
             ExpiresAt = DateTime.UtcNow.AddDays(jwtSettings.Value.RefreshTokenExpirationDays)
         };

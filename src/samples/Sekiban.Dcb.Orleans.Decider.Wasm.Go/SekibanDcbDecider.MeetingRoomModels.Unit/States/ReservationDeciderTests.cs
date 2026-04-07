@@ -254,4 +254,59 @@ public class ReservationDeciderTests
         state = state.Evolve(new ReservationCancelled(_reservationId, _roomId, _startTime, _endTime, "Changed plans", DateTime.UtcNow));
         Assert.IsType<ReservationState.ReservationCancelled>(state);
     }
+
+    [Fact]
+    public void ReservationHoldCommittedDecider_Validate_Should_Use_Configured_Clock()
+    {
+        var now = new DateTime(2026, 4, 6, 12, 0, 0, DateTimeKind.Utc);
+        var draft = new ReservationState.ReservationDraft(
+            _reservationId,
+            _roomId,
+            _organizerId,
+            _organizerName,
+            now,
+            now.AddHours(1),
+            "Team Meeting",
+            []);
+
+        var originalProvider = ReservationHoldCommittedDecider.UtcNowProvider;
+        ReservationHoldCommittedDecider.UtcNowProvider = () => now;
+
+        try
+        {
+            var ex = Assert.Throws<InvalidOperationException>(() => draft.Validate());
+            Assert.Equal("Cannot commit hold for past or current time", ex.Message);
+        }
+        finally
+        {
+            ReservationHoldCommittedDecider.UtcNowProvider = originalProvider;
+        }
+    }
+
+    [Fact]
+    public void ReservationHoldCommittedDecider_Validate_Should_Pass_For_Future_Time()
+    {
+        var now = new DateTime(2026, 4, 6, 12, 0, 0, DateTimeKind.Utc);
+        var draft = new ReservationState.ReservationDraft(
+            _reservationId,
+            _roomId,
+            _organizerId,
+            _organizerName,
+            now.AddMinutes(30),
+            now.AddHours(1),
+            "Team Meeting",
+            []);
+
+        var originalProvider = ReservationHoldCommittedDecider.UtcNowProvider;
+        ReservationHoldCommittedDecider.UtcNowProvider = () => now;
+
+        try
+        {
+            draft.Validate();
+        }
+        finally
+        {
+            ReservationHoldCommittedDecider.UtcNowProvider = originalProvider;
+        }
+    }
 }

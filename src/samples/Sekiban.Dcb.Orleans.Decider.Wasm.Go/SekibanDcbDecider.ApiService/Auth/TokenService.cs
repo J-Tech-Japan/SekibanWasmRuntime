@@ -64,6 +64,16 @@ public class TokenService
     }
 
     /// <summary>
+    ///     Hash a refresh token before persistence.
+    /// </summary>
+    public string HashRefreshToken(string refreshToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(refreshToken);
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(refreshToken));
+        return Convert.ToHexString(hash);
+    }
+
+    /// <summary>
     ///     Get the principal from an expired token (for refresh token validation).
     /// </summary>
     public ClaimsPrincipal? GetPrincipalFromExpiredToken(string token)

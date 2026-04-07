@@ -2,17 +2,35 @@ package wasm
 
 import "unsafe"
 
+const maxAllocations = 2048
+
 // Allocations keeps buffers alive to prevent GC in TinyGo reactor mode.
-var Allocations [][]byte
+// The registry is bounded and should be cleared by the host between calls.
+var Allocations [maxAllocations][]byte
+
+var allocationCount int
+
+// ResetAllocations releases tracked buffers once the host has finished reading
+// any returned memory from the previous reactor invocation.
+func ResetAllocations() {
+	for i := 0; i < allocationCount; i++ {
+		Allocations[i] = nil
+	}
+	allocationCount = 0
+}
 
 // Alloc allocates a buffer in WASM linear memory and returns its pointer.
 func Alloc(size uint32) uint32 {
 	if size == 0 {
 		return 0
 	}
+	if allocationCount >= len(Allocations) {
+		panic("wasm allocation registry exhausted; host must call ResetAllocations between invocations")
+	}
 	buf := make([]byte, int(size))
 	ptr := uintptr(unsafe.Pointer(&buf[0]))
-	Allocations = append(Allocations, buf)
+	Allocations[allocationCount] = buf
+	allocationCount++
 	return uint32(ptr)
 }
 
