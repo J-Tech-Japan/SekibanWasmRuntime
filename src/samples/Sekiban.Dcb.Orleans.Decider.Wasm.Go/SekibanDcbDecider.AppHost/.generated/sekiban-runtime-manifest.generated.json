@@ -1,0 +1,119 @@
+{
+  "defaultModulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/sleepy-gates/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Go/modules/go-weather.wasm",
+  "queryAssemblyVersion": "wasm",
+  "eventTypes": [
+    "WeatherForecastCreated",
+    "WeatherForecastLocationUpdated",
+    "WeatherForecastDeleted",
+    "StudentCreated",
+    "ClassRoomCreated",
+    "StudentEnrolledInClassRoom",
+    "StudentDroppedFromClassRoom",
+    "UserRegistered",
+    "UserProfileUpdated",
+    "UserAccessGranted",
+    "UserRoleGranted",
+    "RoomCreated",
+    "RoomUpdated",
+    "ReservationDraftCreated",
+    "ReservationHoldCommitted",
+    "ReservationConfirmed",
+    "ReservationCancelled",
+    "ReservationRejected",
+    "ApprovalFlowStarted",
+    "ApprovalDecisionRecorded"
+  ],
+  "projectors": [
+    {
+      "projectorName": "WeatherForecastProjector",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/sleepy-gates/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Go/modules/go-weather.wasm",
+      "projectorVersion": "1.0.0"
+    },
+    {
+      "projectorName": "StudentProjector",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/sleepy-gates/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Go/modules/go-weather.wasm",
+      "projectorVersion": "1.0.0"
+    },
+    {
+      "projectorName": "ClassRoomProjector",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/sleepy-gates/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Go/modules/go-weather.wasm",
+      "projectorVersion": "1.0.0"
+    },
+    {
+      "projectorName": "UserDirectoryProjector",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/sleepy-gates/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Go/modules/go-weather.wasm",
+      "projectorVersion": "1.0.0"
+    },
+    {
+      "projectorName": "UserAccessProjector",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/sleepy-gates/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Go/modules/go-weather.wasm",
+      "projectorVersion": "1.0.0"
+    },
+    {
+      "projectorName": "RoomProjector",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/sleepy-gates/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Go/modules/go-weather.wasm",
+      "projectorVersion": "1.0.0"
+    },
+    {
+      "projectorName": "ReservationProjector",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/sleepy-gates/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Go/modules/go-weather.wasm",
+      "projectorVersion": "1.0.0"
+    },
+    {
+      "projectorName": "ApprovalRequestProjector",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/sleepy-gates/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Go/modules/go-weather.wasm",
+      "projectorVersion": "1.0.0"
+    },
+    {
+      "projectorName": "WeatherForecastMultiProjection",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/sleepy-gates/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Go/modules/go-weather.wasm",
+      "projectorVersion": "1.0.0"
+    },
+    {
+      "projectorName": "StudentListProjection",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/sleepy-gates/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Go/modules/go-weather.wasm",
+      "projectorVersion": "1.0.0"
+    },
+    {
+      "projectorName": "ClassRoomListProjection",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/sleepy-gates/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Go/modules/go-weather.wasm",
+      "projectorVersion": "1.0.0"
+    },
+    {
+      "projectorName": "UserDirectoryListProjection",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/sleepy-gates/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Go/modules/go-weather.wasm",
+      "projectorVersion": "1.0.0"
+    },
+    {
+      "projectorName": "UserAccessListProjection",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/sleepy-gates/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Go/modules/go-weather.wasm",
+      "projectorVersion": "1.0.0"
+    },
+    {
+      "projectorName": "RoomListProjection",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/sleepy-gates/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Go/modules/go-weather.wasm",
+      "projectorVersion": "1.0.0"
+    },
+    {
+      "projectorName": "ReservationListProjection",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/sleepy-gates/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Go/modules/go-weather.wasm",
+      "projectorVersion": "1.0.0"
+    },
+    {
+      "projectorName": "ApprovalRequestListProjection",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/sleepy-gates/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Go/modules/go-weather.wasm",
+      "projectorVersion": "1.0.0"
+    }
+  ],
+  "queryProjectors": {
+    "GetWeatherForecastCountQuery": "WeatherForecastMultiProjection",
+    "GetWeatherForecastListQuery": "WeatherForecastMultiProjection",
+    "GetStudentListQuery": "StudentListProjection",
+    "GetClassRoomListQuery": "ClassRoomListProjection",
+    "GetRoomListQuery": "RoomListProjection",
+    "GetReservationListQuery": "ReservationListProjection",
+    "GetApprovalInboxQuery": "ApprovalRequestListProjection",
+    "GetUserDirectoryListQuery": "UserDirectoryListProjection",
+    "GetUserAccessListQuery": "UserAccessListProjection"
+  }
+}
