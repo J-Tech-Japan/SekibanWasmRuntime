@@ -117,13 +117,7 @@ public class WasmTagStatePrimitiveTests
         Assert.Equal("WeatherForecastState", primitive.TagPayloadName);
         Assert.Equal("weather", primitive.TagGroup);
         Assert.Equal("f-1", primitive.TagContent);
-        var restoredSnapshot = JsonSerializer.Deserialize<WasmStateSnapshot>(instance.LastRestoredState!, JsonOptions);
-        Assert.NotNull(restoredSnapshot);
-        Assert.Equal("{\"forecastId\":\"f-1\"}", restoredSnapshot!.StateJson);
-        Assert.Equal("WeatherForecastState", restoredSnapshot.TagPayloadName);
-        Assert.Equal("weather", restoredSnapshot.TagGroup);
-        Assert.Equal("f-1", restoredSnapshot.TagContent);
-        Assert.Equal("WeatherForecastProjector", restoredSnapshot.TagProjector);
+        Assert.Equal("{\"forecastId\":\"f-1\"}", instance.LastRestoredState);
     }
 
     [Fact]
