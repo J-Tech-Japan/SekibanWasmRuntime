@@ -6,6 +6,7 @@ using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Queries;
 namespace Dcb.EventSource.Queries;
 
+[GenerateSerializer]
 public record GetClassRoomListQuery :
     IMultiProjectionListQuery<ClassRoomListProjection, GetClassRoomListQuery, ClassRoomItem>,
     IWaitForSortableUniqueId,

@@ -1,4 +1,5 @@
 using Dcb.MeetingRoomModels.Events.Reservation;
+using Dcb.MeetingRoomModels.States.Reservation;
 using Dcb.MeetingRoomModels.Tags;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Events;
@@ -31,16 +32,33 @@ public record UpdateReservationDetails : ICommandWithHandler<UpdateReservationDe
         ICommandContext context)
     {
         var tag = new ReservationTag(command.ReservationId);
-        var exists = await context.TagExistsAsync(tag);
+        var reservationStateTyped = await context.GetStateAsync<ReservationState, ReservationProjector>(tag);
+        var roomId = reservationStateTyped.Payload switch
+        {
+            ReservationState.ReservationDraft draft => draft.RoomId,
+            ReservationState.ReservationHeld held => held.RoomId,
+            ReservationState.ReservationConfirmed confirmed => confirmed.RoomId,
+            ReservationState.ReservationCancelled cancelled => cancelled.RoomId,
+            ReservationState.ReservationRejected rejected => rejected.RoomId,
+            ReservationState.ReservationExpired expired => expired.RoomId,
+            ReservationState.ReservationEmpty => Guid.Empty,
+            _ => Guid.Empty
+        };
 
-        if (!exists)
+        if (roomId == Guid.Empty)
         {
             throw new ApplicationException($"Reservation {command.ReservationId} not found");
         }
 
+        if (command.RoomId != roomId)
+        {
+            throw new ApplicationException(
+                $"Reservation {command.ReservationId} belongs to room {roomId}, not {command.RoomId}");
+        }
+
         return new ReservationDetailsUpdated(
             command.ReservationId,
-            command.RoomId,
+            roomId,
             command.Title,
             command.Description,
             command.AttendeeCount,

@@ -43,6 +43,13 @@ public record ConfirmReservation : ICommandWithHandler<ConfirmReservation>
         var endTime = held.EndTime;
         var purpose = held.Purpose;
         var organizerId = held.OrganizerId;
+        var roomId = held.RoomId;
+
+        if (command.RoomId != roomId)
+        {
+            throw new ApplicationException(
+                $"Reservation {command.ReservationId} belongs to room {roomId}, not {command.RoomId}");
+        }
 
         string? approvalDecisionComment = null;
         if (held.RequiresApproval)
@@ -63,13 +70,13 @@ public record ConfirmReservation : ICommandWithHandler<ConfirmReservation>
         }
 
         // 3. Get room name for user-friendly error messages
-        var roomTag = new RoomTag(command.RoomId);
+        var roomTag = new RoomTag(roomId);
         var roomStateTyped = await context.GetStateAsync<RoomProjector>(roomTag);
         var roomState = roomStateTyped.Payload as RoomState ?? RoomState.Empty;
-        var roomName = !string.IsNullOrEmpty(roomState.Name) ? roomState.Name : $"Room {command.RoomId}";
+        var roomName = !string.IsNullOrEmpty(roomState.Name) ? roomState.Name : $"Room {roomId}";
 
         // 4. Check for conflicts on each day the reservation spans
-        var dailyTags = RoomDailyActivityTag.CreateTagsForTimeRange(command.RoomId, startTime, endTime).ToList();
+        var dailyTags = RoomDailyActivityTag.CreateTagsForTimeRange(roomId, startTime, endTime).ToList();
 
         foreach (var dailyTag in dailyTags)
         {
@@ -93,7 +100,7 @@ public record ConfirmReservation : ICommandWithHandler<ConfirmReservation>
         // 5. Create confirmed event with all details for projectors
         return new ReservationConfirmed(
             command.ReservationId,
-            command.RoomId,
+            roomId,
             organizerId,
             startTime,
             endTime,

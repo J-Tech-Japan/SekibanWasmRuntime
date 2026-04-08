@@ -40,7 +40,13 @@ public record CommitReservationHold : ICommandWithHandler<CommitReservationHold>
             throw new ApplicationException($"Reservation {command.ReservationId} is not in draft state");
         }
 
-        var roomTag = new RoomTag(command.RoomId);
+        if (command.RoomId != draft.RoomId)
+        {
+            throw new ApplicationException(
+                $"Reservation {command.ReservationId} belongs to room {draft.RoomId}, not {command.RoomId}");
+        }
+
+        var roomTag = new RoomTag(draft.RoomId);
         var roomStateTyped = await context.GetStateAsync<RoomProjector>(roomTag);
         var roomState = roomStateTyped.Payload as RoomState ?? RoomState.Empty;
 
@@ -64,7 +70,7 @@ public record CommitReservationHold : ICommandWithHandler<CommitReservationHold>
 
         return new ReservationHoldCommitted(
             command.ReservationId,
-            command.RoomId,
+            draft.RoomId,
             draft.OrganizerId,
             draft.OrganizerName,
             draft.StartTime,

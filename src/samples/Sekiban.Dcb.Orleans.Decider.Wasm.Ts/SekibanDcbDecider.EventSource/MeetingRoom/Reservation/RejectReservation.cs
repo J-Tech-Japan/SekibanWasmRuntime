@@ -36,12 +36,19 @@ public record RejectReservation : ICommandWithHandler<RejectReservation>
 
         var reservationState = await context.GetStateAsync<ReservationProjector>(tag);
         var payloadState = reservationState.Payload as ReservationState ?? ReservationState.Empty;
-        var (organizerId, startTime) = GetOrganizerAndStartTime(payloadState);
+        var (roomId, organizerId, startTime) = GetReservationMetadata(payloadState);
+
+        if (command.RoomId != roomId)
+        {
+            throw new ApplicationException(
+                $"Reservation {command.ReservationId} belongs to room {roomId}, not {command.RoomId}");
+        }
+
         var monthlyTag = UserMonthlyReservationTag.FromStartTime(organizerId, startTime);
 
         var payload = new ReservationRejected(
             command.ReservationId,
-            command.RoomId,
+            roomId,
             command.ApprovalRequestId,
             command.Reason,
             DateTime.UtcNow);
@@ -49,21 +56,21 @@ public record RejectReservation : ICommandWithHandler<RejectReservation>
         var tags = new List<ITag>
         {
             new ReservationTag(command.ReservationId),
-            new RoomTag(command.RoomId),
+            new RoomTag(roomId),
             monthlyTag
         };
 
         return new EventPayloadWithTags(payload, tags);
     }
 
-    private static (Guid OrganizerId, DateTime StartTime) GetOrganizerAndStartTime(ReservationState state) =>
+    private static (Guid RoomId, Guid OrganizerId, DateTime StartTime) GetReservationMetadata(ReservationState state) =>
         state switch
         {
-            ReservationState.ReservationDraft draft => (draft.OrganizerId, draft.StartTime),
-            ReservationState.ReservationHeld held => (held.OrganizerId, held.StartTime),
-            ReservationState.ReservationConfirmed confirmed => (confirmed.OrganizerId, confirmed.StartTime),
-            ReservationState.ReservationCancelled cancelled => (cancelled.OrganizerId, cancelled.StartTime),
-            ReservationState.ReservationRejected rejected => (rejected.OrganizerId, rejected.StartTime),
+            ReservationState.ReservationDraft draft => (draft.RoomId, draft.OrganizerId, draft.StartTime),
+            ReservationState.ReservationHeld held => (held.RoomId, held.OrganizerId, held.StartTime),
+            ReservationState.ReservationConfirmed confirmed => (confirmed.RoomId, confirmed.OrganizerId, confirmed.StartTime),
+            ReservationState.ReservationCancelled cancelled => (cancelled.RoomId, cancelled.OrganizerId, cancelled.StartTime),
+            ReservationState.ReservationRejected rejected => (rejected.RoomId, rejected.OrganizerId, rejected.StartTime),
             _ => throw new ApplicationException("Reservation does not include organizer details.")
         };
 }

@@ -5,6 +5,7 @@ using Sekiban.Dcb.Queries;
 
 namespace Dcb.EventSource.Queries;
 
+[GenerateSerializer]
 public record GetWeatherForecastListGenericQuery :
     IMultiProjectionListQuery<WeatherForecastProjection, GetWeatherForecastListGenericQuery, WeatherForecastItem>,
     IWaitForSortableUniqueId,

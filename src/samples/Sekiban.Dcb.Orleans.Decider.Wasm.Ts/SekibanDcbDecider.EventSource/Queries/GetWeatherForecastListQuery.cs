@@ -3,6 +3,7 @@ using Orleans;
 using Sekiban.Dcb.Queries;
 namespace Dcb.EventSource.Queries;
 
+[GenerateSerializer]
 public record GetWeatherForecastListQuery :
     IMultiProjectionListQuery<WeatherForecastProjection, GetWeatherForecastListQuery, WeatherForecastItem>,
     IWaitForSortableUniqueId,
