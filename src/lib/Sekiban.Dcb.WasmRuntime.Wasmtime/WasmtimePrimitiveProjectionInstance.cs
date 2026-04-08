@@ -94,7 +94,8 @@ public class WasmtimePrimitiveProjectionInstance :
         lock (_syncRoot)
         {
             Trace($"constructor:start projector={projectorType}");
-            var initialize = instance.GetAction("_initialize");
+            var initialize = instance.GetAction("_initialize")
+                ?? instance.GetAction("_start");
             Trace($"constructor:before_initialize projector={projectorType}");
             initialize?.Invoke();
             Trace($"constructor:after_initialize projector={projectorType}");

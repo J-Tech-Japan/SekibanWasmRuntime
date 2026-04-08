@@ -1,0 +1,95 @@
+{
+  "ModeLabel": "rs-wasm-50k-grain",
+  "BaseUrl": "http://127.0.0.1:6198",
+  "TargetEvents": 50000,
+  "Concurrency": 8,
+  "StartedAtUtc": "2026-04-08T07:33:23.353015Z",
+  "CompletedAtUtc": "2026-04-08T07:34:42.00989Z",
+  "TotalDurationSeconds": 78.6578692,
+  "Phases": [
+    {
+      "Name": "Setup",
+      "TotalOperations": 20,
+      "TotalEventsCreated": 20,
+      "ErrorCount": 0,
+      "DurationSeconds": 0.1635418,
+      "OperationsPerSecond": 122.29289392681261,
+      "EventsPerSecond": 122.29289392681261,
+      "CommandLatency": {
+        "MinMs": 4.8497,
+        "MaxMs": 20.118,
+        "MeanMs": 8.028445,
+        "P50Ms": 6.5578,
+        "P95Ms": 13.8849,
+        "P99Ms": 20.118
+      },
+      "QueryLatency": null,
+      "StatusCodeDistribution": {
+        "200": 20
+      }
+    },
+    {
+      "Name": "WeatherBulk",
+      "TotalOperations": 30000,
+      "TotalEventsCreated": 30000,
+      "ErrorCount": 0,
+      "DurationSeconds": 21.4054187,
+      "OperationsPerSecond": 1401.514281054451,
+      "EventsPerSecond": 1401.514281054451,
+      "CommandLatency": {
+        "MinMs": 2.7897,
+        "MaxMs": 50.3103,
+        "MeanMs": 5.701787089999985,
+        "P50Ms": 5.312,
+        "P95Ms": 8.3584,
+        "P99Ms": 12.0651
+      },
+      "QueryLatency": null,
+      "StatusCodeDistribution": {
+        "200": 30000
+      }
+    },
+    {
+      "Name": "ReservationLifecycle",
+      "TotalOperations": 7695,
+      "TotalEventsCreated": 20007,
+      "ErrorCount": 0,
+      "DurationSeconds": 16.3651257,
+      "OperationsPerSecond": 470.2072040913196,
+      "EventsPerSecond": 1222.538730637431,
+      "CommandLatency": {
+        "MinMs": 5.0561,
+        "MaxMs": 145.4323,
+        "MeanMs": 16.43235733593246,
+        "P50Ms": 17.7755,
+        "P95Ms": 22.2545,
+        "P99Ms": 26.5382
+      },
+      "QueryLatency": null,
+      "StatusCodeDistribution": {
+        "200": 7695
+      }
+    },
+    {
+      "Name": "QueryPerformance",
+      "TotalOperations": 250,
+      "TotalEventsCreated": 0,
+      "ErrorCount": 0,
+      "DurationSeconds": 0.3012783,
+      "OperationsPerSecond": 829.7975659050121,
+      "EventsPerSecond": 0,
+      "CommandLatency": {
+        "MinMs": 0.6117,
+        "MaxMs": 44.7605,
+        "MeanMs": 1.1858775999999995,
+        "P50Ms": 0.7668,
+        "P95Ms": 1.5651,
+        "P99Ms": 6.0554
+      },
+      "QueryLatency": null,
+      "StatusCodeDistribution": {
+        "200": 250
+      }
+    }
+  ]
+}

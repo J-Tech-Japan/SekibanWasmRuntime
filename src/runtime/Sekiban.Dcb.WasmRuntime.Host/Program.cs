@@ -141,10 +141,13 @@ builder.Services.AddTransient<ISerializedSekibanDcbExecutor>(sp =>
 builder.Services.AddWasmtimeProjectionHost(options =>
 {
     options.DefaultModulePath = manifest.DefaultModulePath;
-    // Pool=1: keep 1 idle instance per projector for reuse.
-    // With tag projector filtering, only ~10 projectors → 10 × 55MB = 550MB idle.
-    // Pool reuse avoids 55MB instance creation cost on every call.
-    options.MaxPooledInstancesPerProjector = 1;
+    // Pool size: configurable via SEKIBAN_WASM_POOL_SIZE env var.
+    // Default=1 keeps 1 idle instance per projector for reuse.
+    // Set to 0 for Go (TinyGo) WASM to avoid memory corruption from instance reuse.
+    var poolSize = int.TryParse(
+        Environment.GetEnvironmentVariable("SEKIBAN_WASM_POOL_SIZE"),
+        out var ps) ? ps : 1;
+    options.MaxPooledInstancesPerProjector = poolSize;
     options.StaticMemoryMaximumSizeBytes = staticMemoryMaximumSizeBytes;
 });
 builder.Services.AddWasmTagStateRuntime(options =>
@@ -293,6 +296,19 @@ app.MapPost("/api/sekiban/serialized/tag-state", async (HttpContext http, TagSta
     var grainKey = ServiceIdGrainKey.Build(serviceIdProvider.GetCurrentServiceId(), tagStateId.GetTagStateId());
     var grain = clusterClient.GetGrain<ITagStateGrain>(grainKey);
     var tagState = await grain.GetStateAsync();
+
+    // Safety net: WASM projectors don't embed C# type names, so the accumulated
+    // TagPayloadName may be missing or "EmptyTagStatePayload" for non-empty payloads.
+    // Override with the manifest-inferred name when needed.
+    if (tagState.Payload.Length > 0 &&
+        (string.IsNullOrEmpty(tagState.TagPayloadName) ||
+         tagState.TagPayloadName == nameof(EmptyTagStatePayload)))
+    {
+        tagState = tagState with
+        {
+            TagPayloadName = SekibanRuntimeManifest.InferTagPayloadName(tagStateId.TagProjectorName)
+        };
+    }
 
     return Results.Ok(tagState);
     }
