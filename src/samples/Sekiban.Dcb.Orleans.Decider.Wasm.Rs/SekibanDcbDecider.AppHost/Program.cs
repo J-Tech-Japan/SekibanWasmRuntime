@@ -3,7 +3,14 @@ using SekibanWasm.AppHostShared;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-var builder = DistributedApplication.CreateBuilder(args);
+var benchmarkProfile = Environment.GetEnvironmentVariable("BENCHMARK_PROFILE");
+var isStrictBenchmarkProfile = string.Equals(benchmarkProfile, "tagstategrain-memory", StringComparison.OrdinalIgnoreCase);
+var builder = DistributedApplication.CreateBuilder(new DistributedApplicationOptions
+{
+    Args = args,
+    DisableDashboard = isStrictBenchmarkProfile,
+    EnableResourceLogging = isStrictBenchmarkProfile
+});
 
 var storage = builder
     .AddAzureStorage("azurestorage")
@@ -54,6 +61,13 @@ var wasmServerBuilder = builder
     .WaitFor(postgres)
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
 
+if (isStrictBenchmarkProfile)
+{
+    wasmServerBuilder = wasmServerBuilder
+        .WithEnvironment("SEKIBAN_DIRECT_SNAPSHOT_QUERY_ENABLED", "false")
+        .WithEnvironment("SEKIBAN_TAG_STATE_FAST_PATH_ENABLED", "false");
+}
+
 var wasmApiPort = AppHostInfrastructure.ResolveConfiguredPort(6199, "E2E_API_PORT");
 wasmServerBuilder = wasmServerBuilder
     .WithEndpoint("http", endpoint =>
@@ -75,6 +89,13 @@ var apiServiceBuilder = builder
     .WithReference(multiProjectionOffload)
     .WaitFor(dcbPostgres)
     .WaitFor(identityPostgres);
+
+if (isStrictBenchmarkProfile)
+{
+    apiServiceBuilder = apiServiceBuilder
+        .WithEnvironment("Orleans__UseInMemoryStreams", "true")
+        .WithEnvironment("Orleans__UseInMemoryGrainStorage", "true");
+}
 
 apiServiceBuilder = apiServiceBuilder
     .WithEndpoint("http", endpoint =>

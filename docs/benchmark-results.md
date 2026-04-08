@@ -5,7 +5,7 @@ This document tracks two benchmark profiles:
 - the stricter 2026-04-08 `tagstategrain-memory` rerun, which disables shortcut paths and routes tag-state through Orleans `TagStateGrain`
 - the older optimized `300,000` event matrix from the 2026-04-04 pass, kept as a shortcut-enabled baseline
 
-When the two profiles disagree, treat the 2026-04-08 strict profile as the current answer for Native C# and C# WASM. The older C# WASM row (`1355.3 weather eps`, `1882.1 reservation eps`, `115.1 query ops/sec`, `~2594.2 MB`) is not the latest strict result; it is the earlier shortcut-enabled baseline.
+When the two profiles disagree, treat the 2026-04-08 strict profile as the current answer for all six implemented runtimes. The older C# WASM row (`1355.3 weather eps`, `1882.1 reservation eps`, `115.1 query ops/sec`, `~2594.2 MB`) is not the latest strict result; it is the earlier shortcut-enabled baseline.
 
 The current `300,000` event matrix now has fresh reruns for:
 
@@ -79,7 +79,7 @@ Tag-state is now resolved via Orleans `TagStateGrain` instead of the in-process 
 
 ## 2026-04-08 Strict `tagstategrain-memory` Profile
 
-This profile was added to answer the question "how fast are Native C# and C# WASM when we do not shortcut tag-state?" It intentionally removes the fast paths that made the earlier C# rows look better.
+This profile was added to answer the question "how fast are the implemented runtimes when we do not shortcut tag-state?" It intentionally removes the fast paths that made the earlier optimized rows look better.
 
 Profile rules:
 
@@ -93,11 +93,16 @@ The strict runs were executed with:
 
 - `scripts/run-benchmark-runtime.sh native 300000 ... tagstategrain-memory`
 - `scripts/run-benchmark-runtime.sh cs-wasm 300000 ... tagstategrain-memory`
+- `scripts/run-benchmark-runtime.sh rs-wasm 300000 ... tagstategrain-memory`
+- `scripts/run-benchmark-runtime.sh mb-wasm 300000 ... tagstategrain-memory`
+- `scripts/run-benchmark-runtime.sh go-wasm 300000 ... tagstategrain-memory`
+- `scripts/run-benchmark-runtime.sh ts-wasm 300000 ... tagstategrain-memory`
 
 Strict profile wiring:
 
 - Native template AppHost: `Orleans__UseInMemoryStreams=true`, `Orleans__UseInMemoryGrainStorage=true`
-- C# WASM AppHost: `SEKIBAN_DIRECT_SNAPSHOT_QUERY_ENABLED=false`, `SEKIBAN_TAG_STATE_FAST_PATH_ENABLED=false`
+- All WASM AppHosts: `SEKIBAN_DIRECT_SNAPSHOT_QUERY_ENABLED=false`, `SEKIBAN_TAG_STATE_FAST_PATH_ENABLED=false`
+- Rust / MoonBit / Go / TypeScript sample ApiServices: `Orleans__UseInMemoryStreams=true`, `Orleans__UseInMemoryGrainStorage=true`
 
 ### Strict 300K Results
 
@@ -105,6 +110,10 @@ Strict profile wiring:
 |---|---|---:|---:|---:|---:|---:|---:|---:|
 | C# Native (`tagstategrain-memory`) | `completed` | `1965.5` | `747.0` | `287.3` | `1808.6` | `254.2 s` | `~2953.4 MB` | `0` |
 | C# WASM (`tagstategrain-memory`) | `completed` | `1581.9` | `254.4` | `97.9` | `942.1` | `586.6 s` | `~3950.6 MB` | `0` |
+| Rust WASM (`tagstategrain-memory`) | `completed` | `480.0` | `148.0` | `57.0` | `2081.0` | `1187.9 s` | `~2327.4 MB` | `0` |
+| MoonBit WASM (`tagstategrain-memory`) | `completed` | `515.0` | `163.0` | `63.0` | `166.0` | `1089.5 s` | `~2320.5 MB` | `0` |
+| Go WASM (`tagstategrain-memory`) | `completed` | `510.0` | `190.0` | `73.0` | `816.0` | `986.6 s` | `~2980.4 MB` | `0` |
+| TypeScript WASM (`tagstategrain-memory`) | `completed` | `475.0` | `196.0` | `75.0` | `418.0` | `992.5 s` | `~3999.7 MB` | `0` |
 
 Latency summary:
 
@@ -112,14 +121,19 @@ Latency summary:
 |---|---|---|---|
 | C# Native (`tagstategrain-memory`) | `3.9 / 5.7 ms` | `11.2 / 87.1 ms` | `0.2 / 0.4 ms` |
 | C# WASM (`tagstategrain-memory`) | `4.9 / 6.7 ms` | `73.4 / 138.1 ms` | `0.6 / 1.3 ms` |
+| Rust WASM (`tagstategrain-memory`) | `16.5 / 27.6 ms` | `135.5 / 221.0 ms` | `0.2 / 0.6 ms` |
+| MoonBit WASM (`tagstategrain-memory`) | `15.7 / 24.3 ms` | `128.6 / 200.1 ms` | `5.7 / 17.9 ms` |
+| Go WASM (`tagstategrain-memory`) | `15.9 / 26.0 ms` | `104.4 / 177.7 ms` | `1.0 / 2.4 ms` |
+| TypeScript WASM (`tagstategrain-memory`) | `16.3 / 30.0 ms` | `102.0 / 170.0 ms` | `1.5 / 4.9 ms` |
 
 Takeaways from the strict profile:
 
-- Native C# remains clearly faster than C# WASM when tag-state is forced through `TagStateGrain`.
-- C# WASM still completes `300K` with `0` errors and stays just under the original `4 GB` guardrail, but only barely at `~3950.6 MB`.
-- The biggest regression under the strict profile is the reservation lifecycle path. C# WASM falls from the earlier optimized `1882.1 reservation eps` to `254.4 reservation eps`.
-- Native C# also slows down under the strict profile, but it still keeps a `~2.9x` lead over C# WASM on reservation events/sec and a `~1.9x` lead on total wall-clock.
-- Query throughput is not the current strict-profile bottleneck. After rebuilding the sample module, C# WASM query throughput recovered to `942 qps`.
+- All six implemented runtimes now complete the strict `300K` profile with `0` errors.
+- Native C# remains the clear strict-profile leader on both command throughput and query throughput.
+- Among the non-C# WASM runtimes, Go and TypeScript have the strongest reservation command path under strict conditions, while Rust is the clear query-throughput leader.
+- C# WASM and TypeScript WASM both stay under the original `4 GB` guardrail, but only barely at `~3950.6 MB` and `~3999.7 MB`.
+- Rust WASM and MoonBit WASM keep the lowest strict-profile memory usage, both near `~2.32 GB`, but they pay for that with the weakest reservation throughput under long runs.
+- The biggest strict-profile regression remains the command path which depends on repeated tag-state resolution. Every WASM runtime degrades materially relative to the optimized baseline, but C# WASM still holds a substantial lead over Rust and MoonBit on reservation events/sec.
 
 ### Strict 50K Validation
 
@@ -140,16 +154,22 @@ This was fixed by:
 - copying the fresh output back to `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm`
 - making `scripts/run-benchmark-runtime.sh` auto-rebuild the sample module when the source tree is newer than the checked-in module
 
+The strict TypeScript rerun initially failed for a different reproducibility reason: `ts-clientapi` had no local `node_modules`, so `npx tsx` could not resolve `@hono/node-server`. This was fixed by making `scripts/run-benchmark-runtime.sh` auto-run `npm install --no-audit --no-fund` for `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Ts/ts-clientapi` when those dependencies are missing.
+
 Result files:
 
 - `benchmarks/results/native-50k-tagstategrain-memory-20260408.json`
 - `benchmarks/results/native-300k-tagstategrain-memory-20260408.json`
 - `benchmarks/results/cs-wasm-50k-tagstategrain-memory-20260408-fix2.json`
 - `benchmarks/results/cs-wasm-300k-tagstategrain-memory-20260408.json`
+- `benchmarks/results/rs-wasm-300k-tagstategrain-memory-20260408.json`
+- `benchmarks/results/mb-wasm-300k-tagstategrain-memory-20260408.json`
+- `benchmarks/results/go-wasm-300k-tagstategrain-memory-20260408.json`
+- `benchmarks/results/ts-wasm-300k-tagstategrain-memory-20260408.json`
 
 ## 2026-04-04 Optimized 300K Baseline
 
-This section is retained for comparison only. It used the shortcut-enabled runtime configuration from the 2026-04-04 pass, so its Native C# and C# WASM rows are not the current strict-profile values.
+This section is retained for comparison only. It used the shortcut-enabled runtime configuration from the 2026-04-04 pass, so its rows are not the current strict-profile values.
 
 The table below uses fresh `300,000` event runs. The C# Native row shows the PostgreSQL-backed result for apples-to-apples comparison with the WASM runtimes (all use PostgreSQL). The in-memory result is documented separately below.
 

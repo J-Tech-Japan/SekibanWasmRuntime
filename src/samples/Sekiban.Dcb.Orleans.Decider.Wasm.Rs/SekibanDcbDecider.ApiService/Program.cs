@@ -21,6 +21,7 @@ using Dcb.EventSource;
 using Orleans.Configuration;
 using Microsoft.Extensions.Logging;
 using Orleans.Runtime;
+using Orleans.Runtime.Hosting;
 using Orleans.Storage;
 using Scalar.AspNetCore;
 using Sekiban.Dcb;
@@ -76,6 +77,8 @@ builder.Services.AddOpenApi();
 var orleansClusterType = builder.Configuration["ORLEANS_CLUSTERING_TYPE"]?.ToLower() ?? "azurestorage";
 var orleansGrainType = builder.Configuration["ORLEANS_GRAIN_DEFAULT_TYPE"]?.ToLower() ?? "blob";
 var orleansQueueType = builder.Configuration["ORLEANS_QUEUE_TYPE"]?.ToLower() ?? "azurestorage";
+var useInMemoryStreams = builder.Configuration.GetValue<bool>("Orleans:UseInMemoryStreams");
+var useInMemoryGrainStorage = builder.Configuration.GetValue<bool>("Orleans:UseInMemoryGrainStorage");
 
 // Add Azure Storage clients for Orleans only when NOT using Cosmos for clustering
 // (Aspire clients add health checks that require connection strings)
@@ -104,7 +107,7 @@ if (orleansQueueType != "eventhub")
 
 var databaseType = builder.Configuration.GetSection("Sekiban").GetValue<string>("Database")?.ToLower();
 
-Console.WriteLine($"[Orleans Config] ClusterType: {orleansClusterType}, GrainType: {orleansGrainType}, QueueType: {orleansQueueType}");
+Console.WriteLine($"[Orleans Config] ClusterType: {orleansClusterType}, GrainType: {orleansGrainType}, QueueType: {orleansQueueType}, InMemoryStreams: {useInMemoryStreams}, InMemoryGrainStorage: {useInMemoryGrainStorage}");
 
 // Configure Orleans
 builder.Host.UseOrleans((context, siloBuilder) =>
@@ -321,6 +324,8 @@ void ConfigureCosmosOrleans(ISiloBuilder siloBuilder, string cosmosConnection, I
 
 void ConfigureLocalOrleans(ISiloBuilder siloBuilder, IHostEnvironment environment, IConfiguration configuration)
 {
+    var useInMemoryGrainStorage = configuration.GetValue<bool>("Orleans:UseInMemoryGrainStorage");
+
     if (environment.IsDevelopment())
     {
         Console.WriteLine("[Orleans] Using LocalhostClustering (Development mode)");
@@ -336,6 +341,17 @@ void ConfigureLocalOrleans(ISiloBuilder siloBuilder, IHostEnvironment environmen
                 opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>("DcbOrleansClusteringTable");
             });
         });
+    }
+
+    if (useInMemoryGrainStorage)
+    {
+        Console.WriteLine("[Orleans] Using in-memory grain storage");
+        AddCompatibleMemoryGrainStorageAsDefault(siloBuilder);
+        foreach (var store in new[] { "OrleansStorage", "dcb-orleans-queue", "DcbOrleansGrainTable", "EventStreamProvider", "PubSubStore" })
+        {
+            AddCompatibleMemoryGrainStorage(siloBuilder, store);
+        }
+        return;
     }
 
     // Configure Azure Storage grain storage
@@ -425,7 +441,7 @@ void ConfigureInMemoryStreams(ISiloBuilder siloBuilder)
 
     AddMemoryStream("EventStreamProvider");
     AddMemoryStream("DcbOrleansQueue");
-    siloBuilder.AddMemoryGrainStorage("PubSubStore");
+    AddCompatibleMemoryGrainStorage(siloBuilder, "PubSubStore");
 }
 
 void ConfigureEventHubStreams(ISiloBuilder siloBuilder, IConfiguration configuration)
@@ -493,6 +509,20 @@ void ConfigureGrainStorage(ISiloBuilder siloBuilder, IConfiguration configuratio
     // Grain storage is configured in ConfigureCosmosOrleans or ConfigureLocalOrleans
     // This function is kept for future extensibility
 }
+
+void AddCompatibleMemoryGrainStorage(ISiloBuilder siloBuilder, string providerName)
+{
+    siloBuilder.ConfigureServices(services =>
+    {
+        services.AddGrainStorage<CompatibleMemoryGrainStorage>(
+            providerName,
+            static (serviceProvider, name) => new CompatibleMemoryGrainStorage(
+                MemoryGrainStorageFactory.Create(serviceProvider, name)));
+    });
+}
+
+void AddCompatibleMemoryGrainStorageAsDefault(ISiloBuilder siloBuilder) =>
+    AddCompatibleMemoryGrainStorage(siloBuilder, "Default");
 
 void ConfigureOrleansServices(ISiloBuilder siloBuilder, IHostEnvironment environment, string? databaseType, IConfiguration configuration)
 {
@@ -567,4 +597,41 @@ static IPAddress GetPrivateIpAddress()
 
     // Last resort: return loopback
     return IPAddress.Loopback;
+}
+
+sealed class CompatibleMemoryGrainStorage : IGrainStorage, ILifecycleParticipant<ISiloLifecycle>, IDisposable
+{
+    private readonly MemoryGrainStorage _inner;
+
+    public CompatibleMemoryGrainStorage(MemoryGrainStorage inner)
+    {
+        _inner = inner;
+    }
+
+    Task IGrainStorage.ReadStateAsync<T>(
+        string stateName,
+        GrainId grainId,
+        IGrainState<T> grainState) =>
+        _inner.ReadStateAsync(stateName, grainId, grainState);
+
+    Task IGrainStorage.WriteStateAsync<T>(
+        string stateName,
+        GrainId grainId,
+        IGrainState<T> grainState) =>
+        _inner.WriteStateAsync(stateName, grainId, grainState);
+
+    Task IGrainStorage.ClearStateAsync<T>(
+        string stateName,
+        GrainId grainId,
+        IGrainState<T> grainState) =>
+        _inner.ClearStateAsync(stateName, grainId, grainState);
+
+    public void Participate(ISiloLifecycle lifecycle)
+    {
+    }
+
+    public void Dispose()
+    {
+        _inner.Dispose();
+    }
 }

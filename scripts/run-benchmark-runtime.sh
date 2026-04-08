@@ -155,6 +155,16 @@ ensure_cs_wasm_sample_module() {
   fi
 }
 
+ensure_ts_wasm_clientapi_dependencies() {
+  local clientapi_dir="$repo_root/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Ts/ts-clientapi"
+  local marker="$clientapi_dir/node_modules/@hono/node-server/package.json"
+
+  if [[ ! -f "$marker" ]]; then
+    echo "[ts-wasm] ts-clientapi dependencies missing, running npm install"
+    (cd "$clientapi_dir" && npm install --no-audit --no-fund)
+  fi
+}
+
 ensure_postgres_database() {
   local container_name="$1"
   local password="$2"
@@ -342,6 +352,8 @@ echo "[$runtime] benchmark profile: $benchmark_profile"
 rm -f "$apphost_log" "$benchmark_log" "$rss_log"
 if [[ "$runtime" == "cs-wasm" ]]; then
   ensure_cs_wasm_sample_module
+elif [[ "$runtime" == "ts-wasm" ]]; then
+  ensure_ts_wasm_clientapi_dependencies
 fi
 assert_port_free "$ready_port"
 if [[ "$rss_port" != "$ready_port" ]]; then
