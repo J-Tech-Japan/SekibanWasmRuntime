@@ -2,8 +2,10 @@
 
 This document tracks two benchmark profiles:
 
-- the optimized `300,000` event matrix from the 2026-04-04 pass
 - the stricter 2026-04-08 `tagstategrain-memory` rerun, which disables shortcut paths and routes tag-state through Orleans `TagStateGrain`
+- the older optimized `300,000` event matrix from the 2026-04-04 pass, kept as a shortcut-enabled baseline
+
+When the two profiles disagree, treat the 2026-04-08 strict profile as the current answer for Native C# and C# WASM. The older C# WASM row (`1355.3 weather eps`, `1882.1 reservation eps`, `115.1 query ops/sec`, `~2594.2 MB`) is not the latest strict result; it is the earlier shortcut-enabled baseline.
 
 The current `300,000` event matrix now has fresh reruns for:
 
@@ -145,7 +147,9 @@ Result files:
 - `benchmarks/results/cs-wasm-50k-tagstategrain-memory-20260408-fix2.json`
 - `benchmarks/results/cs-wasm-300k-tagstategrain-memory-20260408.json`
 
-## 2026-04-04 Fresh 300K Matrix
+## 2026-04-04 Optimized 300K Baseline
+
+This section is retained for comparison only. It used the shortcut-enabled runtime configuration from the 2026-04-04 pass, so its Native C# and C# WASM rows are not the current strict-profile values.
 
 The table below uses fresh `300,000` event runs. The C# Native row shows the PostgreSQL-backed result for apples-to-apples comparison with the WASM runtimes (all use PostgreSQL). The in-memory result is documented separately below.
 
