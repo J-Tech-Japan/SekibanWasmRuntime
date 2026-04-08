@@ -135,6 +135,57 @@ Takeaways from the strict profile:
 - Rust WASM and MoonBit WASM keep the lowest strict-profile memory usage, both near `~2.32 GB`, but they pay for that with the weakest reservation throughput under long runs.
 - The biggest strict-profile regression remains the command path which depends on repeated tag-state resolution. Every WASM runtime degrades materially relative to the optimized baseline, but C# WASM still holds a substantial lead over Rust and MoonBit on reservation events/sec.
 
+### C# WASM vs Native C# Strict 300K Investigation
+
+The strict `300K` numbers are valid, but they are not an apples-to-apples "same code plus WASM only" comparison.
+
+- Native C# reservation throughput finishes at `287.3 ops/sec` (`747.0 events/sec`) with reservation p50 / p95 latency `11.2 / 87.1 ms`.
+- C# WASM reservation throughput finishes at `97.9 ops/sec` (`254.4 events/sec`) with reservation p50 / p95 latency `73.4 / 138.1 ms`.
+- Native reservation interval throughput degrades from `961 eps` at the first progress sample to `576 eps` at the last one.
+- C# WASM reservation interval throughput degrades more sharply, from `435 eps` to `168 eps`.
+
+The apphost log shows where that extra time goes for strict C# WASM.
+
+| C# WASM reservation-phase signal | Measured value |
+|---|---:|
+| Reservation ops | `46,163` |
+| Client `/api/reservations/quick` starts | `36,913` |
+| Client `/api/reservations/draft` starts | `9,229` |
+| WasmServer `/serialized/tag-state` starts | `83,051` |
+| WasmServer `/serialized/commit` starts | `46,749` |
+| WasmServer `/serialized/tag-latest-sortable` starts | `46,745` |
+
+That means the strict C# WASM reservation path is doing approximately:
+
+- `~1.80` `serialized/tag-state` POSTs per reservation op
+- `~1.01` `serialized/commit` POSTs per reservation op
+- `~1.01` `serialized/tag-latest-sortable` POSTs per reservation op
+- `~2.25` `serialized/tag-state` POSTs per quick reservation
+
+The internal endpoint latencies also drift upward during the run:
+
+| Endpoint | First 5,000 avg | Last 5,000 avg | p50 | p95 |
+|---|---:|---:|---:|---:|
+| Client `/api/reservations/quick` | `50.4 ms` | `127.7 ms` | `82.8 ms` | `142.0 ms` |
+| Client `/api/reservations/draft` | `35.6 ms` | `53.6 ms` | `42.2 ms` | `74.1 ms` |
+| WasmServer `/serialized/tag-state` | `20.1 ms` | `56.3 ms` | `32.7 ms` | `68.0 ms` |
+| WasmServer `/serialized/commit` | `4.1 ms` | `10.6 ms` | `3.5 ms` | `10.9 ms` |
+| WasmServer `/serialized/tag-latest-sortable` | `1.5 ms` | `2.3 ms` | `1.0 ms` | `2.2 ms` |
+
+The practical conclusion is:
+
+- The dominant strict-profile slowdown for C# WASM is the command-side remote path, especially repeated `serialized/tag-state` calls whose latency roughly triples over the run.
+- Commit retries are not the main issue. `serialized/commit` is only about `1.3%` above reservation-op count in the reservation phase.
+- Query throughput is lower than Native C#, but the biggest strict gap is not query; it is the reservation command path.
+- Native strict runs do not pay the same `benchmark -> ClientApi -> WasmServer -> TagStateGrain` hop pattern, so the current strict profile measures architecture plus WASM, not WASM execution in isolation.
+
+If the goal is a fair runtime comparison, the benchmark needs one of these before the next round:
+
+- a Native control path that uses the same serialized remote command flow as C# WASM, or
+- a C# WASM host path that executes the same command flow without the extra HTTP proxy hops
+
+The analysis was generated from the saved strict benchmark log with `scripts/analyze-apphost-http-log.py` and written to `benchmarks/results/cs-wasm-300k-tagstategrain-memory-20260408-http-analysis.json`.
+
 ### Strict 50K Validation
 
 The `50,000` event smoke runs were used to verify the strict setup before the full `300K` pass.
@@ -162,6 +213,7 @@ Result files:
 - `benchmarks/results/native-300k-tagstategrain-memory-20260408.json`
 - `benchmarks/results/cs-wasm-50k-tagstategrain-memory-20260408-fix2.json`
 - `benchmarks/results/cs-wasm-300k-tagstategrain-memory-20260408.json`
+- `benchmarks/results/cs-wasm-300k-tagstategrain-memory-20260408-http-analysis.json`
 - `benchmarks/results/rs-wasm-300k-tagstategrain-memory-20260408.json`
 - `benchmarks/results/mb-wasm-300k-tagstategrain-memory-20260408.json`
 - `benchmarks/results/go-wasm-300k-tagstategrain-memory-20260408.json`
