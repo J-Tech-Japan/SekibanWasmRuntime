@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.WithoutResult\Sekiban.Dcb.WithoutResult.csproj" />
+    <ProjectReference Include="..\..\..\samples\Sekiban.Dcb.Orleans.Decider.Wasm.Ts\SekibanDcbDecider.MeetingRoomModels\SekibanDcbDecider.MeetingRoomModels.csproj" />
   </ItemGroup>
 
 </Project>

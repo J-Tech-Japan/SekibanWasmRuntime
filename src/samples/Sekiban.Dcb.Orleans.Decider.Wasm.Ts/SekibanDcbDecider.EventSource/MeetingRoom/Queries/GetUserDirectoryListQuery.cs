@@ -6,16 +6,17 @@ using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Queries;
 namespace Dcb.EventSource.MeetingRoom.Queries;
 
+[GenerateSerializer]
 public record UserDirectoryListItem(
-    Guid UserId,
-    string DisplayName,
-    string Email,
-    string? Department,
-    bool IsActive,
-    DateTime RegisteredAt,
-    int MonthlyReservationLimit,
-    List<string> ExternalProviders,
-    List<string> Roles)
+    [property: Id(0)] Guid UserId,
+    [property: Id(1)] string DisplayName,
+    [property: Id(2)] string Email,
+    [property: Id(3)] string? Department,
+    [property: Id(4)] bool IsActive,
+    [property: Id(5)] DateTime RegisteredAt,
+    [property: Id(6)] int MonthlyReservationLimit,
+    [property: Id(7)] List<string> ExternalProviders,
+    [property: Id(8)] List<string> Roles)
 {
     /// <summary>
     ///     Creates a new instance with roles
@@ -24,6 +25,7 @@ public record UserDirectoryListItem(
         this with { Roles = roles };
 }
 
+[GenerateSerializer]
 public record GetUserDirectoryListQuery :
     IMultiProjectionListQuery<UserDirectoryListProjection, GetUserDirectoryListQuery, UserDirectoryListItem>,
     IWaitForSortableUniqueId,

@@ -7,6 +7,7 @@ namespace Dcb.EventSource.Queries;
 /// <summary>
 /// Count query for the TagState-based projector
 /// </summary>
+[GenerateSerializer]
 public record GetWeatherForecastCountSingleQuery :
     IMultiProjectionQuery<WeatherForecastProjectorWithTagStateProjector, GetWeatherForecastCountSingleQuery, WeatherForecastCountResult>,
     IWaitForSortableUniqueId

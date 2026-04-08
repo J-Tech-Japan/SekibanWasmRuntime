@@ -22,6 +22,8 @@ public record UserMonthlyReservationState : ITagStatePayload
     {
         if (UserId == Guid.Empty || Month == default)
         {
+            // Rejections can be replayed before the monthly counter tag is initialized.
+            // Returning the current state keeps the projection idempotent for that out-of-order case.
             return this;
         }
 

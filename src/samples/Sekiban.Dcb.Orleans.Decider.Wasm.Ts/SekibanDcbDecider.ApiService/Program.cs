@@ -232,7 +232,10 @@ apiRoute.MapClassRoomEndpoints();
 apiRoute.MapEnrollmentEndpoints();
 apiRoute.MapWeatherEndpoints();
 apiRoute.MapProjectionEndpoints();
-apiRoute.MapDebugEndpoints();
+if (app.Environment.IsDevelopment())
+{
+    apiRoute.MapDebugEndpoints();
+}
 apiRoute.MapRoomEndpoints();
 apiRoute.MapReservationEndpoints();
 apiRoute.MapApprovalEndpoints();
