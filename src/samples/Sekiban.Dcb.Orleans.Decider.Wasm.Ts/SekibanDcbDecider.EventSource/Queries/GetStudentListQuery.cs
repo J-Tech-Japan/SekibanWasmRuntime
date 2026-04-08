@@ -5,6 +5,7 @@ using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Queries;
 namespace Dcb.EventSource.Queries;
 
+[GenerateSerializer]
 public record GetStudentListQuery :
     IMultiProjectionListQuery<StudentListProjection, GetStudentListQuery, StudentState>,
     IWaitForSortableUniqueId,

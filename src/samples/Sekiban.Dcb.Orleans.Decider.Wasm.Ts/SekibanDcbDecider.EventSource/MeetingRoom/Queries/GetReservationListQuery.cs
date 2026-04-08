@@ -6,21 +6,23 @@ using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Queries;
 namespace Dcb.EventSource.MeetingRoom.Queries;
 
+[GenerateSerializer]
 public record ReservationListItem(
-    Guid ReservationId,
-    Guid RoomId,
-    Guid OrganizerId,
-    string OrganizerName,
-    DateTime StartTime,
-    DateTime EndTime,
-    string Purpose,
-    List<string> SelectedEquipment,
-    string Status,
-    bool RequiresApproval,
-    Guid? ApprovalRequestId,
-    string? ApprovalRequestComment,
-    string? ApprovalDecisionComment);
+    [property: Id(0)] Guid ReservationId,
+    [property: Id(1)] Guid RoomId,
+    [property: Id(2)] Guid OrganizerId,
+    [property: Id(3)] string OrganizerName,
+    [property: Id(4)] DateTime StartTime,
+    [property: Id(5)] DateTime EndTime,
+    [property: Id(6)] string Purpose,
+    [property: Id(7)] List<string> SelectedEquipment,
+    [property: Id(8)] string Status,
+    [property: Id(9)] bool RequiresApproval,
+    [property: Id(10)] Guid? ApprovalRequestId,
+    [property: Id(11)] string? ApprovalRequestComment,
+    [property: Id(12)] string? ApprovalDecisionComment);
 
+[GenerateSerializer]
 public record GetReservationListQuery :
     IMultiProjectionListQuery<ReservationListProjection, GetReservationListQuery, ReservationListItem>,
     IWaitForSortableUniqueId,

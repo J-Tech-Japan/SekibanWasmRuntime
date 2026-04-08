@@ -37,17 +37,23 @@ public record ExpireReservation : ICommandWithHandler<ExpireReservation>
         }
 
         // Get time range from the current state
-        var (startTime, endTime) = reservationStateTyped.Payload switch
+        var (roomId, startTime, endTime) = reservationStateTyped.Payload switch
         {
-            ReservationState.ReservationHeld held => (held.StartTime, held.EndTime),
-            ReservationState.ReservationConfirmed confirmed => (confirmed.StartTime, confirmed.EndTime),
-            ReservationState.ReservationDraft draft => (draft.StartTime, draft.EndTime),
+            ReservationState.ReservationHeld held => (held.RoomId, held.StartTime, held.EndTime),
+            ReservationState.ReservationConfirmed confirmed => (confirmed.RoomId, confirmed.StartTime, confirmed.EndTime),
+            ReservationState.ReservationDraft draft => (draft.RoomId, draft.StartTime, draft.EndTime),
             _ => throw new ApplicationException($"Reservation {command.ReservationId} cannot be expired from state: {reservationStateTyped.Payload.GetType().Name}")
         };
 
+        if (command.RoomId != roomId)
+        {
+            throw new ApplicationException(
+                $"Reservation {command.ReservationId} belongs to room {roomId}, not {command.RoomId}");
+        }
+
         return new ReservationExpiredCommitted(
             command.ReservationId,
-            command.RoomId,
+            roomId,
             startTime,
             endTime,
             DateTime.UtcNow,

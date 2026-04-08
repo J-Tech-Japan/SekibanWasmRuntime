@@ -75,15 +75,16 @@ The last setting is important for the C# WASM fix: it prevents `RoomProjector` c
 
 ## 2026-04-04 Fresh 300K Matrix
 
-The table below uses fresh `300,000` event runs from current `main` where available.
+The table below uses fresh `300,000` event runs. The C# Native row shows the PostgreSQL-backed result for apples-to-apples comparison with the WASM runtimes (all use PostgreSQL). The in-memory result is documented separately below.
 
 | Runtime | Status | Weather events/sec | Reservation events/sec | Reservation ops/sec | Query ops/sec | Total wall-clock | Peak RSS | Errors |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
-| C# Native | `completed` | `2004.1` | `236.7` | `91.0` | `1586.5` | `597.6 s` | `~2626.4 MB` | `0` |
+| C# Native (Postgres) | `completed` | `2004.1` | `236.7` | `91.0` | `1586.5` | `597.6 s` | `~1637.2 MB` | `0` |
+| C# Native (in-memory) | `completed` | `1988.7` | `2001.4` | `769.8` | `1759.0` | `151.2 s` | `n/a` | `0` |
 | C# WASM | `completed` | `1355.3` | `1882.1` | `723.8` | `115.1` | `199.4 s` | `~2594.2 MB` | `0` |
 | Rust WASM | `completed` | `1565.3` | `561.0` | `215.7` | `754.0` | `329.8 s` | `~1312.7 MB` | `0` |
-| MoonBit WASM | `completed` | `1460.5` | `556.8` | `214.1` | `164.5` | `340.9 s` | `~1961.6 MB` | `0` |
-| Go WASM | `completed` | `1547.8` | `520.1` | `200.0` | `335.8` | `388.5 s` | `~2502.4 MB` | `0` |
+| MoonBit WASM | `completed` | `1460.5` | `556.8` | `214.1` | `164.5` | `340.9 s` | `~1301.6 MB` | `0` |
+| Go WASM | `completed` | `1547.8` | `520.1` | `200.0` | `335.8` | `388.5 s` | `~2514.2 MB` | `0` |
 | TypeScript WASM | `completed` | `1494.7` | `559.3` | `215.1` | `2.0` | `498.7 s` | `~1724.1 MB` | `0` |
 | C WASM | `not implemented in repo` | `n/a` | `n/a` | `n/a` | `n/a` | `n/a` | `n/a` | `n/a` |
 
@@ -91,7 +92,8 @@ Latency summary:
 
 | Runtime | Weather p50 / p95 | Reservation p50 / p95 | Query p50 / p95 |
 |---|---|---|---|
-| C# Native | `3.8 / 5.4 ms` | `66.0 / 225.5 ms` | `0.2 / 0.4 ms` |
+| C# Native (Postgres) | `3.8 / 5.4 ms` | `66.0 / 225.5 ms` | `0.2 / 0.4 ms` |
+| C# Native (in-memory) | `3.8 / 5.4 ms` | `8.5 / 16.0 ms` | `0.2 / 0.6 ms` |
 | C# WASM | `5.7 / 7.8 ms` | `10.0 / 14.0 ms` | `4.2 / 22.9 ms` |
 | Rust WASM | `4.9 / 6.7 ms` | `36.4 / 64.8 ms` | `0.8 / 1.5 ms` |
 | MoonBit WASM | `5.3 / 7.3 ms` | `38.7 / 61.2 ms` | `2.0 / 22.1 ms` |
@@ -101,14 +103,14 @@ Latency summary:
 Current takeaways:
 
 - All six runtimes now complete `300K` with zero errors.
-- C# WASM remains the fastest command path at `300K` among all runtimes, and it still stays under the original `4 GB` memory target.
-- Native C# now completes `300K` cleanly and stays under `4 GB`, but its reservation phase still decays from roughly `670 eps` at the start to roughly `125 eps` at the end of the run.
+- **C# Native with in-memory storage is the fastest overall runtime**, completing `300K` in just `151 s` with `2001 reservation eps` — an **8.5x improvement** over the PostgreSQL-backed run. This confirms that the native reservation throughput decay was caused by PostgreSQL I/O contention, not by the Sekiban framework itself.
+- C# WASM remains the fastest command path among WASM runtimes at `300K`, and it still stays under the original `4 GB` memory target.
+- Native C# (Postgres) completes `300K` cleanly and stays under `2 GB`, but its reservation phase still decays from roughly `670 eps` at the start to roughly `125 eps` at the end of the run due to PostgreSQL write amplification.
 - Rust WASM, MoonBit WASM, Go WASM, and TypeScript WASM all have very similar command-side throughput, around `520-561` reservation events/sec.
-- Rust WASM has the smallest memory footprint at `~1313 MB` and the best query throughput at `754 ops/sec`.
-- Go WASM has strong query performance (`335.8 ops/sec`) but the highest memory usage among WASM runtimes at `~2502 MB`.
+- Rust WASM and MoonBit WASM share the smallest memory footprint at `~1302-1313 MB` and Rust WASM has the best query throughput at `754 ops/sec`.
+- Go WASM has strong query performance (`335.8 ops/sec`) but the highest memory usage among WASM runtimes at `~2514 MB`.
 - TypeScript WASM has the smallest WASM module size (`~239 KB`) and competitive command throughput, but its query phase is severely degraded (`2.0 ops/sec`, p95 `~4 s`) — likely a cold-start or GC issue in the Hono/Node client API layer.
 - MoonBit WASM is materially slower on query throughput than Rust WASM, but still clearly faster than C# WASM on the query phase.
-- Native C# is no longer blocked by the earlier benchmark setup issue, but it is still the highest-priority scalability target because reservation throughput remains much lower than its `30K` profile.
 
 ### Native C# 300K Completion Note
 
@@ -117,7 +119,7 @@ The current native rerun against the Sekiban template AppHost now completes with
 - weather phase completed at `2004.1 events/sec`
 - reservation phase completed at `236.7 events/sec` overall and `91.0 ops/sec`
 - reservation interval throughput still decayed steadily during the run, from roughly `673 eps` at the start to roughly `124-140 eps` at the end
-- peak sampled RSS was `~2626.4 MB`
+- peak sampled RSS was `~1637.2 MB`
 - query phase completed at `1586.5 ops/sec`
 
 The previous aborted native runs turned out to mix two different problems:
@@ -126,6 +128,43 @@ The previous aborted native runs turned out to mix two different problems:
 - the native template quick-reservation path and room reservation state were doing more work than necessary per command
 
 That benchmark-side issue is now fixed, so the current native `300K` result is a trustworthy completion result. The remaining issue is throughput decay, not correctness.
+
+### Native C# In-Memory Storage Results
+
+A `skip-persist` run was performed on 2026-04-08 to isolate the impact of PostgreSQL I/O on native throughput. The in-memory storage provider eliminates all database writes and reads, keeping events and projections entirely in process memory.
+
+| Metric | PostgreSQL | In-Memory | Speedup |
+|---|---:|---:|---:|
+| Weather events/sec | `2004.1` | `1988.7` | `1.0x` |
+| Reservation events/sec | `236.7` | `2001.4` | **`8.5x`** |
+| Reservation ops/sec | `91.0` | `769.8` | **`8.5x`** |
+| Query ops/sec | `1586.5` | `1759.0` | `1.1x` |
+| Total wall-clock | `597.6 s` | `151.2 s` | **`3.9x`** |
+| Reservation p50 | `66.0 ms` | `8.5 ms` | **`7.8x`** |
+| Reservation p95 | `225.5 ms` | `16.0 ms` | **`14.1x`** |
+
+Key observations:
+- Weather throughput is unchanged (~2000 eps) because weather events are simple append-only writes with no conflict checking, so PostgreSQL I/O is not the bottleneck.
+- Reservation throughput jumps from `237` to `2001` events/sec — the entire `300K` reservation decay pattern disappears. This proves the decay was caused by PostgreSQL write contention on the conflict-checked reservation path.
+- The in-memory reservation latency profile (`p50=8.5 ms`, `p95=16.0 ms`) is comparable to the WASM runtimes, confirming that the native Sekiban command pipeline is efficient once database I/O is removed.
+- Query throughput improves marginally (`1587` → `1759` ops/sec) because query reads no longer hit PostgreSQL.
+
+This result establishes the **theoretical upper bound** for native C# performance. Any future PostgreSQL optimization work should aim to close the gap between `237 eps` (Postgres) and `2001 eps` (in-memory) on the reservation path.
+
+### Native C# Optimization Series (2026-04-07)
+
+A series of incremental PostgreSQL-side optimizations were tested before the in-memory run:
+
+| Run | Reservation eps | Total time | Change |
+|---|---:|---:|---|
+| Baseline (04/04) | `236.7` | `597.6 s` | — |
+| delta-fix | `240.9` | `586.0 s` | +1.7% |
+| tags-join | `248.6` | `573.6 s` | +5.0% |
+| with-logs | `260.0` | `552.4 s` | +9.9% |
+| local-ref | `262.1` | `547.8 s` | +10.7% |
+| **skip-persist (in-memory)** | **`2001.4`** | **`151.2 s`** | **+745%** |
+
+The incremental Postgres optimizations (delta-fix through local-ref) yielded a cumulative ~11% improvement on reservation throughput. The in-memory result shows the remaining ~8x gap is entirely due to PostgreSQL I/O overhead.
 
 ## 2026-04-03 Fresh Comparable 30K Rerun
 
@@ -209,11 +248,11 @@ The earlier failed optimization attempts from the same day (`cs-wasm-30k-2026040
 
 ## Remaining Bottlenecks
 
+- **Native C# (Postgres) reservation decay** is now fully explained: the in-memory run proves the `8.5x` gap is PostgreSQL I/O contention. Future optimization should focus on batching, connection pooling, or event store write path improvements.
 - C# WASM query throughput is still far below Rust WASM and still below MoonBit WASM. The main remaining gap is query-side state access rather than reservation command execution.
 - Rust WASM, MoonBit WASM, Go WASM, and TypeScript WASM now all complete `300K` cleanly, but their reservation lifecycle throughput trails the fixed C# WASM path by roughly `3.4x`.
 - TypeScript WASM query throughput is extremely low (`2.0 ops/sec`) at `300K`. The command phase performs well, so the bottleneck is likely in the Hono/Node client API query path or garbage collection pauses under high state volume.
-- Go WASM has the highest memory usage among WASM runtimes (`~2502 MB`), close to C# WASM. The TinyGo runtime and linear memory growth likely account for this.
-- Native C# now has the highest-priority scalability issue in this repo. The `300K` reservation path needs profiling before it can be treated as a valid baseline again.
+- Go WASM has the highest memory usage among WASM runtimes (`~2514 MB`), close to C# WASM. The TinyGo runtime and linear memory growth likely account for this.
 
 ## Result Files
 
@@ -223,6 +262,14 @@ The earlier failed optimization attempts from the same day (`cs-wasm-30k-2026040
 - `benchmarks/results/mb-wasm-5k-shared-lib-rss.log`
 - `benchmarks/results/mb-wasm-300k-shared-lib.json`
 - `benchmarks/results/mb-wasm-300k-shared-lib-rss.log`
+
+### 2026-04-07 Native C# Optimization Series
+
+- `benchmarks/results/native-300k-delta-fix.json` / `-rss.log` (delta-fix optimization)
+- `benchmarks/results/native-300k-tags-join.json` / `-rss.log` (tags-join optimization)
+- `benchmarks/results/native-300k-with-logs.json` / `-rss.log` (with-logs optimization)
+- `benchmarks/results/native-300k-local-ref.json` (local-ref optimization)
+- `benchmarks/results/native-300k-skip-persist.json` (in-memory storage — no RSS log)
 
 ### Current 2026-04-04 300K reruns
 

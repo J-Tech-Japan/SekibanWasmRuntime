@@ -1,31 +1,31 @@
 {
-  "ModeLabel": "CS WASM",
-  "BaseUrl": "http://localhost:5198",
+  "ModeLabel": "cs-wasm",
+  "BaseUrl": "http://127.0.0.1:5198",
   "TargetEvents": 300000,
   "Concurrency": 8,
-  "StartedAtUtc": "2026-04-01T06:40:10.761119Z",
-  "CompletedAtUtc": "2026-04-01T07:17:55.117241Z",
-  "TotalDurationSeconds": 2264.3455829,
+  "StartedAtUtc": "2026-04-08T05:03:46.195881Z",
+  "CompletedAtUtc": "2026-04-08T05:30:00.876366Z",
+  "TotalDurationSeconds": 1574.6410214,
   "Phases": [
     {
       "Name": "Setup",
-      "TotalOperations": 20,
-      "TotalEventsCreated": 20,
+      "TotalOperations": 68,
+      "TotalEventsCreated": 68,
       "ErrorCount": 0,
-      "DurationSeconds": 0.1475724,
-      "OperationsPerSecond": 135.52669740412165,
-      "EventsPerSecond": 135.52669740412165,
+      "DurationSeconds": 0.198168,
+      "OperationsPerSecond": 343.14319163538005,
+      "EventsPerSecond": 343.14319163538005,
       "CommandLatency": {
-        "MinMs": 4.7757,
-        "MaxMs": 23.6991,
-        "MeanMs": 7.2034199999999995,
-        "P50Ms": 5.8726,
-        "P95Ms": 9.8804,
-        "P99Ms": 23.6991
+        "MinMs": 1.7146,
+        "MaxMs": 8.6636,
+        "MeanMs": 2.8523867647058823,
+        "P50Ms": 2.4397,
+        "P95Ms": 6.1954,
+        "P99Ms": 8.6636
       },
       "QueryLatency": null,
       "StatusCodeDistribution": {
-        "200": 20
+        "200": 68
       }
     },
     {
@@ -33,16 +33,16 @@
       "TotalOperations": 180000,
       "TotalEventsCreated": 180000,
       "ErrorCount": 0,
-      "DurationSeconds": 116.517409,
-      "OperationsPerSecond": 1544.8335278378872,
-      "EventsPerSecond": 1544.8335278378872,
+      "DurationSeconds": 82.8936056,
+      "OperationsPerSecond": 2171.458204732742,
+      "EventsPerSecond": 2171.458204732742,
       "CommandLatency": {
-        "MinMs": 2.7282,
-        "MaxMs": 246.4254,
-        "MeanMs": 5.170783863333339,
-        "P50Ms": 4.8191,
-        "P95Ms": 7.0132,
-        "P99Ms": 12.2732
+        "MinMs": 2.0179,
+        "MaxMs": 335.2535,
+        "MeanMs": 3.6782660922221173,
+        "P50Ms": 3.2621,
+        "P95Ms": 4.8805,
+        "P99Ms": 10.837
       },
       "QueryLatency": null,
       "StatusCodeDistribution": {
@@ -51,45 +51,45 @@
     },
     {
       "Name": "ReservationLifecycle",
-      "TotalOperations": 46163,
-      "TotalEventsCreated": 120023,
+      "TotalOperations": 46164,
+      "TotalEventsCreated": 120026,
       "ErrorCount": 0,
-      "DurationSeconds": 1031.7357772,
-      "OperationsPerSecond": 44.74304470208499,
-      "EventsPerSecond": 116.33114083309894,
+      "DurationSeconds": 36.408117,
+      "OperationsPerSecond": 1267.9590103492583,
+      "EventsPerSecond": 3296.682440347025,
       "CommandLatency": {
-        "MinMs": 19.582,
-        "MaxMs": 2178.9487,
-        "MeanMs": 174.1741816043147,
-        "P50Ms": 153.0423,
-        "P95Ms": 366.0958,
-        "P99Ms": 446.4432
+        "MinMs": 2.9548,
+        "MaxMs": 51.6575,
+        "MeanMs": 5.991865564075925,
+        "P50Ms": 5.6439,
+        "P95Ms": 8.4886,
+        "P99Ms": 13.4167
       },
       "QueryLatency": null,
       "StatusCodeDistribution": {
-        "200": 46163
+        "200": 46164
       }
     },
     {
       "Name": "QueryPerformance",
       "TotalOperations": 250,
       "TotalEventsCreated": 0,
-      "ErrorCount": 36,
-      "DurationSeconds": 1115.3202045,
-      "OperationsPerSecond": 0.22415087522966146,
+      "ErrorCount": 150,
+      "DurationSeconds": 1414.9782707,
+      "OperationsPerSecond": 0.1766811584154739,
       "EventsPerSecond": 0,
       "CommandLatency": {
-        "MinMs": 2.0497,
-        "MaxMs": 30009.4992,
-        "MeanMs": 4461.2703424,
-        "P50Ms": 26.8519,
-        "P95Ms": 30003.5468,
-        "P99Ms": 30005.3956
+        "MinMs": 644.634,
+        "MaxMs": 11889.3134,
+        "MeanMs": 5659.891262000002,
+        "P50Ms": 6817.6019,
+        "P95Ms": 11161.5695,
+        "P99Ms": 11673.6007
       },
       "QueryLatency": null,
       "StatusCodeDistribution": {
-        "200": 214,
-        "500": 36
+        "500": 150,
+        "200": 100
       }
     }
   ]
