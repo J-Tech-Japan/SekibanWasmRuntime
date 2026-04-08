@@ -62,16 +62,15 @@ Command-side throughput is comparable or slightly improved after the shared libr
 - Database: Aspire-managed PostgreSQL
 - Storage provider: `postgres`
 
-All three WASM AppHosts now use the same WasmServer tuning:
+All WASM AppHosts now use the same WasmServer tuning:
 
 - `SEKIBAN_WASM_CATCHUP_CONCURRENCY=4`
 - `SEKIBAN_WASM_MULTIPROJECTION_CATCHUP_BATCH_SIZE=250`
 - `SEKIBAN_WASM_AUTO_COMPACTION_INTERVAL_EVENTS=20000`
 - `SEKIBAN_WASM_FORCE_COMPACTING_GC_AFTER_COMPACTION=true`
 - `SEKIBAN_WASMTIME_STATIC_MEMORY_MAX_MB=192`
-- `WASM_RUNTIME_ALLOWED_TAG_EVENT_TYPES__RoomProjector=RoomCreated,RoomUpdated,RoomDeactivated,RoomReactivated`
 
-The last setting is important for the C# WASM fix: it prevents `RoomProjector` cached tag-state replay from reapplying reservation-tagged events that do not belong to room-state evolution.
+Tag-state is now resolved via Orleans `TagStateGrain` instead of the in-process `SharedTagStateProcessor`. The grain provides persistent caching, delta replay, and distributed concurrency management.
 
 ## 2026-04-04 Fresh 300K Matrix
 
