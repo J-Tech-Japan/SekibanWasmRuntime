@@ -73,6 +73,16 @@ public record CreateQuickReservation : ICommandWithHandler<CreateQuickReservatio
             roomState.Equipment);
         var requiresApproval = roomState.RequiresApproval;
 
+        var roomReservationsStateTyped = await context.GetStateAsync<RoomReservationsProjector>(
+            new RoomReservationTag(command.RoomId));
+        var roomReservationsState = roomReservationsStateTyped.Payload as RoomReservationsState
+            ?? RoomReservationsState.Empty;
+
+        if (roomReservationsState.HasConflict(command.StartTime, command.EndTime, command.ReservationId))
+        {
+            throw new ApplicationException("Reservation time conflicts with another held or confirmed reservation");
+        }
+
         await context.AppendEvent(new ReservationDraftCreated(
             command.ReservationId,
             command.RoomId,
