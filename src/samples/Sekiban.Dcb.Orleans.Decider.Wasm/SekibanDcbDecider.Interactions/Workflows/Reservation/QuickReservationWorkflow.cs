@@ -1,4 +1,5 @@
 using Dcb.EventSource.MeetingRoom.Reservation;
+using Dcb.MeetingRoomModels.Events.ApprovalRequest;
 using Sekiban.Dcb;
 
 namespace Dcb.Interactions.Workflows.Reservation;
@@ -14,8 +15,7 @@ public record QuickReservationResult(
 
 /// <summary>
 ///     Workflow for quick reservation: creates a draft, holds it, and confirms it in one step.
-///     Uses CreateQuickReservation which handles the entire lifecycle in a single command,
-///     avoiding the need for ReservationState deserialization on the client side.
+///     Uses CreateQuickReservation which handles the entire lifecycle in a single command.
 /// </summary>
 public class QuickReservationWorkflow(ISekibanExecutor executor)
 {
@@ -30,43 +30,31 @@ public class QuickReservationWorkflow(ISekibanExecutor executor)
         string? approvalRequestComment = null)
     {
         var reservationId = Guid.CreateVersion7();
+        var approvalRequestId = Guid.CreateVersion7();
 
-        // Step 1: Create draft (separate command execution + commit)
-        await executor.ExecuteAsync(new CreateReservationDraft
+        var executionResult = await executor.ExecuteAsync(new CreateQuickReservation
         {
             ReservationId = reservationId,
             RoomId = roomId,
+            ApprovalRequestId = approvalRequestId,
             OrganizerId = organizerId,
             OrganizerName = organizerName,
             StartTime = startTime,
             EndTime = endTime,
             Purpose = purpose,
-            SelectedEquipment = selectedEquipment?.ToList() ?? []
-        });
-
-        // Step 2: Commit hold (separate command execution + commit)
-        var holdResult = await executor.ExecuteAsync(new CommitReservationHold
-        {
-            ReservationId = reservationId,
-            RoomId = roomId,
-            RequiresApproval = false,
-            ApprovalRequestId = null,
+            SelectedEquipment = selectedEquipment?.ToList() ?? [],
             ApprovalRequestComment = approvalRequestComment
         });
-
-        // Step 3: Confirm (separate command execution + commit)
-        var confirmResult = await executor.ExecuteAsync(new ConfirmReservation
-        {
-            ReservationId = reservationId,
-            RoomId = roomId
-        });
-
-        var sortableUniqueId = confirmResult.SortableUniqueId ?? holdResult.SortableUniqueId ?? string.Empty;
+        var sortableUniqueId = executionResult.SortableUniqueId ?? string.Empty;
+        var approvalStarted = executionResult.Events
+            .Select(static writtenEvent => writtenEvent.Payload)
+            .OfType<ApprovalFlowStarted>()
+            .FirstOrDefault();
 
         return new QuickReservationResult(
             reservationId,
             sortableUniqueId,
-            false,
-            null);
+            approvalStarted is not null,
+            approvalStarted?.ApprovalRequestId);
     }
 }

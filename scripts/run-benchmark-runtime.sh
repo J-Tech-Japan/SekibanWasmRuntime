@@ -4,7 +4,7 @@ set -euo pipefail
 if [[ $# -lt 4 ]]; then
   cat <<'EOF' >&2
 Usage:
-  scripts/run-benchmark-runtime.sh <runtime> <total-events> <output-json> <rss-log>
+  scripts/run-benchmark-runtime.sh <runtime> <total-events> <output-json> <rss-log> [benchmark-profile]
 
 Runtime:
   native   - Sekiban template native C#
@@ -21,6 +21,7 @@ runtime="$1"
 total_events="$2"
 output_json="$3"
 rss_log="$4"
+benchmark_profile="${5:-default}"
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 mkdir -p "$(dirname "$output_json")" "$(dirname "$rss_log")"
@@ -35,6 +36,12 @@ else
   events_label="$total_events"
 fi
 
+if [[ "$benchmark_profile" == "default" ]]; then
+  profile_suffix=""
+else
+  profile_suffix="-$benchmark_profile"
+fi
+
 case "$runtime" in
   native)
     apphost_project="$repo_root/submodules/Sekiban/templates/Sekiban.Dcb.Templates/content/Sekiban.Dcb.Orleans.Decider/SekibanDcbDecider.AppHost/SekibanDcbDecider.AppHost.csproj"
@@ -42,7 +49,7 @@ case "$runtime" in
     ready_port="5141"
     rss_port="5141"
     runtime_process_pattern='SekibanDcbDecider\.ApiService'
-    mode_label="native-${events_label}-${run_timestamp}"
+    mode_label="native-${events_label}${profile_suffix}-${run_timestamp}"
     ;;
   cs-wasm)
     apphost_project="$repo_root/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/SekibanDcbDecider.AppHost/SekibanDcbDecider.AppHost.csproj"
@@ -50,7 +57,7 @@ case "$runtime" in
     ready_port="5198"
     rss_port="5199"
     runtime_process_pattern='Sekiban\.Dcb\.WasmRuntime\.Host|wasmserver'
-    mode_label="cs-wasm-${events_label}-${run_timestamp}"
+    mode_label="cs-wasm-${events_label}${profile_suffix}-${run_timestamp}"
     ;;
   rs-wasm)
     apphost_project="$repo_root/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/SekibanDcbDecider.AppHost/SekibanDcbDecider.AppHost.csproj"
@@ -58,7 +65,7 @@ case "$runtime" in
     ready_port="6198"
     rss_port="6199"
     runtime_process_pattern='Sekiban\.Dcb\.WasmRuntime\.Host|wasmserver'
-    mode_label="rs-wasm-${events_label}-${run_timestamp}"
+    mode_label="rs-wasm-${events_label}${profile_suffix}-${run_timestamp}"
     ;;
   mb-wasm)
     apphost_project="$repo_root/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Mb/SekibanDcbDecider.AppHost/SekibanDcbDecider.AppHost.csproj"
@@ -66,7 +73,7 @@ case "$runtime" in
     ready_port="6198"
     rss_port="6199"
     runtime_process_pattern='Sekiban\.Dcb\.WasmRuntime\.Host|wasmserver'
-    mode_label="mb-wasm-${events_label}-${run_timestamp}"
+    mode_label="mb-wasm-${events_label}${profile_suffix}-${run_timestamp}"
     ;;
   go-wasm)
     apphost_project="$repo_root/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Go/SekibanDcbDecider.AppHost/SekibanDcbDecider.AppHost.csproj"
@@ -74,7 +81,7 @@ case "$runtime" in
     ready_port="7198"
     rss_port="7199"
     runtime_process_pattern='Sekiban\.Dcb\.WasmRuntime\.Host|wasmserver'
-    mode_label="go-wasm-${events_label}-${run_timestamp}"
+    mode_label="go-wasm-${events_label}${profile_suffix}-${run_timestamp}"
     ;;
   ts-wasm)
     apphost_project="$repo_root/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Ts/SekibanDcbDecider.AppHost/SekibanDcbDecider.AppHost.csproj"
@@ -82,7 +89,7 @@ case "$runtime" in
     ready_port="7208"
     rss_port="7209"
     runtime_process_pattern='Sekiban\.Dcb\.WasmRuntime\.Host|wasmserver'
-    mode_label="ts-wasm-${events_label}-${run_timestamp}"
+    mode_label="ts-wasm-${events_label}${profile_suffix}-${run_timestamp}"
     ;;
   *)
     echo "Unknown runtime: $runtime" >&2
@@ -108,6 +115,110 @@ terminate_pid_tree() {
   done < <(pgrep -P "$pid" 2>/dev/null || true)
 
   kill -TERM "$pid" 2>/dev/null || true
+}
+
+find_running_container_by_prefix() {
+  local prefix="$1"
+
+  docker ps --format '{{.Names}}' | awk -v prefix="$prefix" 'index($0, prefix) == 1 { print; exit }'
+}
+
+ensure_cs_wasm_sample_module() {
+  local module_path="$repo_root/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm"
+  local build_script="$repo_root/build/scripts/build-sample-csharp-wasm.sh"
+  local newest_source=""
+
+  if [[ "${SKIP_CS_WASM_MODULE_REBUILD:-0}" == "1" ]]; then
+    return 0
+  fi
+
+  if [[ ! -f "$module_path" ]]; then
+    echo "[cs-wasm] module missing, rebuilding sample C# WASM module"
+    "$build_script"
+    return 0
+  fi
+
+  newest_source="$(
+    find \
+      "$repo_root/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/SekibanDcbDecider.Wasm" \
+      "$repo_root/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/SekibanDcbDecider.EventSource" \
+      "$repo_root/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/SekibanDcbDecider.MeetingRoomModels" \
+      "$repo_root/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/SekibanDcbDecider.ImmutableModels" \
+      "$repo_root/submodules/Sekiban/dcb/src/Sekiban.Dcb.Core.Model" \
+      "$repo_root/submodules/Sekiban/dcb/src/Sekiban.Dcb.WithoutResult.Model" \
+      -type f -newer "$module_path" -print -quit
+  )"
+
+  if [[ -n "$newest_source" ]]; then
+    echo "[cs-wasm] module is stale relative to $newest_source, rebuilding sample C# WASM module"
+    "$build_script"
+  fi
+}
+
+ensure_postgres_database() {
+  local container_name="$1"
+  local password="$2"
+  local database_name="$3"
+  local exists
+
+  exists="$(docker exec -e PGPASSWORD="$password" "$container_name" \
+    psql -U postgres -h 127.0.0.1 -d postgres -tAc \
+    "SELECT 1 FROM pg_database WHERE datname = '$database_name';" 2>/dev/null || true)"
+  if [[ "$exists" == "1" ]]; then
+    return 0
+  fi
+
+  if docker exec -e PGPASSWORD="$password" "$container_name" \
+    psql -U postgres -h 127.0.0.1 -d postgres -c \
+    "CREATE DATABASE \"$database_name\";" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  exists="$(docker exec -e PGPASSWORD="$password" "$container_name" \
+    psql -U postgres -h 127.0.0.1 -d postgres -tAc \
+    "SELECT 1 FROM pg_database WHERE datname = '$database_name';" 2>/dev/null || true)"
+  [[ "$exists" == "1" ]]
+}
+
+bootstrap_native_postgres_databases() {
+  local retries="${1:-60}"
+  local delay="${2:-2}"
+  local attempt
+  local container_name
+  local password
+
+  for ((attempt = 1; attempt <= retries; attempt++)); do
+    if [[ -n "$apphost_pid" ]] && ! kill -0 "$apphost_pid" 2>/dev/null; then
+      echo "AppHost exited before PostgreSQL bootstrap completed" >&2
+      return 1
+    fi
+
+    container_name="$(find_running_container_by_prefix "dcbOrleansPostgres-")"
+    if [[ -z "$container_name" ]]; then
+      sleep "$delay"
+      continue
+    fi
+
+    password="$(docker inspect "$container_name" --format '{{range .Config.Env}}{{println .}}{{end}}' \
+      | awk -F= '$1 == "POSTGRES_PASSWORD" { print $2; exit }')"
+    if [[ -z "$password" ]]; then
+      sleep "$delay"
+      continue
+    fi
+
+    if ! docker exec -e PGPASSWORD="$password" "$container_name" \
+      psql -U postgres -h 127.0.0.1 -d postgres -tAc 'SELECT 1;' >/dev/null 2>&1; then
+      sleep "$delay"
+      continue
+    fi
+
+    ensure_postgres_database "$container_name" "$password" "DcbPostgres"
+    ensure_postgres_database "$container_name" "$password" "IdentityPostgres"
+    return 0
+  done
+
+  echo "Timed out waiting for PostgreSQL database bootstrap" >&2
+  return 1
 }
 
 cleanup() {
@@ -227,13 +338,22 @@ if [[ ! -f "$apphost_project" ]]; then
 fi
 
 echo "[$runtime] starting AppHost: $apphost_project"
+echo "[$runtime] benchmark profile: $benchmark_profile"
 rm -f "$apphost_log" "$benchmark_log" "$rss_log"
+if [[ "$runtime" == "cs-wasm" ]]; then
+  ensure_cs_wasm_sample_module
+fi
 assert_port_free "$ready_port"
 if [[ "$rss_port" != "$ready_port" ]]; then
   assert_port_free "$rss_port"
 fi
+BENCHMARK_PROFILE="$benchmark_profile" \
 dotnet run --project "$apphost_project" -c Release >"$apphost_log" 2>&1 &
 apphost_pid="$!"
+
+if [[ "$runtime" == "native" ]]; then
+  bootstrap_native_postgres_databases
+fi
 
 wait_for_port "$ready_port"
 wait_for_port "$rss_port"

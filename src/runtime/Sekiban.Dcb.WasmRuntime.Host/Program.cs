@@ -66,6 +66,7 @@ var sqliteDatabasePath = storageConfiguration.SqlitePath;
 var waitForSortableUniqueIdTimeout = ResolveWaitForSortableUniqueIdTimeout(builder.Configuration);
 var queryResponseTimeout = ResolveQueryResponseTimeout(builder.Configuration);
 var directSnapshotQueryEnabled = ResolveDirectSnapshotQueryEnabled(builder.Configuration);
+var tagStateFastPathEnabled = ResolveTagStateFastPathEnabled(builder.Configuration);
 var multiProjectionActorOptions = ResolveGeneralMultiProjectionActorOptions(builder.Configuration);
 var directSnapshotQueryCacheOptions = ResolveDirectSnapshotQueryCacheOptions(builder.Configuration);
 var staticMemoryMaximumSizeBytes = ResolveWasmtimeStaticMemoryMaximumSizeBytes(builder.Configuration);
@@ -173,6 +174,7 @@ app.MapGet("/", () => Results.Ok(new
     waitForSortableUniqueIdTimeout,
     queryResponseTimeout,
     directSnapshotQueryEnabled,
+    tagStateFastPathEnabled,
     manifest.DefaultModulePath,
     projectors = manifest.Projectors.Select(static projector => new
     {
@@ -190,6 +192,7 @@ app.MapGet("/health", () => Results.Ok(new
     waitForSortableUniqueIdTimeout,
     queryResponseTimeout,
     directSnapshotQueryEnabled,
+    tagStateFastPathEnabled,
     manifest.DefaultModulePath
 }));
 
@@ -273,21 +276,24 @@ app.MapPost("/api/sekiban/serialized/tag-state", async (HttpContext http, TagSta
 
     // Fast path: if this tag has never had events committed, return empty state immediately.
     // This avoids Orleans grain activation and WASM instance creation for brand-new tags.
-    var tagProbe = http.RequestServices.GetRequiredService<KnownTagExistenceProbe>();
-    var tagGroupContent = $"{tagStateId.TagGroup}:{tagStateId.TagContent}";
-    if (await tagProbe.ProbeAsync(tagGroupContent) == KnownTagExistence.Missing)
+    if (ResolveTagStateFastPathEnabled(http.RequestServices.GetRequiredService<IConfiguration>()))
     {
-        var projectorVersionResult = domainTypes.TagProjectorTypes.GetProjectorVersion(tagStateId.TagProjectorName);
-        var projectorVersion = projectorVersionResult.IsSuccess ? projectorVersionResult.GetValue() : string.Empty;
-        return Results.Ok(new SerializableTagState(
-            Array.Empty<byte>(),
-            0,
-            string.Empty,
-            tagStateId.TagGroup,
-            tagStateId.TagContent,
-            tagStateId.TagProjectorName,
-            nameof(EmptyTagStatePayload),
-            projectorVersion));
+        var tagProbe = http.RequestServices.GetRequiredService<KnownTagExistenceProbe>();
+        var tagGroupContent = $"{tagStateId.TagGroup}:{tagStateId.TagContent}";
+        if (await tagProbe.ProbeAsync(tagGroupContent) == KnownTagExistence.Missing)
+        {
+            var projectorVersionResult = domainTypes.TagProjectorTypes.GetProjectorVersion(tagStateId.TagProjectorName);
+            var projectorVersion = projectorVersionResult.IsSuccess ? projectorVersionResult.GetValue() : string.Empty;
+            return Results.Ok(new SerializableTagState(
+                Array.Empty<byte>(),
+                0,
+                string.Empty,
+                tagStateId.TagGroup,
+                tagStateId.TagContent,
+                tagStateId.TagProjectorName,
+                nameof(EmptyTagStatePayload),
+                projectorVersion));
+        }
     }
 
     // Delegate to TagStateGrain — Orleans handles caching, delta replay, and concurrency.
@@ -333,8 +339,10 @@ app.MapPost("/api/sekiban/serialized/tag-latest-sortable", async (
     TagLatestSortableRequest request) =>
 {
     // Fast path: if the tag has never had events committed, it doesn't exist.
+    var tagStateFastPathEnabled = ResolveTagStateFastPathEnabled(http.RequestServices.GetRequiredService<IConfiguration>());
     var tagProbe = http.RequestServices.GetRequiredService<KnownTagExistenceProbe>();
-    if (await tagProbe.ProbeAsync(request.Tag) == KnownTagExistence.Missing)
+    if (tagStateFastPathEnabled &&
+        await tagProbe.ProbeAsync(request.Tag) == KnownTagExistence.Missing)
     {
         return Results.Ok(new TagLatestSortableResponse(false, string.Empty));
     }
@@ -894,6 +902,21 @@ static async Task<IResult?> TryExecuteDirectSnapshotQueryAsync(
 static bool ResolveDirectSnapshotQueryEnabled(IConfiguration configuration)
 {
     string? raw = configuration["SEKIBAN_DIRECT_SNAPSHOT_QUERY_ENABLED"];
+    if (string.IsNullOrWhiteSpace(raw))
+    {
+        return true;
+    }
+
+    return raw.Trim().ToLowerInvariant() switch
+    {
+        "0" or "false" or "no" or "off" => false,
+        _ => true
+    };
+}
+
+static bool ResolveTagStateFastPathEnabled(IConfiguration configuration)
+{
+    string? raw = configuration["SEKIBAN_TAG_STATE_FAST_PATH_ENABLED"];
     if (string.IsNullOrWhiteSpace(raw))
     {
         return true;

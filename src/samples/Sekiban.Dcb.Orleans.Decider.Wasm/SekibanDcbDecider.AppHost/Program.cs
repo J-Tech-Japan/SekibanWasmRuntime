@@ -2,7 +2,14 @@ using Projects;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-var builder = DistributedApplication.CreateBuilder(args);
+var benchmarkProfile = Environment.GetEnvironmentVariable("BENCHMARK_PROFILE");
+var isStrictBenchmarkProfile = string.Equals(benchmarkProfile, "tagstategrain-memory", StringComparison.OrdinalIgnoreCase);
+var builder = DistributedApplication.CreateBuilder(new DistributedApplicationOptions
+{
+    Args = args,
+    DisableDashboard = isStrictBenchmarkProfile,
+    EnableResourceLogging = isStrictBenchmarkProfile
+});
 
 var postgresServer = builder
     .AddPostgres("dcbOrleansPostgres")
@@ -25,6 +32,13 @@ var wasmServerBuilder = builder
     .WithReference(wasmPostgres, "SekibanDcb")
     .WaitFor(wasmPostgres)
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
+
+if (isStrictBenchmarkProfile)
+{
+    wasmServerBuilder = wasmServerBuilder
+        .WithEnvironment("SEKIBAN_DIRECT_SNAPSHOT_QUERY_ENABLED", "false")
+        .WithEnvironment("SEKIBAN_TAG_STATE_FAST_PATH_ENABLED", "false");
+}
 
 wasmServerBuilder = wasmServerBuilder
     .WithEndpoint("http", endpoint =>
@@ -94,13 +108,22 @@ static string ResolveCSharpWasmModulePath()
         Path.GetFullPath(Path.Combine(
             Directory.GetCurrentDirectory(),
             "..",
+            "..",
+            "..",
+            "..",
+            "artifacts",
+            "sekiban-dcb-decider-wasm",
+            "SekibanDcbDecider.Wasm.wasm")),
+        Path.GetFullPath(Path.Combine(
+            Directory.GetCurrentDirectory(),
+            "..",
             "SekibanDcbDecider.Wasm",
             "bin",
             "Release",
             "net10.0",
             "wasi-wasm",
             "native",
-            "SekibanWasm.Cs.Wasm.wasm"))
+            "SekibanDcbDecider.Wasm.wasm"))
     ];
 
     foreach (var candidate in candidates)

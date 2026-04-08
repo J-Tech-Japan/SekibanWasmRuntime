@@ -1,6 +1,9 @@
 # Event Sourcing Runtime Benchmark Report
 
-This document tracks the current benchmark status for the Sekiban sample runtimes after the 2026-04-04 300K verification pass.
+This document tracks two benchmark profiles:
+
+- the optimized `300,000` event matrix from the 2026-04-04 pass
+- the stricter 2026-04-08 `tagstategrain-memory` rerun, which disables shortcut paths and routes tag-state through Orleans `TagStateGrain`
 
 The current `300,000` event matrix now has fresh reruns for:
 
@@ -71,6 +74,76 @@ All WASM AppHosts now use the same WasmServer tuning:
 - `SEKIBAN_WASMTIME_STATIC_MEMORY_MAX_MB=192`
 
 Tag-state is now resolved via Orleans `TagStateGrain` instead of the in-process `SharedTagStateProcessor`. The grain provides persistent caching, delta replay, and distributed concurrency management.
+
+## 2026-04-08 Strict `tagstategrain-memory` Profile
+
+This profile was added to answer the question "how fast are Native C# and C# WASM when we do not shortcut tag-state?" It intentionally removes the fast paths that made the earlier C# rows look better.
+
+Profile rules:
+
+- use `TagStateGrain` as the authoritative tag-state path
+- disable direct snapshot query shortcuts in the C# WASM host
+- disable the runtime's tag-state missing-tag fast path in the C# WASM host
+- use Orleans in-memory streams and in-memory grain storage for the Native template AppHost
+- keep the event store on PostgreSQL so command/query behavior still runs against real persisted events
+
+The strict runs were executed with:
+
+- `scripts/run-benchmark-runtime.sh native 300000 ... tagstategrain-memory`
+- `scripts/run-benchmark-runtime.sh cs-wasm 300000 ... tagstategrain-memory`
+
+Strict profile wiring:
+
+- Native template AppHost: `Orleans__UseInMemoryStreams=true`, `Orleans__UseInMemoryGrainStorage=true`
+- C# WASM AppHost: `SEKIBAN_DIRECT_SNAPSHOT_QUERY_ENABLED=false`, `SEKIBAN_TAG_STATE_FAST_PATH_ENABLED=false`
+
+### Strict 300K Results
+
+| Runtime | Status | Weather events/sec | Reservation events/sec | Reservation ops/sec | Query ops/sec | Total wall-clock | Peak RSS | Errors |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| C# Native (`tagstategrain-memory`) | `completed` | `1965.5` | `747.0` | `287.3` | `1808.6` | `254.2 s` | `~2953.4 MB` | `0` |
+| C# WASM (`tagstategrain-memory`) | `completed` | `1581.9` | `254.4` | `97.9` | `942.1` | `586.6 s` | `~3950.6 MB` | `0` |
+
+Latency summary:
+
+| Runtime | Weather p50 / p95 | Reservation p50 / p95 | Query p50 / p95 |
+|---|---|---|---|
+| C# Native (`tagstategrain-memory`) | `3.9 / 5.7 ms` | `11.2 / 87.1 ms` | `0.2 / 0.4 ms` |
+| C# WASM (`tagstategrain-memory`) | `4.9 / 6.7 ms` | `73.4 / 138.1 ms` | `0.6 / 1.3 ms` |
+
+Takeaways from the strict profile:
+
+- Native C# remains clearly faster than C# WASM when tag-state is forced through `TagStateGrain`.
+- C# WASM still completes `300K` with `0` errors and stays just under the original `4 GB` guardrail, but only barely at `~3950.6 MB`.
+- The biggest regression under the strict profile is the reservation lifecycle path. C# WASM falls from the earlier optimized `1882.1 reservation eps` to `254.4 reservation eps`.
+- Native C# also slows down under the strict profile, but it still keeps a `~2.9x` lead over C# WASM on reservation events/sec and a `~1.9x` lead on total wall-clock.
+- Query throughput is not the current strict-profile bottleneck. After rebuilding the sample module, C# WASM query throughput recovered to `942 qps`.
+
+### Strict 50K Validation
+
+The `50,000` event smoke runs were used to verify the strict setup before the full `300K` pass.
+
+| Runtime | Weather events/sec | Reservation events/sec | Reservation ops/sec | Query ops/sec | Total wall-clock | Peak RSS | Errors |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| C# Native (`tagstategrain-memory`) | `1813.0` | `1517.2` | `583.5` | `1995.1` | `30.5 s` | `~894.1 MB` | `0` |
+| C# WASM (`tagstategrain-memory`) | `1456.0` | `510.5` | `196.3` | `1008.1` | `60.6 s` | `~1931.2 MB` | `0` |
+
+### Strict Profile Notes
+
+The first strict C# WASM query run was invalid because the checked-in `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm` was stale relative to the source tree. That stale module could not instantiate `RoomListProjection`, which caused `create_instance failed with code -1` during query catch-up.
+
+This was fixed by:
+
+- rebuilding the sample C# WASM module with `build/scripts/build-sample-csharp-wasm.sh`
+- copying the fresh output back to `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm`
+- making `scripts/run-benchmark-runtime.sh` auto-rebuild the sample module when the source tree is newer than the checked-in module
+
+Result files:
+
+- `benchmarks/results/native-50k-tagstategrain-memory-20260408.json`
+- `benchmarks/results/native-300k-tagstategrain-memory-20260408.json`
+- `benchmarks/results/cs-wasm-50k-tagstategrain-memory-20260408-fix2.json`
+- `benchmarks/results/cs-wasm-300k-tagstategrain-memory-20260408.json`
 
 ## 2026-04-04 Fresh 300K Matrix
 

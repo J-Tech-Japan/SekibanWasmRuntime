@@ -31,13 +31,24 @@ public sealed class HttpApiClient : IDisposable
     /// </summary>
     public async Task<bool> AuthenticateAsync()
     {
-        _authEmail = $"benchmark-{Guid.NewGuid():N}@test.local";
-        _authPassword = "Bench!Mark123$";
+        try
+        {
+            _authEmail = $"benchmark-{Guid.NewGuid():N}@test.local";
+            _authPassword = "Bench!Mark123$";
 
-        var regPayload = new { email = _authEmail, password = _authPassword, displayName = "BenchmarkAdmin" };
-        await WaitForAuthEndpointAsync("/auth/register", regPayload);
+            var regPayload = new { email = _authEmail, password = _authPassword, displayName = "BenchmarkAdmin" };
+            await WaitForAuthEndpointAsync("/auth/register", regPayload);
 
-        return await RefreshTokenAsync();
+            return await RefreshTokenAsync();
+        }
+        catch
+        {
+            _authEmail = null;
+            _authPassword = null;
+            _tokenExpiresAt = DateTimeOffset.MaxValue;
+            _http.DefaultRequestHeaders.Authorization = null;
+            return false;
+        }
     }
 
     /// <summary>
@@ -82,6 +93,10 @@ public sealed class HttpApiClient : IDisposable
             try
             {
                 var response = await PostMeasured(path, payload, includeBodyOnSuccess);
+                if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.MethodNotAllowed)
+                {
+                    return response;
+                }
                 if (response.IsSuccessStatusCode || response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Unauthorized)
                 {
                     return response;
