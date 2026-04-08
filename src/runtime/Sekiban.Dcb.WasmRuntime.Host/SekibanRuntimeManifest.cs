@@ -78,7 +78,8 @@ public sealed class SekibanRuntimeManifest
                 ModulePath: projector.ModulePath,
                 AbiKind: projector.AbiKind,
                 ModuleVersion: projector.ModuleVersion,
-                ProjectorVersion: projector.ProjectorVersion));
+                ProjectorVersion: projector.ProjectorVersion,
+                TagPayloadName: projector.TagPayloadName ?? InferTagPayloadName(projector.ProjectorName)));
         }
 
         foreach (var (queryType, projectorName) in QueryProjectors)
@@ -87,6 +88,19 @@ public sealed class SekibanRuntimeManifest
         }
 
         return registry;
+    }
+
+    /// <summary>
+    /// Heuristic: "RoomProjector" → "RoomState", "WeatherForecastProjector" → "WeatherForecastState".
+    /// WASM projectors don't know C# type names, so the host infers the payload name from the projector name.
+    /// </summary>
+    internal static string InferTagPayloadName(string projectorName)
+    {
+        if (projectorName.EndsWith("Projector", StringComparison.Ordinal))
+        {
+            return projectorName[..^"Projector".Length] + "State";
+        }
+        return projectorName;
     }
 
     private SekibanRuntimeManifest ResolveRelativePaths(string manifestPath)
@@ -177,6 +191,11 @@ public sealed class SekibanRuntimeProjector
     public string AbiKind { get; init; } = "wasi-preview1";
     public string ModuleVersion { get; init; } = "1.0.0";
     public string ProjectorVersion { get; init; } = "1.0.0";
+    /// <summary>
+    /// Optional explicit tag payload name (e.g. "RoomState").
+    /// When null, the host infers it from ProjectorName via heuristic.
+    /// </summary>
+    public string? TagPayloadName { get; init; }
 
     public SekibanRuntimeProjector ResolvePath(string baseDirectory) =>
         new()

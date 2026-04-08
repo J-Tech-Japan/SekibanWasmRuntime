@@ -49,8 +49,8 @@ var wasmServerBuilder = builder
     .WithEnvironment("SEKIBAN_WASM_MULTIPROJECTION_CATCHUP_BATCH_SIZE", "250")
     .WithEnvironment("SEKIBAN_WASM_AUTO_COMPACTION_INTERVAL_EVENTS", "20000")
     .WithEnvironment("SEKIBAN_WASM_FORCE_COMPACTING_GC_AFTER_COMPACTION", "true")
-    .WithEnvironment("SEKIBAN_WASMTIME_STATIC_MEMORY_MAX_MB", "192")
-    .WithEnvironment("WASM_RUNTIME_ALLOWED_TAG_EVENT_TYPES__RoomProjector", "RoomCreated,RoomUpdated,RoomDeactivated,RoomReactivated")
+    .WithEnvironment("SEKIBAN_WASMTIME_STATIC_MEMORY_MAX_MB", "512")
+    .WithEnvironment("SEKIBAN_WASM_POOL_SIZE", "0")
     .WithReference(postgres, "SekibanDcb")
     .WaitFor(postgres)
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");

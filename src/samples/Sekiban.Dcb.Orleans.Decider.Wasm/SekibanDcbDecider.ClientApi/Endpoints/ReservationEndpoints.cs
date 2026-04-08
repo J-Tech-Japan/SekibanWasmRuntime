@@ -198,29 +198,42 @@ public static class ReservationEndpoints
         HttpContext httpContext,
         [FromServices] ISekibanExecutor executor)
     {
-        var organizer = ResolveOrganizer(httpContext);
-
-        var workflow = new QuickReservationWorkflow(executor);
-        var result = await workflow.ExecuteAsync(
-            request.RoomId,
-            organizer.OrganizerId,
-            organizer.DisplayName,
-            request.StartTime,
-            request.EndTime,
-            request.Purpose,
-            request.SelectedEquipment,
-            request.ApprovalRequestComment);
-
-        return Results.Ok(new
+        try
         {
-            success = true,
-            reservationId = result.ReservationId,
-            organizerId = organizer.OrganizerId,
-            organizerName = organizer.DisplayName,
-            sortableUniqueId = result.SortableUniqueId,
-            requiresApproval = result.RequiresApproval,
-            approvalRequestId = result.ApprovalRequestId
-        });
+            var organizer = ResolveOrganizer(httpContext);
+
+            var workflow = new QuickReservationWorkflow(executor);
+            var result = await workflow.ExecuteAsync(
+                request.RoomId,
+                organizer.OrganizerId,
+                organizer.DisplayName,
+                request.StartTime,
+                request.EndTime,
+                request.Purpose,
+                request.SelectedEquipment,
+                request.ApprovalRequestComment);
+
+            return Results.Ok(new
+            {
+                success = true,
+                reservationId = result.ReservationId,
+                organizerId = organizer.OrganizerId,
+                organizerName = organizer.DisplayName,
+                sortableUniqueId = result.SortableUniqueId,
+                requiresApproval = result.RequiresApproval,
+                approvalRequestId = result.ApprovalRequestId
+            });
+        }
+        catch (Exception ex)
+        {
+            return Results.Json(new
+            {
+                success = false,
+                error = ex.Message,
+                type = ex.GetType().Name,
+                innerError = ex.InnerException?.Message
+            }, statusCode: StatusCodes.Status500InternalServerError);
+        }
     }
 
     private static OrganizerContext ResolveOrganizer(

@@ -13,8 +13,9 @@ public record QuickReservationResult(
     Guid? ApprovalRequestId);
 
 /// <summary>
-///     Workflow for quick reservation: creates a draft, holds it, and confirms it
-///     using three separate command executions to match the Rust/Go/TS client API behaviour.
+///     Workflow for quick reservation: creates a draft, holds it, and confirms it in one step.
+///     Uses CreateQuickReservation which handles the entire lifecycle in a single command,
+///     avoiding the need for ReservationState deserialization on the client side.
 /// </summary>
 public class QuickReservationWorkflow(ISekibanExecutor executor)
 {

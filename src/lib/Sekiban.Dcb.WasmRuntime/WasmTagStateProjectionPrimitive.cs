@@ -99,6 +99,25 @@ public class WasmTagStateProjectionPrimitive : ITagStateProjectionAccumulator, I
         string? latestSortableUniqueId,
         CancellationToken cancellationToken = default)
     {
+        try
+        {
+            return ApplyEventsCore(events, latestSortableUniqueId, cancellationToken);
+        }
+        catch (ArgumentOutOfRangeException ex) when (ex.ParamName == "address")
+        {
+            // WASM memory access error – the module's allocator returned an out-of-bounds
+            // pointer (common with TinyGo WASM after heavy state accumulation).
+            // Return false so the grain treats this as a projection failure and retries
+            // with a fresh WASM instance on the next call.
+            return false;
+        }
+    }
+
+    private bool ApplyEventsCore(
+        IReadOnlyList<SerializableEvent> events,
+        string? latestSortableUniqueId,
+        CancellationToken cancellationToken)
+    {
         List<SerializableEvent> orderedEvents = events
             .OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal)
             .ToList();
@@ -242,7 +261,11 @@ public class WasmTagStateProjectionPrimitive : ITagStateProjectionAccumulator, I
     {
         _version = 0;
         _lastSortedUniqueId = null;
-        _tagPayloadName = nameof(EmptyTagStatePayload);
+        // Use null so UpdateTagMetadataFrom*Event can populate from _defaultTagPayloadName.
+        // Previously "EmptyTagStatePayload" was set here, which blocked the fallback because
+        // the IsNullOrWhiteSpace guard in UpdateTagMetadataFromSerializableEvent treated it
+        // as already-set.
+        _tagPayloadName = null;
         _tagGroup = null;
         _tagContent = null;
     }

@@ -45,7 +45,7 @@ var registry = manifest.CreateRegistry();
 // Remove tag-only projectors from Projectors list to prevent MultiProjectionGrain activation.
 // Tag-only projectors (not mapped to any query) don't need MultiProjectionGrain.
 // They waste 36.6MB WASM linear memory each and process events unnecessarily.
-// SharedTagStateProcessor handles tag-state directly without MultiProjectionGrain.
+// TagStateGrain handles tag-state via Orleans with persistent caching and delta replay.
 // The registry still has all projectors for tag-state lookup.
 var queryMappedProjectors = new HashSet<string>(
     manifest.QueryProjectors.Values, StringComparer.Ordinal);
@@ -141,10 +141,13 @@ builder.Services.AddTransient<ISerializedSekibanDcbExecutor>(sp =>
 builder.Services.AddWasmtimeProjectionHost(options =>
 {
     options.DefaultModulePath = manifest.DefaultModulePath;
-    // Pool=1: keep 1 idle instance per projector for reuse.
-    // With tag projector filtering, only ~10 projectors → 10 × 55MB = 550MB idle.
-    // Pool reuse avoids 55MB instance creation cost on every call.
-    options.MaxPooledInstancesPerProjector = 1;
+    // Pool size: configurable via SEKIBAN_WASM_POOL_SIZE env var.
+    // Default=1 keeps 1 idle instance per projector for reuse.
+    // Set to 0 for Go (TinyGo) WASM to avoid memory corruption from instance reuse.
+    var poolSize = int.TryParse(
+        Environment.GetEnvironmentVariable("SEKIBAN_WASM_POOL_SIZE"),
+        out var ps) ? ps : 1;
+    options.MaxPooledInstancesPerProjector = poolSize;
     options.StaticMemoryMaximumSizeBytes = staticMemoryMaximumSizeBytes;
 });
 builder.Services.AddWasmTagStateRuntime(options =>
@@ -254,18 +257,6 @@ app.MapGet("/api/sekiban/memory-stats", async (HttpContext http) =>
 
 InstanceEndpoints.Map(app);
 
-// Pure-function tag-state processor: creates fresh accumulator per call but limits
-// concurrency to 1 per projector type. With pool=1, the same WASM instance is reused.
-// Memory: ~6 projectors × 36.6MB = 220MB (vs 200+ × 36.6MB = 7.3GB without limiting).
-var sharedTagStateProcessor = new SharedTagStateProcessor(
-    app.Services.GetRequiredService<ITagStateProjectionPrimitive>(),
-    app.Services.GetRequiredService<IEventStore>(),
-    app.Services.GetRequiredService<IActorObjectAccessor>(),
-    app.Services.GetRequiredService<WasmProjectorRegistry>(),
-    domainTypes,
-    builder.Configuration,
-    app.Services.GetRequiredService<ILoggerFactory>());
-
 app.MapPost("/api/sekiban/serialized/tag-state", async (HttpContext http, TagStateRequest request) =>
 {
     try
@@ -299,11 +290,24 @@ app.MapPost("/api/sekiban/serialized/tag-state", async (HttpContext http, TagSta
             projectorVersion));
     }
 
-    // Pure function mode: 1 WASM instance per projector, serialized access via semaphore.
-    var tagState = await sharedTagStateProcessor.GetTagStateAsync(tagStateId);
-    if (tagState is null)
+    // Delegate to TagStateGrain — Orleans handles caching, delta replay, and concurrency.
+    var clusterClient = http.RequestServices.GetRequiredService<IClusterClient>();
+    var serviceIdProvider = http.RequestServices.GetRequiredService<IServiceIdProvider>();
+    var grainKey = ServiceIdGrainKey.Build(serviceIdProvider.GetCurrentServiceId(), tagStateId.GetTagStateId());
+    var grain = clusterClient.GetGrain<ITagStateGrain>(grainKey);
+    var tagState = await grain.GetStateAsync();
+
+    // Safety net: WASM projectors don't embed C# type names, so the accumulated
+    // TagPayloadName may be missing or "EmptyTagStatePayload" for non-empty payloads.
+    // Override with the manifest-inferred name when needed.
+    if (tagState.Payload.Length > 0 &&
+        (string.IsNullOrEmpty(tagState.TagPayloadName) ||
+         tagState.TagPayloadName == nameof(EmptyTagStatePayload)))
     {
-        return Results.BadRequest(new { error = $"Failed to compute tag state for {request.TagStateId}" });
+        tagState = tagState with
+        {
+            TagPayloadName = SekibanRuntimeManifest.InferTagPayloadName(tagStateId.TagProjectorName)
+        };
     }
 
     return Results.Ok(tagState);
@@ -378,10 +382,6 @@ app.MapPost("/api/sekiban/serialized/commit", async (
         var tagProbe = http.RequestServices.GetRequiredService<KnownTagExistenceProbe>();
         tagProbe.MarkTagsAsWritten(committedTags);
 
-        // Invalidate SharedTagStateProcessor's cache for affected tags
-        // so the next tag-state request re-computes from the event store.
-        sharedTagStateProcessor.InvalidateForTags(committedTags);
-
         return Results.Ok(result.GetValue());
     }
     catch (TimeoutException ex)
@@ -439,132 +439,6 @@ app.MapPost("/api/sekiban/serialized/list-query", async (
 });
 
 app.Run();
-
-static async Task<SerializableTagState?> TryGetSerializableTagStateDirectAsync(
-    HttpContext http,
-    TagStateId tagStateId,
-    SemaphoreSlim replaySemaphore,
-    StrongBox<int> replayCounter)
-{
-    var logger = http.RequestServices
-        .GetRequiredService<ILoggerFactory>()
-        .CreateLogger("DirectTagState");
-    var registry = http.RequestServices.GetRequiredService<WasmProjectorRegistry>();
-    var moduleRef = registry.TryGet(tagStateId.TagProjectorName);
-    if (moduleRef is null)
-    {
-        logger.LogDebug(
-            "Direct tag-state skipped: projector {ProjectorName} not in manifest.",
-            tagStateId.TagProjectorName);
-        return null;
-    }
-
-    if (http.RequestServices.GetService<ITagStateProjectionPrimitive>() is not { } primitive ||
-        http.RequestServices.GetService<IEventStore>() is not { } eventStore ||
-        http.RequestServices.GetService<IActorObjectAccessor>() is not { } actorAccessor)
-    {
-        logger.LogWarning(
-            "Direct tag-state unavailable: missing services for {TagStateId}.",
-            tagStateId);
-        return null;
-    }
-
-    logger.LogInformation(
-        "Direct tag-state start: {TagStateId}",
-        tagStateId);
-    string? latestSortableUniqueId = null;
-    var tagActorId = $"{tagStateId.TagGroup}:{tagStateId.TagContent}";
-    var tagActorResult = await actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagActorId);
-    if (tagActorResult.IsSuccess)
-    {
-        var latestResult = await tagActorResult.GetValue().GetLatestSortableUniqueIdAsync();
-        if (latestResult.IsSuccess)
-        {
-            latestSortableUniqueId = latestResult.GetValue();
-        }
-    }
-    logger.LogInformation(
-        "Direct tag-state latest sortable resolved: {TagStateId} => {LatestSortableUniqueId}",
-        tagStateId,
-        latestSortableUniqueId ?? "<none>");
-
-    // Limit concurrent replays to reduce peak memory from parallel WASM accumulators.
-    await replaySemaphore.WaitAsync();
-    SerializableTagState state;
-    try
-    {
-        using var accumulator = primitive.CreateAccumulator(tagStateId);
-        if (!accumulator.ApplyState(null))
-        {
-            logger.LogWarning(
-                "Direct tag-state ApplyState(null) failed: {TagStateId}",
-                tagStateId);
-            return null;
-        }
-
-        var tag = new FallbackTag(tagStateId.TagGroup, tagStateId.TagContent);
-        var eventsResult = await eventStore.ReadSerializableEventsByTagAsync(tag);
-        if (!eventsResult.IsSuccess)
-        {
-            logger.LogWarning(
-                "Direct tag-state event read failed: {TagStateId} => {Error}",
-                tagStateId,
-                eventsResult.GetException().Message);
-            return null;
-        }
-
-        var events = eventsResult.GetValue().ToList();
-        logger.LogDebug(
-            "Direct tag-state events loaded: {TagStateId} => {EventCount}",
-            tagStateId,
-            events.Count);
-        if (events.Count > 0 && !accumulator.ApplyEvents(events, latestSortableUniqueId))
-        {
-            logger.LogWarning(
-                "Direct tag-state ApplyEvents failed: {TagStateId}",
-                tagStateId);
-            return null;
-        }
-
-        state = accumulator.GetSerializedState();
-    }
-    finally
-    {
-        replaySemaphore.Release();
-        // Reclaim WASM accumulator and event-list memory from LOH.
-        // Without LOH compaction, RSS grows to 10+ GB at 300K events.
-        // LOH compaction requires blocking GC; non-blocking GC won't compact the LOH.
-        // Every ~50 replays gives a good balance: ~5GB peak with moderate throughput impact.
-        // Non-blocking Gen 2 GC every 50 tag-state replays.
-        // Version-aware caching reduces replay frequency significantly.
-        // Non-blocking avoids throughput degradation from GC pauses.
-        var count = Interlocked.Increment(ref replayCounter.Value);
-        if (count % 50 == 0)
-        {
-            GC.Collect(2, GCCollectionMode.Optimized, blocking: false);
-        }
-    }
-
-    // Note: DirectTagStateCache is available but disabled pending investigation of
-    // snapshot restore compatibility with the accumulator's ApplyState method.
-    logger.LogInformation(
-        "Direct tag-state serialized: {TagStateId} payload={PayloadLength} payloadName={PayloadName}",
-        tagStateId,
-        state.Payload.Length,
-        state.TagPayloadName);
-    bool needsPayloadNameFix =
-        state.Payload.Length > 0 &&
-        string.Equals(state.TagPayloadName, nameof(EmptyTagStatePayload), StringComparison.Ordinal);
-    if (!needsPayloadNameFix && !string.IsNullOrWhiteSpace(state.TagPayloadName))
-    {
-        return state;
-    }
-
-    var inferredPayloadName = InferTagPayloadName(tagStateId.TagProjectorName);
-    return string.IsNullOrWhiteSpace(inferredPayloadName)
-        ? state
-        : state with { TagPayloadName = inferredPayloadName };
-}
 
 static async Task<IResult> ExecuteSerializedQueryAsync(
     HttpContext http,
@@ -1031,15 +905,6 @@ static bool ResolveDirectSnapshotQueryEnabled(IConfiguration configuration)
         _ => true
     };
 }
-
-static string? InferTagPayloadName(string projectorName) =>
-    projectorName switch
-    {
-        "ClassRoomProjector" => null,
-        _ when projectorName.EndsWith("Projector", StringComparison.Ordinal) =>
-            projectorName[..^"Projector".Length] + "State",
-        _ => null
-    };
 
 static async Task WaitForSortableUniqueIdAsync(
     IMultiProjectionGrain grain,
@@ -1693,15 +1558,12 @@ sealed class KnownTagTracker
     }
 }
 
-/// <summary>
-/// Pure-function tag-state processor. Creates a fresh WASM accumulator per call but
-/// limits concurrency per tag+projector cache key via a keyed semaphore. Global
-/// projector fan-out is still bounded by Wasmtime pooling through
-/// MaxPooledInstancesPerProjector.
-/// Uses in-process state cache with incremental replay (delta events only).
-/// Memory: 6×36.6MB=220MB (vs 200×36.6MB=7.3GB without limiting).
-/// </summary>
-sealed class SharedTagStateProcessor : IDisposable
+// SharedTagStateProcessor has been removed. Tag-state is now handled by
+// TagStateGrain via Orleans, which provides persistent caching, delta replay,
+// projector version validation, and distributed concurrency management.
+// See: https://github.com/J-Tech-Japan/SekibanWasmRuntime/issues/83
+#if false
+sealed class SharedTagStateProcessor_REMOVED : IDisposable
 {
     private readonly ConcurrentDictionary<string, GateEntry> _gates = new();
     private readonly ConcurrentDictionary<string, SerializableTagState> _stateCache = new();
@@ -2064,3 +1926,4 @@ sealed class SharedTagStateProcessor : IDisposable
         List<SerializableEvent> EventsToApply,
         SerializableTagState? ShortCircuitedState);
 }
+#endif
