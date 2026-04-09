@@ -134,6 +134,7 @@ Native-vs-WASM fairness note:
 - the Native template `CreateReservationDraft` reads `UserAccessProjector`, `UserDirectoryProjector`, and `UserMonthlyReservationProjector`
 - the C# WASM sample `CreateReservationDraft` does not execute those extra user-governance reads
 - the original mixed strict benchmark therefore measured "latest package Native template behavior" against a lighter C# WASM draft path
+- the Rust / MoonBit / Go / TypeScript WASM command implementations already matched the lighter draft path, so their strict rows were already runtime-comparable to C# WASM
 
 To isolate runtime overhead, the latest Native reruns use:
 
@@ -159,6 +160,17 @@ Latest comparable strict `300K` results:
 | Go WASM (`tagstategrain-memory`) | `completed` | `510.0` | `190.0` | `73.0` | `816.0` | `986.6 s` | `~2980.4 MB` | `0` |
 | TypeScript WASM (`tagstategrain-memory`) | `completed` | `475.0` | `196.0` | `75.0` | `418.0` | `992.5 s` | `~3999.7 MB` | `0` |
 
+Comparable strict `50K` results:
+
+| Runtime | Status | Weather events/sec | Reservation events/sec | Reservation ops/sec | Query ops/sec | Total wall-clock | Peak RSS | Errors |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| C# Native (`tagstategrain-memory`, latest package, benchmark-aligned draft path) | `completed` | `1858.6` | `2443.3` | `939.7` | `1874.8` | `24.8 s` | `~887.7 MB` | `0` |
+| C# WASM (`tagstategrain-memory`, fixed host) | `completed` | `1302.2` | `1485.3` | `571.3` | `1012.4` | `37.3 s` | `~1775.4 MB` | `0` |
+| Rust WASM (`tagstategrain-memory`, aligned) | `completed` | `1037.4` | `856.3` | `329.3` | `2496.7` | `52.9 s` | `~746.4 MB` | `0` |
+| MoonBit WASM (`tagstategrain-memory`, aligned) | `completed` | `990.3` | `818.5` | `314.4` | `149.6` | `57.1 s` | `~745.7 MB` | `0` |
+| Go WASM (`tagstategrain-memory`, aligned) | `completed` | `994.4` | `952.0` | `366.3` | `2106.9` | `51.9 s` | `~784.5 MB` | `0` |
+| TypeScript WASM (`tagstategrain-memory`, aligned) | `completed` | `926.2` | `881.4` | `338.9` | `323.4` | `56.5 s` | `~732.6 MB` | `0` |
+
 Latency summary:
 
 | Runtime | Weather p50 / p95 | Reservation p50 / p95 | Query p50 / p95 |
@@ -174,6 +186,7 @@ Takeaways from the strict profile:
 
 - All six implemented runtimes now complete the strict `300K` profile with `0` errors.
 - Once the reservation workload is aligned, Native C# is faster than C# WASM at `10K`, `50K`, and `300K` for both reservation commands and queries.
+- The other WASM runtimes were already on the lighter draft path, so the new 50K reruns mainly confirm their placement under the same comparable workload definition.
 - After the projector-version fix, C# WASM no longer shows the pathological reservation collapse from the earlier strict run. It now completes `300K` with `588.3 reservation ops/sec` and stays under the `4 GB` guardrail at `~3552.4 MB`.
 - The old strict conclusion "C# WASM is faster than Native at scale" was a benchmark artifact caused by Native-only draft governance work on the template path, not by WASM runtime superiority.
 - With the draft path aligned, Native's `300K` reservation phase stays high throughout the run (`2567 eps` first sample -> `2304 eps` last sample) instead of collapsing.
@@ -205,12 +218,7 @@ The saved 2026-04-08 HTTP-hop analysis is still useful as historical evidence fo
 
 ### Strict 50K Validation
 
-The `50,000` event reruns were used to verify the aligned comparison before the full `300K` pass.
-
-| Runtime | Weather events/sec | Reservation events/sec | Reservation ops/sec | Query ops/sec | Total wall-clock | Peak RSS | Errors |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| C# Native (`tagstategrain-memory`, latest package, benchmark-aligned draft path) | `1858.6` | `2443.3` | `939.7` | `1874.8` | `24.8 s` | `~887.7 MB` | `0` |
-| C# WASM (`tagstategrain-memory`, fixed host) | `1302.2` | `1485.3` | `571.3` | `1012.4` | `37.3 s` | `~1775.4 MB` | `0` |
+The `50,000` event reruns were used to verify the aligned comparison before the full `300K` pass and to fill in a comparable mid-scale table for every implemented runtime.
 
 ### Strict Profile Notes
 
@@ -240,9 +248,13 @@ Result files:
 - `benchmarks/results/cs-wasm-50k-postfix.json`
 - `benchmarks/results/cs-wasm-300k-postfix.json`
 - `benchmarks/results/cs-wasm-300k-tagstategrain-memory-20260408-http-analysis.json`
+- `benchmarks/results/rs-wasm-50k-strict-aligned.json`
 - `benchmarks/results/rs-wasm-300k-tagstategrain-memory-20260408.json`
+- `benchmarks/results/mb-wasm-50k-strict-aligned.json`
 - `benchmarks/results/mb-wasm-300k-tagstategrain-memory-20260408.json`
+- `benchmarks/results/go-wasm-50k-strict-aligned.json`
 - `benchmarks/results/go-wasm-300k-tagstategrain-memory-20260408.json`
+- `benchmarks/results/ts-wasm-50k-strict-aligned.json`
 - `benchmarks/results/ts-wasm-300k-tagstategrain-memory-20260408.json`
 
 ## 2026-04-04 Optimized 300K Baseline
