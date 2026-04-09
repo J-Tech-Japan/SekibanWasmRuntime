@@ -13,8 +13,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Sekiban.Dcb.WasmRuntime\Sekiban.Dcb.WasmRuntime.csproj" />
-    <ProjectReference Include="..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.WithoutResult.Model\Sekiban.Dcb.WithoutResult.Model.csproj" />
-    <ProjectReference Include="..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.WithoutResult\Sekiban.Dcb.WithoutResult.csproj" />
+    <PackageReference Include="Sekiban.Dcb.WithoutResult.Model" />
+    <PackageReference Include="Sekiban.Dcb.WithoutResult" />
   </ItemGroup>
 
 </Project>
