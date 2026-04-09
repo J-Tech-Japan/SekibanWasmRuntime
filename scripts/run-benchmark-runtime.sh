@@ -156,6 +156,46 @@ ensure_cs_wasm_sample_module() {
   fi
 }
 
+ensure_rs_wasm_sample_module() {
+  local sample_root="$repo_root/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs"
+  local module_path="$sample_root/modules/sekiban-dcb-decider-rust.wasm"
+  local workspace_manifest="$sample_root/Cargo.toml"
+  local newest_source=""
+
+  if [[ "${SKIP_RS_WASM_MODULE_REBUILD:-0}" == "1" ]]; then
+    return 0
+  fi
+
+  if [[ ! -f "$module_path" ]]; then
+    echo "[rs-wasm] module missing, rebuilding sample Rust WASM module"
+  else
+    newest_source="$(
+      find \
+        "$sample_root/SekibanDcbDecider.Rust.EventSource" \
+        "$sample_root/SekibanDcbDecider.Rust.Wasm" \
+        "$repo_root/src/wasm-projectors/rust/sekiban-core" \
+        "$repo_root/src/wasm-projectors/rust/sekiban-derive" \
+        "$repo_root/src/wasm-projectors/rust/sekiban-wasm" \
+        \( -path '*/target/*' -o -path '*/obj/*' -o -path '*/bin/*' \) -prune -o \
+        -type f \( -name '*.rs' -o -name 'Cargo.toml' -o -name 'Cargo.lock' \) -newer "$module_path" -print -quit
+    )"
+  fi
+
+  if [[ ! -f "$module_path" || -n "$newest_source" ]]; then
+    if [[ -n "$newest_source" ]]; then
+      echo "[rs-wasm] module is stale relative to $newest_source, rebuilding sample Rust WASM module"
+    fi
+    cargo build \
+      --manifest-path "$workspace_manifest" \
+      --package sekiban-dcb-decider-rust-wasm \
+      --target wasm32-wasip1 \
+      --release >/dev/null
+    cp \
+      "$sample_root/target/wasm32-wasip1/release/sekiban_dcb_decider_rust_wasm.wasm" \
+      "$module_path"
+  fi
+}
+
 ensure_ts_wasm_clientapi_dependencies() {
   local clientapi_dir="$repo_root/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Ts/ts-clientapi"
   local marker="$clientapi_dir/node_modules/@hono/node-server/package.json"
@@ -353,6 +393,8 @@ echo "[$runtime] benchmark profile: $benchmark_profile"
 rm -f "$apphost_log" "$benchmark_log" "$rss_log"
 if [[ "$runtime" == "cs-wasm" ]]; then
   ensure_cs_wasm_sample_module
+elif [[ "$runtime" == "rs-wasm" ]]; then
+  ensure_rs_wasm_sample_module
 elif [[ "$runtime" == "ts-wasm" ]]; then
   ensure_ts_wasm_clientapi_dependencies
 fi

@@ -39,6 +39,20 @@ fn multi_tag_output<E: EventPayload>(
     }))
 }
 
+fn multi_event_output(
+    events: Vec<EventOutput>,
+    tags: Vec<String>,
+    consistency_tags: Vec<String>,
+    expected_versions: Vec<(String, i32)>,
+) -> Result<Option<CommandOutput>, CommandError> {
+    Ok(Some(CommandOutput {
+        events,
+        consistency_tags,
+        tags,
+        expected_versions: expected_versions.into_iter().collect(),
+    }))
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Command)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateWeatherForecast {
@@ -523,6 +537,113 @@ impl CommandHandler for CreateReservationDraft {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Command)]
 #[serde(rename_all = "camelCase")]
+pub struct CreateQuickReservation {
+    pub reservation_id: Uuid,
+    pub room_id: Uuid,
+    pub organizer_id: Uuid,
+    pub organizer_name: String,
+    pub start_time: String,
+    pub end_time: String,
+    pub purpose: String,
+    pub approval_request_id: Option<Uuid>,
+    pub approval_request_comment: Option<String>,
+    pub selected_equipment: Vec<String>,
+}
+
+#[async_trait]
+impl CommandHandler for CreateQuickReservation {
+    async fn handle<C: CommandContext + ?Sized>(&self, ctx: &C) -> Result<Option<CommandOutput>, CommandError> {
+        let reservation_tag = ReservationTag {
+            reservation_id: self.reservation_id,
+        };
+        if ctx.tag_exists(&reservation_tag).await? {
+            return Err(CommandError::AlreadyExists(self.reservation_id.to_string()));
+        }
+
+        let room_tag = RoomTag { room_id: self.room_id };
+        let (room, _room_version): (RoomState, i32) = ctx.get_state(&room_tag).await?;
+        if room.room_id == Uuid::nil() {
+            return Err(CommandError::NotFound(self.room_id.to_string()));
+        }
+
+        let room_reservation_tag = RoomReservationTag { room_id: self.room_id };
+        let (room_reservations, room_reservations_version): (RoomReservationsState, i32) =
+            ctx.get_state(&room_reservation_tag).await?;
+
+        if room_reservations.has_conflict(&self.start_time, &self.end_time, Some(self.reservation_id)) {
+            return Err(CommandError::Validation(
+                "Reservation time conflicts with another held or confirmed reservation".to_string(),
+            ));
+        }
+
+        let draft_created = EventOutput {
+            event_type: ReservationDraftCreated::EVENT_TYPE.to_string(),
+            payload: serde_json::to_string(&ReservationDraftCreated {
+                reservation_id: self.reservation_id,
+                room_id: self.room_id,
+                organizer_id: self.organizer_id,
+                organizer_name: self.organizer_name.clone(),
+                start_time: self.start_time.clone(),
+                end_time: self.end_time.clone(),
+                purpose: self.purpose.clone(),
+                selected_equipment: self.selected_equipment.clone(),
+            })
+            .map_err(|err| CommandError::Serialization(err.to_string()))?,
+        };
+
+        let hold_committed = EventOutput {
+            event_type: ReservationHoldCommitted::EVENT_TYPE.to_string(),
+            payload: serde_json::to_string(&ReservationHoldCommitted {
+                reservation_id: self.reservation_id,
+                room_id: self.room_id,
+                organizer_id: self.organizer_id,
+                organizer_name: self.organizer_name.clone(),
+                start_time: self.start_time.clone(),
+                end_time: self.end_time.clone(),
+                purpose: self.purpose.clone(),
+                selected_equipment: self.selected_equipment.clone(),
+                requires_approval: room.requires_approval,
+                approval_request_id: self.approval_request_id,
+                approval_request_comment: self.approval_request_comment.clone(),
+            })
+            .map_err(|err| CommandError::Serialization(err.to_string()))?,
+        };
+
+        let mut events = vec![draft_created, hold_committed];
+        if !room.requires_approval {
+            events.push(EventOutput {
+                event_type: ReservationConfirmed::EVENT_TYPE.to_string(),
+                payload: serde_json::to_string(&ReservationConfirmed {
+                    reservation_id: self.reservation_id,
+                    room_id: self.room_id,
+                    organizer_id: self.organizer_id,
+                    organizer_name: self.organizer_name.clone(),
+                    start_time: self.start_time.clone(),
+                    end_time: self.end_time.clone(),
+                    purpose: self.purpose.clone(),
+                    selected_equipment: self.selected_equipment.clone(),
+                    confirmed_at: Utc::now().to_rfc3339(),
+                    approval_request_id: None,
+                    approval_request_comment: None,
+                    approval_decision_comment: None,
+                })
+                .map_err(|err| CommandError::Serialization(err.to_string()))?,
+            });
+        }
+
+        let reservation_tag_string = reservation_tag.to_tag_string();
+        let room_reservation_tag_string = room_reservation_tag.to_tag_string();
+        multi_event_output(
+            events,
+            vec![reservation_tag_string.clone(), room_reservation_tag_string.clone()],
+            vec![reservation_tag_string, room_reservation_tag_string.clone()],
+            vec![(room_reservation_tag_string, room_reservations_version)],
+        )
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Command)]
+#[serde(rename_all = "camelCase")]
 pub struct CommitReservationHold {
     pub reservation_id: Uuid,
     pub room_id: Uuid,
@@ -534,10 +655,10 @@ pub struct CommitReservationHold {
 #[async_trait]
 impl CommandHandler for CommitReservationHold {
     async fn handle<C: CommandContext + ?Sized>(&self, ctx: &C) -> Result<Option<CommandOutput>, CommandError> {
-        let tag = ReservationTag {
+        let reservation_tag = ReservationTag {
             reservation_id: self.reservation_id,
         };
-        let (state, version): (ReservationState, i32) = ctx.get_state(&tag).await?;
+        let (state, version): (ReservationState, i32) = ctx.get_state(&reservation_tag).await?;
         if state.is_empty() {
             return Err(CommandError::NotFound(self.reservation_id.to_string()));
         }
@@ -545,7 +666,7 @@ impl CommandHandler for CommitReservationHold {
             return Ok(None);
         }
 
-        single_output(
+        multi_tag_output(
             ReservationHoldCommitted {
                 reservation_id: state.reservation_id,
                 room_id: self.room_id,
@@ -559,8 +680,11 @@ impl CommandHandler for CommitReservationHold {
                 approval_request_id: self.approval_request_id,
                 approval_request_comment: self.approval_request_comment.clone(),
             },
-            tag,
-            Some(version),
+            vec![
+                reservation_tag.to_tag_string(),
+                RoomReservationTag { room_id: self.room_id }.to_tag_string(),
+            ],
+            vec![(reservation_tag.to_tag_string(), version)],
         )
     }
 }
@@ -575,10 +699,10 @@ pub struct ConfirmReservation {
 #[async_trait]
 impl CommandHandler for ConfirmReservation {
     async fn handle<C: CommandContext + ?Sized>(&self, ctx: &C) -> Result<Option<CommandOutput>, CommandError> {
-        let tag = ReservationTag {
+        let reservation_tag = ReservationTag {
             reservation_id: self.reservation_id,
         };
-        let (state, version): (ReservationState, i32) = ctx.get_state(&tag).await?;
+        let (state, version): (ReservationState, i32) = ctx.get_state(&reservation_tag).await?;
         if state.is_empty() {
             return Err(CommandError::NotFound(self.reservation_id.to_string()));
         }
@@ -586,7 +710,7 @@ impl CommandHandler for ConfirmReservation {
             return Ok(None);
         }
 
-        single_output(
+        multi_tag_output(
             ReservationConfirmed {
                 reservation_id: state.reservation_id,
                 room_id: self.room_id,
@@ -601,8 +725,11 @@ impl CommandHandler for ConfirmReservation {
                 approval_request_comment: state.approval_request_comment,
                 approval_decision_comment: state.approval_decision_comment,
             },
-            tag,
-            Some(version),
+            vec![
+                reservation_tag.to_tag_string(),
+                RoomReservationTag { room_id: self.room_id }.to_tag_string(),
+            ],
+            vec![(reservation_tag.to_tag_string(), version)],
         )
     }
 }
@@ -618,15 +745,15 @@ pub struct CancelReservation {
 #[async_trait]
 impl CommandHandler for CancelReservation {
     async fn handle<C: CommandContext + ?Sized>(&self, ctx: &C) -> Result<Option<CommandOutput>, CommandError> {
-        let tag = ReservationTag {
+        let reservation_tag = ReservationTag {
             reservation_id: self.reservation_id,
         };
-        let (state, version): (ReservationState, i32) = ctx.get_state(&tag).await?;
+        let (state, version): (ReservationState, i32) = ctx.get_state(&reservation_tag).await?;
         if state.is_empty() {
             return Err(CommandError::NotFound(self.reservation_id.to_string()));
         }
 
-        single_output(
+        multi_tag_output(
             ReservationCancelled {
                 reservation_id: state.reservation_id,
                 room_id: self.room_id,
@@ -640,8 +767,11 @@ impl CommandHandler for CancelReservation {
                 reason: self.reason.clone(),
                 cancelled_at: Utc::now().to_rfc3339(),
             },
-            tag,
-            Some(version),
+            vec![
+                reservation_tag.to_tag_string(),
+                RoomReservationTag { room_id: self.room_id }.to_tag_string(),
+            ],
+            vec![(reservation_tag.to_tag_string(), version)],
         )
     }
 }
@@ -658,15 +788,15 @@ pub struct RejectReservation {
 #[async_trait]
 impl CommandHandler for RejectReservation {
     async fn handle<C: CommandContext + ?Sized>(&self, ctx: &C) -> Result<Option<CommandOutput>, CommandError> {
-        let tag = ReservationTag {
+        let reservation_tag = ReservationTag {
             reservation_id: self.reservation_id,
         };
-        let (state, version): (ReservationState, i32) = ctx.get_state(&tag).await?;
+        let (state, version): (ReservationState, i32) = ctx.get_state(&reservation_tag).await?;
         if state.is_empty() {
             return Err(CommandError::NotFound(self.reservation_id.to_string()));
         }
 
-        single_output(
+        multi_tag_output(
             ReservationRejected {
                 reservation_id: state.reservation_id,
                 room_id: self.room_id,
@@ -681,8 +811,11 @@ impl CommandHandler for RejectReservation {
                 reason: self.reason.clone(),
                 rejected_at: Utc::now().to_rfc3339(),
             },
-            tag,
-            Some(version),
+            vec![
+                reservation_tag.to_tag_string(),
+                RoomReservationTag { room_id: self.room_id }.to_tag_string(),
+            ],
+            vec![(reservation_tag.to_tag_string(), version)],
         )
     }
 }

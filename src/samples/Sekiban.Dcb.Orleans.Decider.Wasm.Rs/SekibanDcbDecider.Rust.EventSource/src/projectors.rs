@@ -694,6 +694,48 @@ impl Projector for ReservationProjector {
     }
 }
 
+#[derive(TagProjector)]
+#[projector(name = "RoomReservationsProjector", version = "1.0.0")]
+pub struct RoomReservationsProjector;
+
+impl Projector for RoomReservationsProjector {
+    type State = RoomReservationsState;
+
+    fn event_types() -> Vec<&'static str> {
+        vec![
+            ReservationDraftCreated::EVENT_TYPE,
+            ReservationHoldCommitted::EVENT_TYPE,
+            ReservationConfirmed::EVENT_TYPE,
+            ReservationCancelled::EVENT_TYPE,
+            ReservationRejected::EVENT_TYPE,
+        ]
+    }
+
+    fn project(state: Self::State, event: &Event) -> Self::State {
+        match_event!(event, state, {
+            ReservationDraftCreated(_e) => state,
+            ReservationHoldCommitted(e) => state.add_or_update_reservation(
+                e.reservation_id,
+                e.start_time.clone(),
+                e.end_time.clone(),
+                e.purpose.clone(),
+                e.organizer_id,
+                ReservationSlotStatus::Held,
+            ),
+            ReservationConfirmed(e) => state.add_or_update_reservation(
+                e.reservation_id,
+                e.start_time.clone(),
+                e.end_time.clone(),
+                e.purpose.clone(),
+                e.organizer_id,
+                ReservationSlotStatus::Confirmed,
+            ),
+            ReservationCancelled(e) => state.remove_reservation(e.reservation_id),
+            ReservationRejected(e) => state.remove_reservation(e.reservation_id),
+        })
+    }
+}
+
 #[derive(MultiProjector)]
 #[projector(name = "ReservationListProjection", version = "1.0.0")]
 pub struct ReservationListProjector;

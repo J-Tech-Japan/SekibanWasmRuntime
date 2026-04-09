@@ -12,7 +12,7 @@ use chrono::{DateTime, Duration, FixedOffset, NaiveDate, TimeZone, Utc};
 use sekiban_core::prelude::*;
 use sekiban_dcb_decider_rust_eventsource::{
     ApprovalDecision, ApprovalRequestState, ClassRoomItem, ClassRoomState, CommitReservationHold,
-    ConfirmReservation, CountResult, CreateClassRoom, CreateReservationDraft, CreateRoom,
+    ConfirmReservation, CountResult, CreateClassRoom, CreateQuickReservation, CreateReservationDraft, CreateRoom,
     CreateStudent, CreateWeatherForecast, GetApprovalInboxQuery, GetClassRoomListQuery,
     GetReservationListQuery, GetRoomListQuery, GetStudentListQuery, GetUserAccessListQuery,
     GetUserDirectoryListQuery, GetWeatherForecastCountQuery, GetWeatherForecastListQuery,
@@ -55,6 +55,7 @@ async fn main() -> Result<()> {
             .with_tag_group("User", "UserDirectoryProjector")
             .with_tag_group("UserAccess", "UserAccessProjector")
             .with_tag_group("Room", "RoomProjector")
+            .with_tag_group("RoomReservation", "RoomReservationsProjector")
             .with_tag_group("Reservation", "ReservationProjector")
             .with_tag_group("ApprovalRequest", "ApprovalRequestProjector"),
     ));
@@ -837,18 +838,11 @@ async fn quick_reservation(
     State(state): State<AppState>,
     Json(request): Json<QuickReservationRequest>,
 ) -> Response {
-    let room = match get_tag_state::<RoomState, RoomTag>(&state.executor, &RoomTag { room_id: request.room_id }).await {
-        Ok((room, _)) if !room.is_empty() => room,
-        Ok(_) => return error_response(StatusCode::BAD_REQUEST, "Room not found"),
-        Err(err) => return error_response(StatusCode::BAD_GATEWAY, err),
-    };
-
     let reservation_id = Uuid::now_v7();
     let organizer_id = Uuid::now_v7();
     let organizer_name = "Sample User".to_string();
     let selected_equipment = request.selected_equipment.unwrap_or_default();
-
-    let draft = CreateReservationDraft {
+    let command = CreateQuickReservation {
         reservation_id,
         room_id: request.room_id,
         organizer_id,
@@ -856,55 +850,15 @@ async fn quick_reservation(
         start_time: request.start_time,
         end_time: request.end_time,
         purpose: request.purpose,
+        approval_request_id: None,
+        approval_request_comment: request.approval_request_comment.clone(),
         selected_equipment,
     };
-    if let Err(response) = ensure_command_success(state.executor.execute_command(&draft).await, reservation_id) {
-        return response;
-    }
 
-    let approval_request_id = if room.requires_approval {
-        let approval_request_id = Uuid::now_v7();
-        let start_approval = StartApprovalFlow {
-            approval_request_id,
-            reservation_id,
-            room_id: room.room_id,
-            requester_id: organizer_id,
-            approver_ids: Vec::new(),
-            request_comment: request.approval_request_comment.clone(),
-        };
-        if let Err(response) = ensure_command_success(state.executor.execute_command(&start_approval).await, reservation_id) {
-            return response;
-        }
-        Some(approval_request_id)
-    } else {
-        None
-    };
-
-    let hold = CommitReservationHold {
-        reservation_id,
-        room_id: room.room_id,
-        requires_approval: room.requires_approval,
-        approval_request_id,
-        approval_request_comment: request.approval_request_comment,
-    };
-    let hold_result = match state.executor.execute_command(&hold).await {
+    let result = match state.executor.execute_command(&command).await {
         Ok(result) if result.success => result,
         Ok(result) => return failed_reservation_command_response(reservation_id, result),
         Err(err) => return command_error_response(reservation_id, err),
-    };
-
-    let sortable_unique_id = if room.requires_approval {
-        hold_result.sortable_unique_id
-    } else {
-        let confirm = ConfirmReservation {
-            reservation_id,
-            room_id: room.room_id,
-        };
-        match state.executor.execute_command(&confirm).await {
-            Ok(result) if result.success => result.sortable_unique_id.or(hold_result.sortable_unique_id),
-            Ok(result) => return failed_reservation_command_response(reservation_id, result),
-            Err(err) => return command_error_response(reservation_id, err),
-        }
     };
 
     Json(ReservationCommandResponse {
@@ -912,9 +866,9 @@ async fn quick_reservation(
         reservation_id,
         organizer_id: Some(organizer_id),
         organizer_name: Some(organizer_name),
-        requires_approval: Some(room.requires_approval),
-        approval_request_id,
-        sortable_unique_id,
+        requires_approval: Some(false),
+        approval_request_id: None,
+        sortable_unique_id: result.sortable_unique_id,
         error: None,
     })
     .into_response()
