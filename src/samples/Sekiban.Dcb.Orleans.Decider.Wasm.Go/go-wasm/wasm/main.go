@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"sort"
 	"strings"
+	"time"
 
 	"sekiban-dcb-decider-go/domain"
 
@@ -22,16 +23,17 @@ const (
 	kindUserDirectoryTag  = 4
 	kindUserAccessTag     = 5
 	kindRoomTag           = 6
-	kindReservationTag    = 7
-	kindApprovalTag       = 8
-	kindWeatherList       = 9
-	kindStudentList       = 10
-	kindClassRoomList     = 11
-	kindUserDirectoryList = 12
-	kindUserAccessList    = 13
-	kindRoomList          = 14
-	kindReservationList   = 15
-	kindApprovalList      = 16
+	kindRoomReservationTag = 7
+	kindReservationTag     = 8
+	kindApprovalTag        = 9
+	kindWeatherList        = 10
+	kindStudentList        = 11
+	kindClassRoomList      = 12
+	kindUserDirectoryList  = 13
+	kindUserAccessList     = 14
+	kindRoomList           = 15
+	kindReservationList    = 16
+	kindApprovalList       = 17
 )
 
 // ---------------------------------------------------------------------------
@@ -46,6 +48,7 @@ type instance struct {
 	userDirectoryTag   domain.UserDirectoryState
 	userAccessTag      domain.UserAccessState
 	roomTag            domain.RoomState
+	roomReservationsTag domain.RoomReservationsState
 	reservationTag     domain.ReservationState
 	approvalRequestTag domain.ApprovalRequestState
 	weatherList        domain.WeatherForecastListState
@@ -59,6 +62,7 @@ type instance struct {
 }
 
 func (inst *instance) reset() {
+	inst.roomReservationsTag.ActiveReservations = make(map[string]domain.ReservationSlot)
 	inst.weatherList.Items = make(map[string]domain.WeatherForecastItem)
 	inst.studentList.Items = make(map[string]domain.StudentState)
 	inst.classRoomList.Items = make(map[string]domain.ClassRoomItem)
@@ -99,6 +103,8 @@ func resolveKind(name string) int {
 		return kindUserAccessTag
 	case lower == strings.ToLower(domain.ProjectorRoomTag):
 		return kindRoomTag
+	case lower == strings.ToLower(domain.ProjectorRoomReservationsTag):
+		return kindRoomReservationTag
 	case lower == strings.ToLower(domain.ProjectorReservationTag):
 		return kindReservationTag
 	case lower == strings.ToLower(domain.ProjectorApprovalRequestTag):
@@ -188,6 +194,8 @@ func applyEventToInstance(inst *instance, eventType, payload string) {
 		applyUserAccessTag(&inst.userAccessTag, eventType, payload)
 	case kindRoomTag:
 		applyRoomTag(&inst.roomTag, eventType, payload)
+	case kindRoomReservationTag:
+		applyRoomReservationsTag(&inst.roomReservationsTag, eventType, payload)
 	case kindReservationTag:
 		applyReservationTag(&inst.reservationTag, eventType, payload)
 	case kindApprovalTag:
@@ -266,6 +274,8 @@ func serializeInstanceState(inst *instance) string {
 			return "{}"
 		}
 		return wasm.MustJSON(inst.roomTag)
+	case kindRoomReservationTag:
+		return wasm.MustJSON(inst.roomReservationsTag)
 	case kindReservationTag:
 		if inst.reservationTag.ReservationId == "" {
 			return "{}"
@@ -315,6 +325,11 @@ func restoreInstanceState(inst *instance, stateJSON string) {
 		json.Unmarshal([]byte(stateJSON), &inst.userAccessTag)
 	case kindRoomTag:
 		json.Unmarshal([]byte(stateJSON), &inst.roomTag)
+	case kindRoomReservationTag:
+		json.Unmarshal([]byte(stateJSON), &inst.roomReservationsTag)
+		if inst.roomReservationsTag.ActiveReservations == nil {
+			inst.roomReservationsTag.ActiveReservations = make(map[string]domain.ReservationSlot)
+		}
 	case kindReservationTag:
 		json.Unmarshal([]byte(stateJSON), &inst.reservationTag)
 	case kindApprovalTag:
@@ -787,6 +802,61 @@ func applyRoomTag(s *domain.RoomState, eventType, payload string) {
 		s.Location = ev.Location
 		s.Equipment = ev.Equipment
 		s.RequiresApproval = ev.RequiresApproval
+	}
+}
+
+func applyRoomReservationsTag(s *domain.RoomReservationsState, eventType, payload string) {
+	switch eventType {
+	case domain.EventReservationHoldCommitted:
+		var ev domain.ReservationHoldCommitted
+		json.Unmarshal([]byte(payload), &ev)
+		startTime, err := time.Parse(time.RFC3339, ev.StartTime)
+		if err != nil {
+			return
+		}
+		endTime, err := time.Parse(time.RFC3339, ev.EndTime)
+		if err != nil {
+			return
+		}
+		if s.ActiveReservations == nil {
+			s.ActiveReservations = make(map[string]domain.ReservationSlot)
+		}
+		s.ActiveReservations[ev.ReservationId] = domain.ReservationSlot{
+			StartTime:   startTime,
+			EndTime:     endTime,
+			Purpose:     ev.Purpose,
+			OrganizerId: ev.OrganizerId,
+			Status:      0,
+		}
+	case domain.EventReservationConfirmed:
+		var ev domain.ReservationConfirmed
+		json.Unmarshal([]byte(payload), &ev)
+		startTime, err := time.Parse(time.RFC3339, ev.StartTime)
+		if err != nil {
+			return
+		}
+		endTime, err := time.Parse(time.RFC3339, ev.EndTime)
+		if err != nil {
+			return
+		}
+		if s.ActiveReservations == nil {
+			s.ActiveReservations = make(map[string]domain.ReservationSlot)
+		}
+		s.ActiveReservations[ev.ReservationId] = domain.ReservationSlot{
+			StartTime:   startTime,
+			EndTime:     endTime,
+			Purpose:     ev.Purpose,
+			OrganizerId: ev.OrganizerId,
+			Status:      1,
+		}
+	case domain.EventReservationCancelled:
+		var ev domain.ReservationCancelled
+		json.Unmarshal([]byte(payload), &ev)
+		delete(s.ActiveReservations, ev.ReservationId)
+	case domain.EventReservationRejected:
+		var ev domain.ReservationRejected
+		json.Unmarshal([]byte(payload), &ev)
+		delete(s.ActiveReservations, ev.ReservationId)
 	}
 }
 

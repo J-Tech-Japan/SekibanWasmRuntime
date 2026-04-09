@@ -33,6 +33,7 @@
         "cmd_create_room:create_room",
         "cmd_update_room:update_room",
         "cmd_create_reservation_draft:create_reservation_draft",
+        "cmd_create_quick_reservation:create_quick_reservation",
         "cmd_commit_reservation_hold:commit_reservation_hold",
         "cmd_confirm_reservation:confirm_reservation",
         "cmd_cancel_reservation:cancel_reservation",

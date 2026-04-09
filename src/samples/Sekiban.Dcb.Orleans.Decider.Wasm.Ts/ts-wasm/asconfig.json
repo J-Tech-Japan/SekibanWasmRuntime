@@ -5,7 +5,8 @@
       "optimize": true,
       "exportStart": "_initialize",
       "runtime": "incremental",
-      "exportRuntime": true
+      "exportRuntime": true,
+      "use": ["abort="]
     }
   },
   "options": {

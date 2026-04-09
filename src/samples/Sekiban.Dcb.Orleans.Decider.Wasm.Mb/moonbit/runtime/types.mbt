@@ -35,6 +35,7 @@ let tag_group_classroom = "ClassRoom"
 let tag_group_user = "User"
 let tag_group_user_access = "UserAccess"
 let tag_group_room = "Room"
+let tag_group_room_reservation = "RoomReservation"
 let tag_group_reservation = "Reservation"
 let tag_group_approval_request = "ApprovalRequest"
 
@@ -167,6 +168,18 @@ struct ReservationConfirmed {
   approvalDecisionComment : String?
 } derive(ToJson, FromJson, Show, Eq)
 
+struct ReservationSlot {
+  startTime : String
+  endTime : String
+  purpose : String
+  organizerId : String
+  status : Int
+} derive(ToJson, FromJson, Show, Eq)
+
+struct RoomReservationsState {
+  activeReservations : Map[String, ReservationSlot]
+} derive(ToJson, FromJson, Show, Eq)
+
 struct ReservationCancelled {
   reservationId : String
   roomId : String
@@ -204,6 +217,18 @@ struct ApprovalFlowStarted {
   approverIds : Array[String]
   requestedAt : String
   requestComment : String?
+} derive(ToJson, FromJson, Show, Eq)
+
+struct CreateQuickReservationReq {
+  reservationId : String
+  roomId : String
+  organizerId : String
+  organizerName : String
+  startTime : String
+  endTime : String
+  purpose : String
+  approvalRequestComment : String?
+  selectedEquipment : Array[String]
 } derive(ToJson, FromJson, Show, Eq)
 
 struct ApprovalDecisionRecorded {
@@ -725,3 +750,15 @@ fn ok(output : CommandOutput) -> WasmResult { @core.ok(output) }
 fn ok_noop() -> WasmResult { @core.ok_noop() }
 fn err(status : Int, code : String, message : String) -> WasmResult { @core.err(status, code, message) }
 fn new_command_output(event_type : String, payload_json : String, tags : Array[String]) -> CommandOutput { @core.new_command_output(event_type, payload_json, tags) }
+fn new_multi_command_output(events : Array[EventPayload], tags : Array[String], consistency_tags : Array[String], expected_versions : Map[String, Int]) -> CommandOutput {
+  @core.new_multi_command_output(events, tags, consistency_tags, expected_versions)
+}
+fn new_multi_json_command_output(
+  event_types : Array[String],
+  payload_jsons : Array[String],
+  tags : Array[String],
+  consistency_tags : Array[String],
+  expected_versions : Map[String, Int]
+) -> CommandOutput {
+  @core.new_multi_json_command_output(event_types, payload_jsons, tags, consistency_tags, expected_versions)
+}

@@ -168,70 +168,38 @@ Latest-package strict `300K quick-only` results:
 | C# Native (`10.1.12`, strict, quick-only) | `1932.6` | `2244.7` | `748.2` | `1695.6` | `147.6 s` | `~3365.6 MB` | `0` |
 | C# WASM (`10.1.12`, strict, quick-only) | `1589.0` | `1418.3` | `472.8` | `948.9` | `199.0 s` | `~3380.2 MB` | `0` |
 
+All-runtime strict `50K quick-only` results:
+
+| Runtime | Weather events/sec | Reservation events/sec | Reservation ops/sec | Query ops/sec | Total wall-clock | Peak RSS | Errors |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| C# Native (`10.1.12`, strict, quick-only) | `1836.8` | `2551.9` | `850.6` | `1970.8` | `24.7 s` | `~921.8 MB` | `0` |
+| C# WASM (`10.1.12`, strict, quick-only) | `1466.1` | `1520.1` | `506.7` | `1012.6` | `34.5 s` | `~1764.1 MB` | `0` |
+| Rust WASM (`strict, quick-only`) | `957.2` | `1397.9` | `466.0` | `2227.9` | `46.3 s` | `~909.9 MB` | `0` |
+| MoonBit WASM (`strict, quick-only`) | `969.3` | `1571.2` | `523.7` | `1164.3` | `44.5 s` | `~721.4 MB` | `0` |
+| Go WASM (`strict, quick-only`) | `971.0` | `1126.2` | `375.4` | `2089.4` | `49.4 s` | `~933.5 MB` | `0` |
+| TypeScript WASM (`strict, quick-only`) | `614.4` | `820.5` | `273.7` | `242.9` | `74.9 s` | `~1380.1 MB` | `4` |
+
+All-runtime strict `300K quick-only` results:
+
+| Runtime | Weather events/sec | Reservation events/sec | Reservation ops/sec | Query ops/sec | Total wall-clock | Peak RSS | Errors |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| C# Native (`10.1.12`, strict, quick-only) | `1932.6` | `2244.7` | `748.2` | `1695.6` | `147.6 s` | `~3365.6 MB` | `0` |
+| C# WASM (`10.1.12`, strict, quick-only) | `1589.0` | `1418.3` | `472.8` | `948.9` | `199.0 s` | `~3380.2 MB` | `0` |
+| Rust WASM (`strict, quick-only`) | `462.4` | `549.8` | `183.3` | `2053.8` | `608.6 s` | `~3076.9 MB` | `0` |
+| MoonBit WASM (`strict, quick-only`) | `517.4` | `627.5` | `209.2` | `158.9` | `541.7 s` | `~2362.9 MB` | `0` |
+| Go WASM (`strict, quick-only`) | `496.1` | `539.0` | `179.7` | `746.0` | `586.8 s` | `~2948.8 MB` | `0` |
+| TypeScript WASM (`strict, quick-only`) | `509.0` | `599.7` | `199.9` | `401.5` | `555.3 s` | `~2955.8 MB` | `3` |
+
 Reading:
 
-- package alignment did not materially change the earlier Native-vs-C#-WASM gap
-- at `50K`, C# WASM is `40.4%` slower than Native on reservation ops/sec (`506.6` vs `850.6`)
-- at `300K`, C# WASM is `36.8%` slower than Native on reservation ops/sec (`472.8` vs `748.2`)
-- the `300K` peak RSS is now essentially the same class on both sides (`~3366 MB` Native vs `~3380 MB` C# WASM)
-- the remaining difference is therefore mostly execution-path overhead, not a broken cache or mismatched package line
-- the Native reservation phase still decays under load (`2552 eps` first interval -> `1972 eps` last interval), but C# WASM decays further (`1628 eps` -> `828 eps`)
-
-`50K` reservation split evidence:
-
-| Workload | Native strict ops/sec (old) | Native strict ops/sec (aligned) | C# WASM strict ops/sec | Reading |
-|---|---:|---:|---:|---|
-| `quick-only` | `596.0` | `596.0` | `411.0` | Native was already faster on the shared quick path |
-| `draft-only` | `237.1` | `1590.3` | `563.2` | the old Native row was dominated by Native-only draft governance work |
-| `mixed` | `423.9` | `939.7` | `571.3` | once draft work is aligned, Native is faster overall |
-
-Latest comparable strict `300K` mixed-workload results:
-
-| Runtime | Status | Weather events/sec | Reservation events/sec | Reservation ops/sec | Query ops/sec | Total wall-clock | Peak RSS | Errors |
-|---|---|---:|---:|---:|---:|---:|---:|---:|
-| C# Native (`tagstategrain-memory`, latest package, benchmark-aligned draft path) | `completed` | `2029.5` | `2424.7` | `932.6` | `1796.5` | `139.0 s` | `~3615.6 MB` | `0` |
-| C# WASM (`tagstategrain-memory`, fixed host) | `completed` | `1455.1` | `1529.6` | `588.3` | `917.2` | `203.4 s` | `~3552.4 MB` | `0` |
-| Rust WASM (`tagstategrain-memory`, rebuilt sample module) | `completed` | `459.6` | `523.0` | `201.1` | `2128.7` | `622.1 s` | `~3060.4 MB` | `0` |
-| MoonBit WASM (`tagstategrain-memory`) | `completed` | `515.0` | `163.0` | `63.0` | `166.0` | `1089.5 s` | `~2320.5 MB` | `0` |
-| Go WASM (`tagstategrain-memory`) | `completed` | `510.0` | `190.0` | `73.0` | `816.0` | `986.6 s` | `~2980.4 MB` | `0` |
-| TypeScript WASM (`tagstategrain-memory`) | `completed` | `475.0` | `196.0` | `75.0` | `418.0` | `992.5 s` | `~3999.7 MB` | `0` |
-
-Comparable strict `50K` mixed-workload results:
-
-| Runtime | Status | Weather events/sec | Reservation events/sec | Reservation ops/sec | Query ops/sec | Total wall-clock | Peak RSS | Errors |
-|---|---|---:|---:|---:|---:|---:|---:|---:|
-| C# Native (`tagstategrain-memory`, latest package, benchmark-aligned draft path) | `completed` | `1858.6` | `2443.3` | `939.7` | `1874.8` | `24.8 s` | `~887.7 MB` | `0` |
-| C# WASM (`tagstategrain-memory`, fixed host) | `completed` | `1302.2` | `1485.3` | `571.3` | `1012.4` | `37.3 s` | `~1775.4 MB` | `0` |
-| Rust WASM (`tagstategrain-memory`, rebuilt sample module) | `completed` | `1030.4` | `1473.6` | `566.8` | `2469.3` | `43.3 s` | `~932.2 MB` | `0` |
-| MoonBit WASM (`tagstategrain-memory`, aligned) | `completed` | `990.3` | `818.5` | `314.4` | `149.6` | `57.1 s` | `~745.7 MB` | `0` |
-| Go WASM (`tagstategrain-memory`, aligned) | `completed` | `994.4` | `952.0` | `366.3` | `2106.9` | `51.9 s` | `~784.5 MB` | `0` |
-| TypeScript WASM (`tagstategrain-memory`, aligned) | `completed` | `926.2` | `881.4` | `338.9` | `323.4` | `56.5 s` | `~732.6 MB` | `0` |
-
-Latency summary:
-
-| Runtime | Weather p50 / p95 | Reservation p50 / p95 | Query p50 / p95 |
-|---|---|---|---|
-| C# Native (`tagstategrain-memory`, latest package, benchmark-aligned draft path) | `3.8 / 5.3 ms` | `8.0 / 12.4 ms` | `0.2 / 0.4 ms` |
-| C# WASM (`tagstategrain-memory`, fixed host) | `5.0 / 8.6 ms` | `12.3 / 18.8 ms` | `0.6 / 1.4 ms` |
-| Rust WASM (`tagstategrain-memory`, rebuilt sample module) | `17.8 / 28.8 ms` | `34.8 / 65.7 ms` | `0.2 / 0.6 ms` |
-| MoonBit WASM (`tagstategrain-memory`) | `15.7 / 24.3 ms` | `128.6 / 200.1 ms` | `5.7 / 17.9 ms` |
-| Go WASM (`tagstategrain-memory`) | `15.9 / 26.0 ms` | `104.4 / 177.7 ms` | `1.0 / 2.4 ms` |
-| TypeScript WASM (`tagstategrain-memory`) | `16.3 / 30.0 ms` | `102.0 / 170.0 ms` | `1.5 / 4.9 ms` |
-
-Takeaways from the strict profile:
-
-- All six implemented runtimes now complete the strict `300K` profile with `0` errors.
-- For Native-vs-C#-WASM fairness, the authoritative comparison is now the latest-package `quick-only` table above, not the older mixed strict table.
-- Once the reservation workload is aligned, Native C# is faster than C# WASM at `10K`, `50K`, and `300K` for both reservation commands and queries.
-- The other WASM runtimes were already on the lighter draft path, so the new 50K reruns mainly confirm their placement under the same comparable workload definition.
-- After the projector-version fix, C# WASM no longer shows the pathological reservation collapse from the earlier strict run. It now completes `300K` with `588.3 reservation ops/sec` and stays under the `4 GB` guardrail at `~3552.4 MB`.
-- The old strict conclusion "C# WASM is faster than Native at scale" was a benchmark artifact caused by Native-only draft governance work on the template path, not by WASM runtime superiority.
-- With the draft path aligned, Native's `300K` reservation phase stays high throughout the run (`2567 eps` first sample -> `2304 eps` last sample) instead of collapsing.
-- The remaining C# WASM penalty is now in the expected range for an out-of-process host: `36.9%` lower reservation ops/sec and `48.9%` lower query throughput than aligned Native at `300K`, while peak RSS stays in the same class (`~3.62 GB` vs `~3.55 GB`).
-- Among the non-C# WASM runtimes, Rust now has the strongest strict reservation command path and is still the clear query-throughput leader.
-- C# WASM and TypeScript WASM both stay under the original `4 GB` guardrail, but TypeScript remains extremely tight at `~3999.7 MB`.
-- MoonBit WASM still has the lowest strict-profile memory usage at `~2.32 GB`; the rebuilt Rust sample trades memory for materially better command throughput and now peaks around `~3.06 GB`.
-- The biggest remaining Native vs C# WASM difference is now query throughput and the extra remote-hop overhead, not a broken tag-state cache or a benchmark mismatch.
+- For Native-vs-C#-WASM fairness, the authoritative comparison is now the quick-only tables above, not the older mixed strict rows.
+- At `50K`, C# WASM is `40.4%` slower than Native on reservation ops/sec (`506.7` vs `850.6`); at `300K`, that gap is `36.8%` (`472.8` vs `748.2`).
+- The non-C# runtimes all improved materially once their quick path was forced onto a single-command `CreateQuickReservation` shape and their module/build mismatches were removed.
+- At `50K`, MoonBit is the strongest non-C# reservation command path (`523.7 ops/sec`) and Rust is the clear query leader (`2227.9 qps`).
+- At `300K`, none of the non-C# WASM runtimes surpass aligned C# WASM on reservation ops/sec yet. MoonBit is the strongest non-C# reservation path (`209.2 ops/sec`), Rust is still the query leader (`2053.8 qps`), and Go is the next-strongest query path (`746.0 qps`).
+- Rust, MoonBit, Go, and TypeScript all show strong weather-phase decay between `50K` and `300K`, so the remaining bottleneck is now scale retention rather than basic correctness.
+- MoonBit keeps the lowest `300K` memory footprint among the non-C# runtimes (`~2362.9 MB`).
+- TypeScript now completes `300K` under `~3 GB`, but it still reports a small number of reservation conflict validations (`4` at `50K`, `3` at `300K`) that the other runtimes do not emit.
 
 ### C# WASM vs Native C# Strict Investigation
 
@@ -309,13 +277,14 @@ Result files:
 - `benchmarks/results/cs-wasm-300k-tagstategrain-memory-20260408-http-analysis.json`
 - `benchmarks/results/rs-wasm-50k-quickonly-fixed2.json`
 - `benchmarks/results/rs-wasm-50k-strict-fixed.json`
-- `benchmarks/results/rs-wasm-300k-strict-fixed.json`
-- `benchmarks/results/mb-wasm-50k-strict-aligned.json`
-- `benchmarks/results/mb-wasm-300k-tagstategrain-memory-20260408.json`
-- `benchmarks/results/go-wasm-50k-strict-aligned.json`
-- `benchmarks/results/go-wasm-300k-tagstategrain-memory-20260408.json`
-- `benchmarks/results/ts-wasm-50k-strict-aligned.json`
-- `benchmarks/results/ts-wasm-300k-tagstategrain-memory-20260408.json`
+- `benchmarks/results/rs-wasm-50k-quickonly-strict-20260408.json`
+- `benchmarks/results/rs-wasm-300k-quickonly-strict-20260408.json`
+- `benchmarks/results/mb-wasm-50k-quickonly-strict-20260408.json`
+- `benchmarks/results/mb-wasm-300k-quickonly-strict-20260408.json`
+- `benchmarks/results/go-wasm-50k-quickonly-strict-20260408.json`
+- `benchmarks/results/go-wasm-300k-quickonly-strict-20260408.json`
+- `benchmarks/results/ts-wasm-50k-quickonly-strict-20260408.json`
+- `benchmarks/results/ts-wasm-300k-quickonly-strict-20260408.json`
 
 ## 2026-04-04 Optimized 300K Baseline
 

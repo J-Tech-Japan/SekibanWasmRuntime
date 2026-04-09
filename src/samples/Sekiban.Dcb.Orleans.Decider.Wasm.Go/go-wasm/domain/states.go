@@ -1,6 +1,9 @@
 package domain
 
-import "strings"
+import (
+	"strings"
+	"time"
+)
 
 // Weather states
 type WeatherForecastState struct {
@@ -150,6 +153,30 @@ type RoomListItem struct {
 
 type RoomListState struct {
 	Items map[string]RoomListItem `json:"items"`
+}
+
+type ReservationSlot struct {
+	StartTime   time.Time `json:"startTime"`
+	EndTime     time.Time `json:"endTime"`
+	Purpose     string    `json:"purpose"`
+	OrganizerId string    `json:"organizerId"`
+	Status      int       `json:"status"`
+}
+
+type RoomReservationsState struct {
+	ActiveReservations map[string]ReservationSlot `json:"activeReservations"`
+}
+
+func (s RoomReservationsState) HasConflict(startTime, endTime time.Time, excludeReservationId *string) bool {
+	for reservationId, slot := range s.ActiveReservations {
+		if excludeReservationId != nil && reservationId == *excludeReservationId {
+			continue
+		}
+		if startTime.Before(slot.EndTime) && slot.StartTime.Before(endTime) {
+			return true
+		}
+	}
+	return false
 }
 
 // Reservation states

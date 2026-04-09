@@ -30,6 +30,7 @@
     { "projectorName": "UserDirectoryProjector", "modulePath": "./ts-weather.wasm", "projectorVersion": "1.0.0" },
     { "projectorName": "UserAccessProjector", "modulePath": "./ts-weather.wasm", "projectorVersion": "1.0.0" },
     { "projectorName": "RoomProjector", "modulePath": "./ts-weather.wasm", "projectorVersion": "1.0.0" },
+    { "projectorName": "RoomReservationsProjector", "modulePath": "./ts-weather.wasm", "projectorVersion": "1.0.0" },
     { "projectorName": "ReservationProjector", "modulePath": "./ts-weather.wasm", "projectorVersion": "1.0.0" },
     { "projectorName": "ApprovalRequestProjector", "modulePath": "./ts-weather.wasm", "projectorVersion": "1.0.0" },
     { "projectorName": "WeatherForecastMultiProjection", "modulePath": "./ts-weather.wasm", "projectorVersion": "1.0.0" },

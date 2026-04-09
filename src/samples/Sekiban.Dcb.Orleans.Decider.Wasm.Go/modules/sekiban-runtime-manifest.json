@@ -30,6 +30,7 @@
     { "projectorName": "UserDirectoryProjector", "modulePath": "./go-weather.wasm", "projectorVersion": "1.0.0" },
     { "projectorName": "UserAccessProjector", "modulePath": "./go-weather.wasm", "projectorVersion": "1.0.0" },
     { "projectorName": "RoomProjector", "modulePath": "./go-weather.wasm", "projectorVersion": "1.0.0" },
+    { "projectorName": "RoomReservationsProjector", "modulePath": "./go-weather.wasm", "projectorVersion": "1.0.0" },
     { "projectorName": "ReservationProjector", "modulePath": "./go-weather.wasm", "projectorVersion": "1.0.0" },
     { "projectorName": "ApprovalRequestProjector", "modulePath": "./go-weather.wasm", "projectorVersion": "1.0.0" },
     { "projectorName": "WeatherForecastMultiProjection", "modulePath": "./go-weather.wasm", "projectorVersion": "1.0.0" },

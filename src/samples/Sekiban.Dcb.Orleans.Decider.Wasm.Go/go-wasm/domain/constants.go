@@ -41,6 +41,7 @@ const (
 	TagGroupUser            = "User"
 	TagGroupUserAccess      = "UserAccess"
 	TagGroupRoom            = "Room"
+	TagGroupRoomReservation = "RoomReservation"
 	TagGroupReservation     = "Reservation"
 	TagGroupApprovalRequest = "ApprovalRequest"
 )
@@ -52,6 +53,7 @@ const (
 	ProjectorUserDirectoryTag   = "UserDirectoryProjector"
 	ProjectorUserAccessTag      = "UserAccessProjector"
 	ProjectorRoomTag            = "RoomProjector"
+	ProjectorRoomReservationsTag = "RoomReservationsProjector"
 	ProjectorReservationTag     = "ReservationProjector"
 	ProjectorApprovalRequestTag = "ApprovalRequestProjector"
 
@@ -73,6 +75,7 @@ var TagProjectorMap = map[string]string{
 	TagGroupUser:            ProjectorUserDirectoryTag,
 	TagGroupUserAccess:      ProjectorUserAccessTag,
 	TagGroupRoom:            ProjectorRoomTag,
+	TagGroupRoomReservation: ProjectorRoomReservationsTag,
 	TagGroupReservation:     ProjectorReservationTag,
 	TagGroupApprovalRequest: ProjectorApprovalRequestTag,
 }

@@ -14,6 +14,7 @@ const projectorByTagGroup = {
   User: "UserDirectoryProjector",
   UserAccess: "UserAccessProjector",
   Room: "RoomProjector",
+  RoomReservation: "RoomReservationsProjector",
   Reservation: "ReservationProjector",
   ApprovalRequest: "ApprovalRequestProjector",
 };

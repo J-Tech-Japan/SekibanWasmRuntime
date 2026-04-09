@@ -206,6 +206,74 @@ ensure_ts_wasm_clientapi_dependencies() {
   fi
 }
 
+ensure_go_wasm_sample_module() {
+  local sample_root="$repo_root/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Go"
+  local source_root="$sample_root/go-wasm"
+  local module_path="$sample_root/modules/go-weather.wasm"
+  local newest_source=""
+
+  if [[ "${SKIP_GO_WASM_MODULE_REBUILD:-0}" == "1" ]]; then
+    return 0
+  fi
+
+  if [[ ! -f "$module_path" ]]; then
+    echo "[go-wasm] module missing, rebuilding sample Go WASM module"
+  else
+    newest_source="$(
+      find \
+        "$source_root" \
+        \( -path '*/bin/*' -o -path '*/obj/*' \) -prune -o \
+        -type f \( -name '*.go' -o -name 'go.mod' -o -name 'go.sum' -o -name '*.json' \) -newer "$module_path" -print -quit
+    )"
+  fi
+
+  if [[ ! -f "$module_path" || -n "$newest_source" ]]; then
+    if [[ -n "$newest_source" ]]; then
+      echo "[go-wasm] module is stale relative to $newest_source, rebuilding sample Go WASM module"
+    fi
+    (
+      cd "$source_root"
+      tinygo build -target=wasi -buildmode=c-shared -o ../modules/go-weather.wasm ./wasm
+    )
+  fi
+}
+
+ensure_ts_wasm_sample_module() {
+  local sample_root="$repo_root/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Ts"
+  local module_dir="$sample_root/ts-wasm"
+  local module_path="$sample_root/modules/ts-weather.wasm"
+  local marker="$module_dir/node_modules/assemblyscript/package.json"
+  local newest_source=""
+
+  if [[ "${SKIP_TS_WASM_MODULE_REBUILD:-0}" == "1" ]]; then
+    return 0
+  fi
+
+  if [[ ! -f "$marker" ]]; then
+    echo "[ts-wasm] ts-wasm dependencies missing, running npm install"
+    (cd "$module_dir" && npm install --no-audit --no-fund --legacy-peer-deps)
+  fi
+
+  if [[ ! -f "$module_path" ]]; then
+    echo "[ts-wasm] module missing, rebuilding sample TypeScript WASM module"
+  else
+    newest_source="$(
+      find \
+        "$module_dir" \
+        "$sample_root/modules/sekiban-runtime-manifest.json" \
+        \( -path '*/node_modules/*' -o -path '*/dist/*' \) -prune -o \
+        -type f \( -name '*.ts' -o -name '*.json' -o -name 'package-lock.json' -o -name 'package.json' \) -newer "$module_path" -print -quit
+    )"
+  fi
+
+  if [[ ! -f "$module_path" || -n "$newest_source" ]]; then
+    if [[ -n "$newest_source" ]]; then
+      echo "[ts-wasm] module is stale relative to $newest_source, rebuilding sample TypeScript WASM module"
+    fi
+    (cd "$module_dir" && npm run build >/dev/null)
+  fi
+}
+
 ensure_postgres_database() {
   local container_name="$1"
   local password="$2"
@@ -395,8 +463,13 @@ if [[ "$runtime" == "cs-wasm" ]]; then
   ensure_cs_wasm_sample_module
 elif [[ "$runtime" == "rs-wasm" ]]; then
   ensure_rs_wasm_sample_module
+elif [[ "$runtime" == "go-wasm" ]]; then
+  ensure_go_wasm_sample_module
+elif [[ "$runtime" == "mb-wasm" ]]; then
+  :
 elif [[ "$runtime" == "ts-wasm" ]]; then
   ensure_ts_wasm_clientapi_dependencies
+  ensure_ts_wasm_sample_module
 fi
 assert_port_free "$ready_port"
 if [[ "$rss_port" != "$ready_port" ]]; then
