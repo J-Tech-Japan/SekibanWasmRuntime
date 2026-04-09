@@ -129,11 +129,30 @@ Evidence from the 1K diagnostics:
 | `RoomProjector` avg events read | `3.00` | `1.00` |
 | `RoomReservationsProjector` avg events read | `5.28` | `1.68` |
 
-Latest strict `300K` results:
+Native-vs-WASM fairness note:
+
+- the Native template `CreateReservationDraft` reads `UserAccessProjector`, `UserDirectoryProjector`, and `UserMonthlyReservationProjector`
+- the C# WASM sample `CreateReservationDraft` does not execute those extra user-governance reads
+- the original mixed strict benchmark therefore measured "latest package Native template behavior" against a lighter C# WASM draft path
+
+To isolate runtime overhead, the latest Native reruns use:
+
+- `BENCHMARK_RESERVATION_MODE` in the benchmark CLI so `quick-only`, `draft-only`, and `mixed` reservation traffic can be measured separately
+- `SEKIBAN_BENCHMARK_SKIP_USER_RESERVATION_RULES=true` in the Native strict benchmark profile so the draft path does the same work as the C# WASM sample during runtime-comparison runs
+
+`50K` reservation split evidence:
+
+| Workload | Native strict ops/sec (old) | Native strict ops/sec (aligned) | C# WASM strict ops/sec | Reading |
+|---|---:|---:|---:|---|
+| `quick-only` | `596.0` | `596.0` | `411.0` | Native was already faster on the shared quick path |
+| `draft-only` | `237.1` | `1590.3` | `563.2` | the old Native row was dominated by Native-only draft governance work |
+| `mixed` | `423.9` | `939.7` | `571.3` | once draft work is aligned, Native is faster overall |
+
+Latest comparable strict `300K` results:
 
 | Runtime | Status | Weather events/sec | Reservation events/sec | Reservation ops/sec | Query ops/sec | Total wall-clock | Peak RSS | Errors |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
-| C# Native (`tagstategrain-memory`, latest package) | `completed` | `1933.2` | `739.3` | `284.3` | `1697.8` | `256.3 s` | `~2954.0 MB` | `0` |
+| C# Native (`tagstategrain-memory`, latest package, benchmark-aligned draft path) | `completed` | `2029.5` | `2424.7` | `932.6` | `1796.5` | `139.0 s` | `~3615.6 MB` | `0` |
 | C# WASM (`tagstategrain-memory`, fixed host) | `completed` | `1455.1` | `1529.6` | `588.3` | `917.2` | `203.4 s` | `~3552.4 MB` | `0` |
 | Rust WASM (`tagstategrain-memory`) | `completed` | `480.0` | `148.0` | `57.0` | `2081.0` | `1187.9 s` | `~2327.4 MB` | `0` |
 | MoonBit WASM (`tagstategrain-memory`) | `completed` | `515.0` | `163.0` | `63.0` | `166.0` | `1089.5 s` | `~2320.5 MB` | `0` |
@@ -144,7 +163,7 @@ Latency summary:
 
 | Runtime | Weather p50 / p95 | Reservation p50 / p95 | Query p50 / p95 |
 |---|---|---|---|
-| C# Native (`tagstategrain-memory`, latest package) | `3.8 / 5.8 ms` | `11.2 / 88.5 ms` | `0.2 / 0.5 ms` |
+| C# Native (`tagstategrain-memory`, latest package, benchmark-aligned draft path) | `3.8 / 5.3 ms` | `8.0 / 12.4 ms` | `0.2 / 0.4 ms` |
 | C# WASM (`tagstategrain-memory`, fixed host) | `5.0 / 8.6 ms` | `12.3 / 18.8 ms` | `0.6 / 1.4 ms` |
 | Rust WASM (`tagstategrain-memory`) | `16.5 / 27.6 ms` | `135.5 / 221.0 ms` | `0.2 / 0.6 ms` |
 | MoonBit WASM (`tagstategrain-memory`) | `15.7 / 24.3 ms` | `128.6 / 200.1 ms` | `5.7 / 17.9 ms` |
@@ -154,41 +173,43 @@ Latency summary:
 Takeaways from the strict profile:
 
 - All six implemented runtimes now complete the strict `300K` profile with `0` errors.
-- Query throughput is still strongest in Native C#, and Native C# also uses less memory than C# WASM at `300K`.
+- Once the reservation workload is aligned, Native C# is faster than C# WASM at `10K`, `50K`, and `300K` for both reservation commands and queries.
 - After the projector-version fix, C# WASM no longer shows the pathological reservation collapse from the earlier strict run. It now completes `300K` with `588.3 reservation ops/sec` and stays under the `4 GB` guardrail at `~3552.4 MB`.
-- At `300K`, Native C# still decays steadily through the reservation phase (`961 eps` first sample -> `551 eps` last sample), while the fixed C# WASM run stays materially flatter (`1569 eps` first sample -> `1306 eps` last sample).
-- This means the old strict conclusion "C# WASM command path is inherently much slower than Native" is no longer supported by the data.
+- The old strict conclusion "C# WASM is faster than Native at scale" was a benchmark artifact caused by Native-only draft governance work on the template path, not by WASM runtime superiority.
+- With the draft path aligned, Native's `300K` reservation phase stays high throughout the run (`2567 eps` first sample -> `2304 eps` last sample) instead of collapsing.
+- The remaining C# WASM penalty is now in the expected range for an out-of-process host: `36.9%` lower reservation ops/sec and `48.9%` lower query throughput than aligned Native at `300K`, while peak RSS stays in the same class (`~3.62 GB` vs `~3.55 GB`).
 - Among the non-C# WASM runtimes, Go and TypeScript have the strongest reservation command path under strict conditions, while Rust is the clear query-throughput leader.
 - C# WASM and TypeScript WASM both stay under the original `4 GB` guardrail, but TypeScript remains extremely tight at `~3999.7 MB`.
 - Rust WASM and MoonBit WASM keep the lowest strict-profile memory usage, both near `~2.32 GB`, but they pay for that with the weakest reservation throughput under long runs.
-- The biggest remaining Native vs C# WASM difference is now query throughput and memory footprint, not a reservation-path collapse.
+- The biggest remaining Native vs C# WASM difference is now query throughput and the extra remote-hop overhead, not a broken tag-state cache or a benchmark mismatch.
 
-### C# WASM vs Native C# Strict 300K Investigation
+### C# WASM vs Native C# Strict Investigation
 
-The fairer answer after the fix is scale-dependent:
+After aligning the Native draft path, the scale comparison is consistent:
 
 | Scale | Native reservation ops/sec | C# WASM reservation ops/sec | Gap |
 |---|---:|---:|---:|
-| `10K` | `489.9` | `411.3` | C# WASM is `16.0%` slower |
-| `50K` | `423.9` | `571.3` | C# WASM is `34.8%` faster |
-| `300K` | `284.3` | `588.3` | C# WASM is `106.9%` faster |
+| `10K` | `873.4` | `411.3` | C# WASM is `52.9%` slower |
+| `50K` | `939.7` | `571.3` | C# WASM is `39.2%` slower |
+| `300K` | `932.6` | `588.3` | C# WASM is `36.9%` slower |
 
 Interpretation:
 
-- At small scale, C# WASM now behaves close to the original expectation: somewhat slower than Native, but still in the same class.
-- At larger scales, the old C# WASM slowdown disappears; instead, Native C# is the runtime whose reservation throughput decays harder over time.
+- Native is faster than C# WASM at every measured scale once both runtimes execute comparable reservation work.
+- The remaining gap is no longer "multiple times slower" but a several-tens-of-percent penalty, which is much closer to the original expectation for a WASM host with an extra remote hop.
+- Native no longer shows the severe reservation decay that the earlier mixed strict table suggested; that apparent collapse was mostly the cost of the Native-only draft governance path.
 - The architectural caveat remains: C# WASM still pays `benchmark -> ClientApi -> WasmServer -> TagStateGrain`, while Native executes in-process.
-- Even with that caveat, the strict 2026-04-09 reruns show that the dominant earlier regression was the broken WASM tag-state cache, not unavoidable WASM overhead.
+- Even with that caveat, the strict 2026-04-09 reruns show that the dominant earlier regressions were the broken WASM tag-state cache and the Native/C# WASM draft-path mismatch, not unavoidable WASM overhead.
 
 The saved 2026-04-08 HTTP-hop analysis is still useful as historical evidence for the pre-fix behavior, but it no longer describes the current strict C# WASM runtime.
 
 ### Strict 50K Validation
 
-The `50,000` event reruns were used to verify that the fix held past the 10K smoke test and before the full `300K` pass.
+The `50,000` event reruns were used to verify the aligned comparison before the full `300K` pass.
 
 | Runtime | Weather events/sec | Reservation events/sec | Reservation ops/sec | Query ops/sec | Total wall-clock | Peak RSS | Errors |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| C# Native (`tagstategrain-memory`, latest package) | `1274.5` | `1102.0` | `423.9` | `1407.8` | `42.4 s` | `~897.0 MB` | `0` |
+| C# Native (`tagstategrain-memory`, latest package, benchmark-aligned draft path) | `1858.6` | `2443.3` | `939.7` | `1874.8` | `24.8 s` | `~887.7 MB` | `0` |
 | C# WASM (`tagstategrain-memory`, fixed host) | `1302.2` | `1485.3` | `571.3` | `1012.4` | `37.3 s` | `~1775.4 MB` | `0` |
 
 ### Strict Profile Notes
@@ -207,10 +228,15 @@ The strict TypeScript rerun initially failed for a different reproducibility rea
 
 Result files:
 
-- `benchmarks/results/native-10k-package.json`
-- `benchmarks/results/native-50k-package.json`
-- `benchmarks/results/native-300k-package.json`
+- `benchmarks/results/native-10k-strict-aligned.json`
+- `benchmarks/results/native-50k-quickonly.json`
+- `benchmarks/results/native-50k-draftonly.json`
+- `benchmarks/results/native-50k-draftonly-aligned.json`
+- `benchmarks/results/native-50k-strict-aligned.json`
+- `benchmarks/results/native-300k-strict-aligned.json`
 - `benchmarks/results/cs-wasm-10k-postfix.json`
+- `benchmarks/results/cs-wasm-50k-quickonly.json`
+- `benchmarks/results/cs-wasm-50k-draftonly.json`
 - `benchmarks/results/cs-wasm-50k-postfix.json`
 - `benchmarks/results/cs-wasm-300k-postfix.json`
 - `benchmarks/results/cs-wasm-300k-tagstategrain-memory-20260408-http-analysis.json`
