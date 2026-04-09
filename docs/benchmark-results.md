@@ -106,10 +106,35 @@ Strict profile wiring:
 
 ### Strict 300K Results
 
+The first strict C# WASM numbers from 2026-04-08 were materially wrong for long-run reservation throughput. The root cause was a WASM-host metadata bug, not "WASM is inherently 2x slower".
+
+- `ManifestDomainTypes` was building `DcbDomainTypes` with an empty `AotTagProjectorTypes()`
+- `TagStateGrain` therefore resolved the expected projector version as `""` in the WASM host
+- the accumulator still wrote cached tag-state with manifest version `1.0.0`
+- every subsequent read hit `version-mismatch`, so the grain rebuilt state instead of using delta replay
+
+Fixes applied on 2026-04-09:
+
+- `src/runtime/Sekiban.Dcb.WasmRuntime.Host/ManifestDomainTypes.cs` now uses a manifest-backed `ITagProjectorTypes`
+- `src/runtime/Sekiban.Dcb.WasmRuntime.Host/ManifestTagProjectorTypes.cs` provides projector-version lookup from the manifest
+- `src/lib/Sekiban.Dcb.WasmRuntime/WasmTagStateProjectionPrimitive.cs` now falls back to host-side metadata when the WASM state serializer returns blank projector/tag metadata
+- `scripts/run-benchmark-runtime.sh` now ignores `obj/` and `bin/` noise when deciding whether the checked-in C# WASM module is stale
+
+Evidence from the 1K diagnostics:
+
+| C# WASM diagnostic | Before fix | After fix |
+|---|---:|---:|
+| `RoomProjector` version mismatch count | `80` | `0` |
+| `RoomReservationsProjector` version mismatch count | `84` | `0` |
+| `RoomProjector` avg events read | `3.00` | `1.00` |
+| `RoomReservationsProjector` avg events read | `5.28` | `1.68` |
+
+Latest strict `300K` results:
+
 | Runtime | Status | Weather events/sec | Reservation events/sec | Reservation ops/sec | Query ops/sec | Total wall-clock | Peak RSS | Errors |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
-| C# Native (`tagstategrain-memory`) | `completed` | `1965.5` | `747.0` | `287.3` | `1808.6` | `254.2 s` | `~2953.4 MB` | `0` |
-| C# WASM (`tagstategrain-memory`) | `completed` | `1581.9` | `254.4` | `97.9` | `942.1` | `586.6 s` | `~3950.6 MB` | `0` |
+| C# Native (`tagstategrain-memory`, latest package) | `completed` | `1933.2` | `739.3` | `284.3` | `1697.8` | `256.3 s` | `~2954.0 MB` | `0` |
+| C# WASM (`tagstategrain-memory`, fixed host) | `completed` | `1455.1` | `1529.6` | `588.3` | `917.2` | `203.4 s` | `~3552.4 MB` | `0` |
 | Rust WASM (`tagstategrain-memory`) | `completed` | `480.0` | `148.0` | `57.0` | `2081.0` | `1187.9 s` | `~2327.4 MB` | `0` |
 | MoonBit WASM (`tagstategrain-memory`) | `completed` | `515.0` | `163.0` | `63.0` | `166.0` | `1089.5 s` | `~2320.5 MB` | `0` |
 | Go WASM (`tagstategrain-memory`) | `completed` | `510.0` | `190.0` | `73.0` | `816.0` | `986.6 s` | `~2980.4 MB` | `0` |
@@ -119,8 +144,8 @@ Latency summary:
 
 | Runtime | Weather p50 / p95 | Reservation p50 / p95 | Query p50 / p95 |
 |---|---|---|---|
-| C# Native (`tagstategrain-memory`) | `3.9 / 5.7 ms` | `11.2 / 87.1 ms` | `0.2 / 0.4 ms` |
-| C# WASM (`tagstategrain-memory`) | `4.9 / 6.7 ms` | `73.4 / 138.1 ms` | `0.6 / 1.3 ms` |
+| C# Native (`tagstategrain-memory`, latest package) | `3.8 / 5.8 ms` | `11.2 / 88.5 ms` | `0.2 / 0.5 ms` |
+| C# WASM (`tagstategrain-memory`, fixed host) | `5.0 / 8.6 ms` | `12.3 / 18.8 ms` | `0.6 / 1.4 ms` |
 | Rust WASM (`tagstategrain-memory`) | `16.5 / 27.6 ms` | `135.5 / 221.0 ms` | `0.2 / 0.6 ms` |
 | MoonBit WASM (`tagstategrain-memory`) | `15.7 / 24.3 ms` | `128.6 / 200.1 ms` | `5.7 / 17.9 ms` |
 | Go WASM (`tagstategrain-memory`) | `15.9 / 26.0 ms` | `104.4 / 177.7 ms` | `1.0 / 2.4 ms` |
@@ -129,90 +154,65 @@ Latency summary:
 Takeaways from the strict profile:
 
 - All six implemented runtimes now complete the strict `300K` profile with `0` errors.
-- Native C# remains the clear strict-profile leader on both command throughput and query throughput.
+- Query throughput is still strongest in Native C#, and Native C# also uses less memory than C# WASM at `300K`.
+- After the projector-version fix, C# WASM no longer shows the pathological reservation collapse from the earlier strict run. It now completes `300K` with `588.3 reservation ops/sec` and stays under the `4 GB` guardrail at `~3552.4 MB`.
+- At `300K`, Native C# still decays steadily through the reservation phase (`961 eps` first sample -> `551 eps` last sample), while the fixed C# WASM run stays materially flatter (`1569 eps` first sample -> `1306 eps` last sample).
+- This means the old strict conclusion "C# WASM command path is inherently much slower than Native" is no longer supported by the data.
 - Among the non-C# WASM runtimes, Go and TypeScript have the strongest reservation command path under strict conditions, while Rust is the clear query-throughput leader.
-- C# WASM and TypeScript WASM both stay under the original `4 GB` guardrail, but only barely at `~3950.6 MB` and `~3999.7 MB`.
+- C# WASM and TypeScript WASM both stay under the original `4 GB` guardrail, but TypeScript remains extremely tight at `~3999.7 MB`.
 - Rust WASM and MoonBit WASM keep the lowest strict-profile memory usage, both near `~2.32 GB`, but they pay for that with the weakest reservation throughput under long runs.
-- The biggest strict-profile regression remains the command path which depends on repeated tag-state resolution. Every WASM runtime degrades materially relative to the optimized baseline, but C# WASM still holds a substantial lead over Rust and MoonBit on reservation events/sec.
+- The biggest remaining Native vs C# WASM difference is now query throughput and memory footprint, not a reservation-path collapse.
 
 ### C# WASM vs Native C# Strict 300K Investigation
 
-The strict `300K` numbers are valid, but they are not an apples-to-apples "same code plus WASM only" comparison.
+The fairer answer after the fix is scale-dependent:
 
-- Native C# reservation throughput finishes at `287.3 ops/sec` (`747.0 events/sec`) with reservation p50 / p95 latency `11.2 / 87.1 ms`.
-- C# WASM reservation throughput finishes at `97.9 ops/sec` (`254.4 events/sec`) with reservation p50 / p95 latency `73.4 / 138.1 ms`.
-- Native reservation interval throughput degrades from `961 eps` at the first progress sample to `576 eps` at the last one.
-- C# WASM reservation interval throughput degrades more sharply, from `435 eps` to `168 eps`.
+| Scale | Native reservation ops/sec | C# WASM reservation ops/sec | Gap |
+|---|---:|---:|---:|
+| `10K` | `489.9` | `411.3` | C# WASM is `16.0%` slower |
+| `50K` | `423.9` | `571.3` | C# WASM is `34.8%` faster |
+| `300K` | `284.3` | `588.3` | C# WASM is `106.9%` faster |
 
-The apphost log shows where that extra time goes for strict C# WASM.
+Interpretation:
 
-| C# WASM reservation-phase signal | Measured value |
-|---|---:|
-| Reservation ops | `46,163` |
-| Client `/api/reservations/quick` starts | `36,913` |
-| Client `/api/reservations/draft` starts | `9,229` |
-| WasmServer `/serialized/tag-state` starts | `83,051` |
-| WasmServer `/serialized/commit` starts | `46,749` |
-| WasmServer `/serialized/tag-latest-sortable` starts | `46,745` |
+- At small scale, C# WASM now behaves close to the original expectation: somewhat slower than Native, but still in the same class.
+- At larger scales, the old C# WASM slowdown disappears; instead, Native C# is the runtime whose reservation throughput decays harder over time.
+- The architectural caveat remains: C# WASM still pays `benchmark -> ClientApi -> WasmServer -> TagStateGrain`, while Native executes in-process.
+- Even with that caveat, the strict 2026-04-09 reruns show that the dominant earlier regression was the broken WASM tag-state cache, not unavoidable WASM overhead.
 
-That means the strict C# WASM reservation path is doing approximately:
-
-- `~1.80` `serialized/tag-state` POSTs per reservation op
-- `~1.01` `serialized/commit` POSTs per reservation op
-- `~1.01` `serialized/tag-latest-sortable` POSTs per reservation op
-- `~2.25` `serialized/tag-state` POSTs per quick reservation
-
-The internal endpoint latencies also drift upward during the run:
-
-| Endpoint | First 5,000 avg | Last 5,000 avg | p50 | p95 |
-|---|---:|---:|---:|---:|
-| Client `/api/reservations/quick` | `50.4 ms` | `127.7 ms` | `82.8 ms` | `142.0 ms` |
-| Client `/api/reservations/draft` | `35.6 ms` | `53.6 ms` | `42.2 ms` | `74.1 ms` |
-| WasmServer `/serialized/tag-state` | `20.1 ms` | `56.3 ms` | `32.7 ms` | `68.0 ms` |
-| WasmServer `/serialized/commit` | `4.1 ms` | `10.6 ms` | `3.5 ms` | `10.9 ms` |
-| WasmServer `/serialized/tag-latest-sortable` | `1.5 ms` | `2.3 ms` | `1.0 ms` | `2.2 ms` |
-
-The practical conclusion is:
-
-- The dominant strict-profile slowdown for C# WASM is the command-side remote path, especially repeated `serialized/tag-state` calls whose latency roughly triples over the run.
-- Commit retries are not the main issue. `serialized/commit` is only about `1.3%` above reservation-op count in the reservation phase.
-- Query throughput is lower than Native C#, but the biggest strict gap is not query; it is the reservation command path.
-- Native strict runs do not pay the same `benchmark -> ClientApi -> WasmServer -> TagStateGrain` hop pattern, so the current strict profile measures architecture plus WASM, not WASM execution in isolation.
-
-If the goal is a fair runtime comparison, the benchmark needs one of these before the next round:
-
-- a Native control path that uses the same serialized remote command flow as C# WASM, or
-- a C# WASM host path that executes the same command flow without the extra HTTP proxy hops
-
-The analysis was generated from the saved strict benchmark log with `scripts/analyze-apphost-http-log.py` and written to `benchmarks/results/cs-wasm-300k-tagstategrain-memory-20260408-http-analysis.json`.
+The saved 2026-04-08 HTTP-hop analysis is still useful as historical evidence for the pre-fix behavior, but it no longer describes the current strict C# WASM runtime.
 
 ### Strict 50K Validation
 
-The `50,000` event smoke runs were used to verify the strict setup before the full `300K` pass.
+The `50,000` event reruns were used to verify that the fix held past the 10K smoke test and before the full `300K` pass.
 
 | Runtime | Weather events/sec | Reservation events/sec | Reservation ops/sec | Query ops/sec | Total wall-clock | Peak RSS | Errors |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| C# Native (`tagstategrain-memory`) | `1813.0` | `1517.2` | `583.5` | `1995.1` | `30.5 s` | `~894.1 MB` | `0` |
-| C# WASM (`tagstategrain-memory`) | `1456.0` | `510.5` | `196.3` | `1008.1` | `60.6 s` | `~1931.2 MB` | `0` |
+| C# Native (`tagstategrain-memory`, latest package) | `1274.5` | `1102.0` | `423.9` | `1407.8` | `42.4 s` | `~897.0 MB` | `0` |
+| C# WASM (`tagstategrain-memory`, fixed host) | `1302.2` | `1485.3` | `571.3` | `1012.4` | `37.3 s` | `~1775.4 MB` | `0` |
 
 ### Strict Profile Notes
 
-The first strict C# WASM query run was invalid because the checked-in `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm` was stale relative to the source tree. That stale module could not instantiate `RoomListProjection`, which caused `create_instance failed with code -1` during query catch-up.
+The first strict C# WASM query run from 2026-04-08 was invalid because the checked-in `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm` was stale relative to the source tree. That stale module could not instantiate `RoomListProjection`, which caused `create_instance failed with code -1` during query catch-up.
 
 This was fixed by:
 
 - rebuilding the sample C# WASM module with `build/scripts/build-sample-csharp-wasm.sh`
 - copying the fresh output back to `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm`
-- making `scripts/run-benchmark-runtime.sh` auto-rebuild the sample module when the source tree is newer than the checked-in module
+- making `scripts/run-benchmark-runtime.sh` auto-rebuild the sample module only when real source files (not `obj/` or `bin/` restore noise) are newer than the checked-in module
+
+The 2026-04-09 C# WASM reruns additionally fixed the manifest/projector-version mismatch described above, which is why the latest strict rows differ so sharply from the earlier 2026-04-08 C# WASM line.
 
 The strict TypeScript rerun initially failed for a different reproducibility reason: `ts-clientapi` had no local `node_modules`, so `npx tsx` could not resolve `@hono/node-server`. This was fixed by making `scripts/run-benchmark-runtime.sh` auto-run `npm install --no-audit --no-fund` for `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Ts/ts-clientapi` when those dependencies are missing.
 
 Result files:
 
-- `benchmarks/results/native-50k-tagstategrain-memory-20260408.json`
-- `benchmarks/results/native-300k-tagstategrain-memory-20260408.json`
-- `benchmarks/results/cs-wasm-50k-tagstategrain-memory-20260408-fix2.json`
-- `benchmarks/results/cs-wasm-300k-tagstategrain-memory-20260408.json`
+- `benchmarks/results/native-10k-package.json`
+- `benchmarks/results/native-50k-package.json`
+- `benchmarks/results/native-300k-package.json`
+- `benchmarks/results/cs-wasm-10k-postfix.json`
+- `benchmarks/results/cs-wasm-50k-postfix.json`
+- `benchmarks/results/cs-wasm-300k-postfix.json`
 - `benchmarks/results/cs-wasm-300k-tagstategrain-memory-20260408-http-analysis.json`
 - `benchmarks/results/rs-wasm-300k-tagstategrain-memory-20260408.json`
 - `benchmarks/results/mb-wasm-300k-tagstategrain-memory-20260408.json`

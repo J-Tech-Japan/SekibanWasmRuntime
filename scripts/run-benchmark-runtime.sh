@@ -146,7 +146,8 @@ ensure_cs_wasm_sample_module() {
       "$repo_root/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/SekibanDcbDecider.ImmutableModels" \
       "$repo_root/submodules/Sekiban/dcb/src/Sekiban.Dcb.Core.Model" \
       "$repo_root/submodules/Sekiban/dcb/src/Sekiban.Dcb.WithoutResult.Model" \
-      -type f -newer "$module_path" -print -quit
+      \( -path '*/obj/*' -o -path '*/bin/*' \) -prune -o \
+      -type f \( -name '*.cs' -o -name '*.csproj' -o -name '*.json' \) -newer "$module_path" -print -quit
   )"
 
   if [[ -n "$newest_source" ]]; then

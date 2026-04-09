@@ -33,6 +33,10 @@ var wasmServerBuilder = builder
     .WaitFor(wasmPostgres)
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
 
+wasmServerBuilder = ApplyTagStateDiagnostics(
+    wasmServerBuilder,
+    defaultRuntimeLabel: "cs-wasm");
+
 if (isStrictBenchmarkProfile)
 {
     wasmServerBuilder = wasmServerBuilder
@@ -136,6 +140,47 @@ static string ResolveCSharpWasmModulePath()
 
     throw new InvalidOperationException(
         "C# WASM module not found. Set CS_WASM_MODULE_PATH or build SekibanDcbDecider.Wasm first.");
+}
+
+static IResourceBuilder<ProjectResource> ApplyTagStateDiagnostics(
+    IResourceBuilder<ProjectResource> resource,
+    string defaultRuntimeLabel)
+{
+    string? enabled = Environment.GetEnvironmentVariable("SEKIBAN_TAG_STATE_DIAGNOSTICS_ENABLED");
+    if (string.IsNullOrWhiteSpace(enabled))
+    {
+        return resource;
+    }
+
+    resource = resource.WithEnvironment("SEKIBAN_TAG_STATE_DIAGNOSTICS_ENABLED", enabled);
+
+    string? slowMs = Environment.GetEnvironmentVariable("SEKIBAN_TAG_STATE_DIAGNOSTICS_SLOW_MS");
+    if (!string.IsNullOrWhiteSpace(slowMs))
+    {
+        resource = resource.WithEnvironment("SEKIBAN_TAG_STATE_DIAGNOSTICS_SLOW_MS", slowMs);
+    }
+
+    string? summaryEvery = Environment.GetEnvironmentVariable("SEKIBAN_TAG_STATE_DIAGNOSTICS_SUMMARY_EVERY");
+    if (!string.IsNullOrWhiteSpace(summaryEvery))
+    {
+        resource = resource.WithEnvironment("SEKIBAN_TAG_STATE_DIAGNOSTICS_SUMMARY_EVERY", summaryEvery);
+    }
+
+    string? projectors = Environment.GetEnvironmentVariable("SEKIBAN_TAG_STATE_DIAGNOSTICS_PROJECTORS");
+    if (!string.IsNullOrWhiteSpace(projectors))
+    {
+        resource = resource.WithEnvironment("SEKIBAN_TAG_STATE_DIAGNOSTICS_PROJECTORS", projectors);
+    }
+
+    string? outputPath = Environment.GetEnvironmentVariable("SEKIBAN_TAG_STATE_DIAGNOSTICS_FILE");
+    if (!string.IsNullOrWhiteSpace(outputPath))
+    {
+        resource = resource.WithEnvironment("SEKIBAN_TAG_STATE_DIAGNOSTICS_FILE", outputPath);
+    }
+
+    string runtimeLabel = Environment.GetEnvironmentVariable("SEKIBAN_TAG_STATE_DIAGNOSTICS_RUNTIME_LABEL")
+        ?? defaultRuntimeLabel;
+    return resource.WithEnvironment("SEKIBAN_TAG_STATE_DIAGNOSTICS_RUNTIME_LABEL", runtimeLabel);
 }
 
 static string ResolveCSharpManifestPath(string wasmModulePath)
