@@ -187,19 +187,27 @@ public class WasmTagStateProjectionPrimitive : ITagStateProjectionAccumulator, I
             ExtractSerializedStateMetadata(serializedState);
         var isEmptyPayload = string.IsNullOrWhiteSpace(payloadJson) || payloadJson == "{}";
         var payloadBytes = isEmptyPayload ? Array.Empty<byte>() : Encoding.UTF8.GetBytes(payloadJson);
+        var effectiveProjectorVersion = string.IsNullOrWhiteSpace(projectorVersion)
+            ? _projectorVersion
+            : projectorVersion;
         var effectivePayloadName = isEmptyPayload
             ? nameof(EmptyTagStatePayload)
-            : payloadName ?? _tagPayloadName ?? _defaultTagPayloadName ?? string.Empty;
+            : string.IsNullOrWhiteSpace(payloadName)
+                ? _tagPayloadName ?? _defaultTagPayloadName ?? string.Empty
+                : payloadName;
+        var effectiveTagGroup = string.IsNullOrWhiteSpace(tagGroup) ? _tagGroup ?? string.Empty : tagGroup;
+        var effectiveTagContent = string.IsNullOrWhiteSpace(tagContent) ? _tagContent ?? string.Empty : tagContent;
+        var effectiveTagProjector = string.IsNullOrWhiteSpace(tagProjector) ? _projectorName : tagProjector;
 
         return new SerializableTagState(
             Payload: payloadBytes,
             Version: _version,
             LastSortedUniqueId: _lastSortedUniqueId ?? string.Empty,
-            ProjectorVersion: projectorVersion ?? _projectorVersion,
+            ProjectorVersion: effectiveProjectorVersion,
             TagPayloadName: effectivePayloadName,
-            TagGroup: tagGroup ?? _tagGroup ?? string.Empty,
-            TagContent: tagContent ?? _tagContent ?? string.Empty,
-            TagProjector: tagProjector ?? _projectorName);
+            TagGroup: effectiveTagGroup,
+            TagContent: effectiveTagContent,
+            TagProjector: effectiveTagProjector);
     }
 
     private void ApplyEvent(Event ev)

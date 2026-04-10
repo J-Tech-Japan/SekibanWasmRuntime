@@ -153,6 +153,20 @@ class RoomListItem {
 }
 
 @json
+class ReservationSlot {
+  startTime: string = "";
+  endTime: string = "";
+  purpose: string = "";
+  organizerId: string = "";
+  status: i32 = 0;
+}
+
+@json
+class RoomReservationsState {
+  activeReservations: Map<string, ReservationSlot> = new Map<string, ReservationSlot>();
+}
+
+@json
 class ReservationState {
   reservationId: string = "";
   roomId: string = "";
@@ -296,6 +310,7 @@ class Instance {
   userDirectoryTag: UserDirectoryState = new UserDirectoryState();
   userAccessTag: UserAccessState = new UserAccessState();
   roomTag: RoomState = new RoomState();
+  roomReservationsTag: RoomReservationsState = new RoomReservationsState();
   reservationTag: ReservationState = new ReservationState();
   approvalRequestTag: ApprovalRequestState = new ApprovalRequestState();
   weatherList: WeatherForecastListState = new WeatherForecastListState();
@@ -323,6 +338,7 @@ function resolveKind(name: string): i32 {
   if (lower == C.ProjectorUserDirectoryTag.toLowerCase()) return C.KIND_USER_DIRECTORY_TAG;
   if (lower == C.ProjectorUserAccessTag.toLowerCase()) return C.KIND_USER_ACCESS_TAG;
   if (lower == C.ProjectorRoomTag.toLowerCase()) return C.KIND_ROOM_TAG;
+  if (lower == C.ProjectorRoomReservationsTag.toLowerCase()) return C.KIND_ROOM_RESERVATION_TAG;
   if (lower == C.ProjectorReservationTag.toLowerCase()) return C.KIND_RESERVATION_TAG;
   if (lower == C.ProjectorApprovalRequestTag.toLowerCase()) return C.KIND_APPROVAL_TAG;
   if (lower == C.ProjectorWeatherList.toLowerCase()) return C.KIND_WEATHER_LIST;
@@ -439,6 +455,35 @@ function applyRoomTag(s: RoomState, et: string, p: string): RoomState {
     const ev = JSON.parse<RoomUpdatedEv>(p);
     s.name = ev.name; s.capacity = ev.capacity; s.location = ev.location;
     s.equipment = ev.equipment; s.requiresApproval = ev.requiresApproval;
+  }
+  return s;
+}
+
+function applyRoomReservationsTag(s: RoomReservationsState, et: string, p: string): RoomReservationsState {
+  if (et == C.EventReservationHoldCommitted) {
+    const ev = JSON.parse<ReservationHoldCommittedEv>(p);
+    const slot = new ReservationSlot();
+    slot.startTime = ev.startTime;
+    slot.endTime = ev.endTime;
+    slot.purpose = ev.purpose;
+    slot.organizerId = ev.organizerId;
+    slot.status = 0;
+    s.activeReservations.set(ev.reservationId, slot);
+  } else if (et == C.EventReservationConfirmed) {
+    const ev = JSON.parse<ReservationConfirmedEv>(p);
+    const slot = new ReservationSlot();
+    slot.startTime = ev.startTime;
+    slot.endTime = ev.endTime;
+    slot.purpose = ev.purpose;
+    slot.organizerId = ev.organizerId;
+    slot.status = 1;
+    s.activeReservations.set(ev.reservationId, slot);
+  } else if (et == C.EventReservationCancelled) {
+    const ev = JSON.parse<ReservationCancelledEv>(p);
+    s.activeReservations.delete(ev.reservationId);
+  } else if (et == C.EventReservationRejected) {
+    const ev = JSON.parse<ReservationRejectedEv>(p);
+    s.activeReservations.delete(ev.reservationId);
   }
   return s;
 }
@@ -640,6 +685,7 @@ export function apply_event(instanceId: i32, eventTypePtr: u32, eventTypeLen: u3
     case C.KIND_USER_DIRECTORY_TAG: inst.userDirectoryTag = applyUserDirectoryTag(inst.userDirectoryTag, eventType, payload); break;
     case C.KIND_USER_ACCESS_TAG: inst.userAccessTag = applyUserAccessTag(inst.userAccessTag, eventType, payload); break;
     case C.KIND_ROOM_TAG: inst.roomTag = applyRoomTag(inst.roomTag, eventType, payload); break;
+    case C.KIND_ROOM_RESERVATION_TAG: inst.roomReservationsTag = applyRoomReservationsTag(inst.roomReservationsTag, eventType, payload); break;
     case C.KIND_RESERVATION_TAG: inst.reservationTag = applyReservationTag(inst.reservationTag, eventType, payload); break;
     case C.KIND_APPROVAL_TAG: inst.approvalRequestTag = applyApprovalTag(inst.approvalRequestTag, eventType, payload); break;
     case C.KIND_WEATHER_LIST: inst.weatherList = applyWeatherList(inst.weatherList, eventType, payload); break;
@@ -679,6 +725,7 @@ export function serialize_state(instanceId: i32): u64 {
     case C.KIND_USER_DIRECTORY_TAG: json = JSON.stringify<UserDirectoryState>(inst.userDirectoryTag); break;
     case C.KIND_USER_ACCESS_TAG: json = JSON.stringify<UserAccessState>(inst.userAccessTag); break;
     case C.KIND_ROOM_TAG: json = JSON.stringify<RoomState>(inst.roomTag); break;
+    case C.KIND_ROOM_RESERVATION_TAG: json = JSON.stringify<RoomReservationsState>(inst.roomReservationsTag); break;
     case C.KIND_RESERVATION_TAG: json = JSON.stringify<ReservationState>(inst.reservationTag); break;
     case C.KIND_APPROVAL_TAG: json = JSON.stringify<ApprovalRequestState>(inst.approvalRequestTag); break;
     case C.KIND_WEATHER_LIST: json = serializeMapState<WeatherForecastItem>(inst.weatherList.items); break;
@@ -748,6 +795,7 @@ export function restore_state(instanceId: i32, statePtr: u32, stateLen: u32): vo
     case C.KIND_USER_DIRECTORY_TAG: inst.userDirectoryTag = JSON.parse<UserDirectoryState>(stateJson); break;
     case C.KIND_USER_ACCESS_TAG: inst.userAccessTag = JSON.parse<UserAccessState>(stateJson); break;
     case C.KIND_ROOM_TAG: inst.roomTag = JSON.parse<RoomState>(stateJson); break;
+    case C.KIND_ROOM_RESERVATION_TAG: inst.roomReservationsTag = JSON.parse<RoomReservationsState>(stateJson); break;
     case C.KIND_RESERVATION_TAG: inst.reservationTag = JSON.parse<ReservationState>(stateJson); break;
     case C.KIND_APPROVAL_TAG: inst.approvalRequestTag = JSON.parse<ApprovalRequestState>(stateJson); break;
     case C.KIND_WEATHER_LIST: inst.weatherList.items = restoreMapState<WeatherForecastItem>(stateJson); break;

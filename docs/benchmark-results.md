@@ -106,66 +106,185 @@ Strict profile wiring:
 
 ### Strict 300K Results
 
-| Runtime | Status | Weather events/sec | Reservation events/sec | Reservation ops/sec | Query ops/sec | Total wall-clock | Peak RSS | Errors |
-|---|---|---:|---:|---:|---:|---:|---:|---:|
-| C# Native (`tagstategrain-memory`) | `completed` | `1965.5` | `747.0` | `287.3` | `1808.6` | `254.2 s` | `~2953.4 MB` | `0` |
-| C# WASM (`tagstategrain-memory`) | `completed` | `1581.9` | `254.4` | `97.9` | `942.1` | `586.6 s` | `~3950.6 MB` | `0` |
-| Rust WASM (`tagstategrain-memory`) | `completed` | `480.0` | `148.0` | `57.0` | `2081.0` | `1187.9 s` | `~2327.4 MB` | `0` |
-| MoonBit WASM (`tagstategrain-memory`) | `completed` | `515.0` | `163.0` | `63.0` | `166.0` | `1089.5 s` | `~2320.5 MB` | `0` |
-| Go WASM (`tagstategrain-memory`) | `completed` | `510.0` | `190.0` | `73.0` | `816.0` | `986.6 s` | `~2980.4 MB` | `0` |
-| TypeScript WASM (`tagstategrain-memory`) | `completed` | `475.0` | `196.0` | `75.0` | `418.0` | `992.5 s` | `~3999.7 MB` | `0` |
+The first strict C# WASM numbers from 2026-04-08 were materially wrong for long-run reservation throughput. The root cause was a WASM-host metadata bug, not "WASM is inherently 2x slower".
 
-Latency summary:
+- `ManifestDomainTypes` was building `DcbDomainTypes` with an empty `AotTagProjectorTypes()`
+- `TagStateGrain` therefore resolved the expected projector version as `""` in the WASM host
+- the accumulator still wrote cached tag-state with manifest version `1.0.0`
+- every subsequent read hit `version-mismatch`, so the grain rebuilt state instead of using delta replay
 
-| Runtime | Weather p50 / p95 | Reservation p50 / p95 | Query p50 / p95 |
-|---|---|---|---|
-| C# Native (`tagstategrain-memory`) | `3.9 / 5.7 ms` | `11.2 / 87.1 ms` | `0.2 / 0.4 ms` |
-| C# WASM (`tagstategrain-memory`) | `4.9 / 6.7 ms` | `73.4 / 138.1 ms` | `0.6 / 1.3 ms` |
-| Rust WASM (`tagstategrain-memory`) | `16.5 / 27.6 ms` | `135.5 / 221.0 ms` | `0.2 / 0.6 ms` |
-| MoonBit WASM (`tagstategrain-memory`) | `15.7 / 24.3 ms` | `128.6 / 200.1 ms` | `5.7 / 17.9 ms` |
-| Go WASM (`tagstategrain-memory`) | `15.9 / 26.0 ms` | `104.4 / 177.7 ms` | `1.0 / 2.4 ms` |
-| TypeScript WASM (`tagstategrain-memory`) | `16.3 / 30.0 ms` | `102.0 / 170.0 ms` | `1.5 / 4.9 ms` |
+Fixes applied on 2026-04-09:
 
-Takeaways from the strict profile:
+- `src/runtime/Sekiban.Dcb.WasmRuntime.Host/ManifestDomainTypes.cs` now uses a manifest-backed `ITagProjectorTypes`
+- `src/runtime/Sekiban.Dcb.WasmRuntime.Host/ManifestTagProjectorTypes.cs` provides projector-version lookup from the manifest
+- `src/lib/Sekiban.Dcb.WasmRuntime/WasmTagStateProjectionPrimitive.cs` now falls back to host-side metadata when the WASM state serializer returns blank projector/tag metadata
+- `scripts/run-benchmark-runtime.sh` now ignores `obj/` and `bin/` noise when deciding whether the checked-in C# WASM module is stale
 
-- All six implemented runtimes now complete the strict `300K` profile with `0` errors.
-- Native C# remains the clear strict-profile leader on both command throughput and query throughput.
-- Among the non-C# WASM runtimes, Go and TypeScript have the strongest reservation command path under strict conditions, while Rust is the clear query-throughput leader.
-- C# WASM and TypeScript WASM both stay under the original `4 GB` guardrail, but only barely at `~3950.6 MB` and `~3999.7 MB`.
-- Rust WASM and MoonBit WASM keep the lowest strict-profile memory usage, both near `~2.32 GB`, but they pay for that with the weakest reservation throughput under long runs.
-- The biggest strict-profile regression remains the command path which depends on repeated tag-state resolution. Every WASM runtime degrades materially relative to the optimized baseline, but C# WASM still holds a substantial lead over Rust and MoonBit on reservation events/sec.
+Evidence from the 1K diagnostics:
 
-### Strict 50K Validation
+| C# WASM diagnostic | Before fix | After fix |
+|---|---:|---:|
+| `RoomProjector` version mismatch count | `80` | `0` |
+| `RoomReservationsProjector` version mismatch count | `84` | `0` |
+| `RoomProjector` avg events read | `3.00` | `1.00` |
+| `RoomReservationsProjector` avg events read | `5.28` | `1.68` |
 
-The `50,000` event smoke runs were used to verify the strict setup before the full `300K` pass.
+Native-vs-WASM fairness note:
+
+- the Native template `CreateReservationDraft` reads `UserAccessProjector`, `UserDirectoryProjector`, and `UserMonthlyReservationProjector`
+- the C# WASM sample `CreateReservationDraft` does not execute those extra user-governance reads
+- the original mixed strict benchmark therefore measured "latest package Native template behavior" against a lighter C# WASM draft path
+- the Rust / MoonBit / Go / TypeScript WASM command implementations already matched the lighter draft path, so their strict rows were intended to be runtime-comparable to C# WASM
+
+To isolate runtime overhead, the latest Native reruns use:
+
+- `BENCHMARK_RESERVATION_MODE` in the benchmark CLI so `quick-only`, `draft-only`, and `mixed` reservation traffic can be measured separately
+- `SEKIBAN_BENCHMARK_SKIP_USER_RESERVATION_RULES=true` in the Native strict benchmark profile so the draft path does the same work as the C# WASM sample during runtime-comparison runs
+
+### Latest-Package Native vs C# WASM Fair Comparison
+
+The fairest current Native-vs-C#-WASM comparison is no longer the mixed strict table below. For this rerun, both sides were pinned to the latest released Sekiban packages (`10.1.12`) and the reservation workload was forced to `quick-only` so both runtimes execute the same `CreateQuickReservation` path without draft-path governance differences.
+
+Profile for this comparison:
+
+- Native template: latest Sekiban `10.1.12` packages
+- C# WASM sample/runtime host: latest Sekiban `10.1.12` packages
+- benchmark mode: `BENCHMARK_RESERVATION_MODE=quick-only`
+- strict runtime profile: `tagstategrain-memory`
+- no direct snapshot shortcut
+- no missing-tag fast path
+
+Latest-package strict `50K quick-only` results:
 
 | Runtime | Weather events/sec | Reservation events/sec | Reservation ops/sec | Query ops/sec | Total wall-clock | Peak RSS | Errors |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| C# Native (`tagstategrain-memory`) | `1813.0` | `1517.2` | `583.5` | `1995.1` | `30.5 s` | `~894.1 MB` | `0` |
-| C# WASM (`tagstategrain-memory`) | `1456.0` | `510.5` | `196.3` | `1008.1` | `60.6 s` | `~1931.2 MB` | `0` |
+| C# Native (`10.1.12`, strict, quick-only) | `1836.8` | `2551.9` | `850.6` | `1970.8` | `24.7 s` | `~921.8 MB` | `0` |
+| C# WASM (`10.1.12`, strict, quick-only) | `1466.1` | `1520.1` | `506.7` | `1012.6` | `34.5 s` | `~1764.1 MB` | `0` |
+
+Latest-package strict `300K quick-only` results:
+
+| Runtime | Weather events/sec | Reservation events/sec | Reservation ops/sec | Query ops/sec | Total wall-clock | Peak RSS | Errors |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| C# Native (`10.1.12`, strict, quick-only) | `1932.6` | `2244.7` | `748.2` | `1695.6` | `147.6 s` | `~3365.6 MB` | `0` |
+| C# WASM (`10.1.12`, strict, quick-only) | `1589.0` | `1418.3` | `472.8` | `948.9` | `199.0 s` | `~3380.2 MB` | `0` |
+
+All-runtime strict `50K quick-only` results:
+
+| Runtime | Weather events/sec | Reservation events/sec | Reservation ops/sec | Query ops/sec | Total wall-clock | Peak RSS | Errors |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| C# Native (`10.1.12`, strict, quick-only) | `1836.8` | `2551.9` | `850.6` | `1970.8` | `24.7 s` | `~921.8 MB` | `0` |
+| C# WASM (`10.1.12`, strict, quick-only) | `1466.1` | `1520.1` | `506.7` | `1012.6` | `34.5 s` | `~1764.1 MB` | `0` |
+| Rust WASM (`strict, quick-only`) | `957.2` | `1397.9` | `466.0` | `2227.9` | `46.3 s` | `~909.9 MB` | `0` |
+| MoonBit WASM (`strict, quick-only`) | `969.3` | `1571.2` | `523.7` | `1164.3` | `44.5 s` | `~721.4 MB` | `0` |
+| Go WASM (`strict, quick-only`) | `971.0` | `1126.2` | `375.4` | `2089.4` | `49.4 s` | `~933.5 MB` | `0` |
+| TypeScript WASM (`strict, quick-only`) | `614.4` | `820.5` | `273.7` | `242.9` | `74.9 s` | `~1380.1 MB` | `4` |
+
+All-runtime strict `300K quick-only` results:
+
+| Runtime | Weather events/sec | Reservation events/sec | Reservation ops/sec | Query ops/sec | Total wall-clock | Peak RSS | Errors |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| C# Native (`10.1.12`, strict, quick-only) | `1932.6` | `2244.7` | `748.2` | `1695.6` | `147.6 s` | `~3365.6 MB` | `0` |
+| C# WASM (`10.1.12`, strict, quick-only) | `1589.0` | `1418.3` | `472.8` | `948.9` | `199.0 s` | `~3380.2 MB` | `0` |
+| Rust WASM (`strict, quick-only`) | `462.4` | `549.8` | `183.3` | `2053.8` | `608.6 s` | `~3076.9 MB` | `0` |
+| MoonBit WASM (`strict, quick-only`) | `517.4` | `627.5` | `209.2` | `158.9` | `541.7 s` | `~2362.9 MB` | `0` |
+| Go WASM (`strict, quick-only`) | `496.1` | `539.0` | `179.7` | `746.0` | `586.8 s` | `~2948.8 MB` | `0` |
+| TypeScript WASM (`strict, quick-only`) | `509.0` | `599.7` | `199.9` | `401.5` | `555.3 s` | `~2955.8 MB` | `3` |
+
+Reading:
+
+- For Native-vs-C#-WASM fairness, the authoritative comparison is now the quick-only tables above, not the older mixed strict rows.
+- At `50K`, C# WASM is `40.4%` slower than Native on reservation ops/sec (`506.7` vs `850.6`); at `300K`, that gap is `36.8%` (`472.8` vs `748.2`).
+- The non-C# runtimes all improved materially once their quick path was forced onto a single-command `CreateQuickReservation` shape and their module/build mismatches were removed.
+- At `50K`, MoonBit is the strongest non-C# reservation command path (`523.7 ops/sec`) and Rust is the clear query leader (`2227.9 qps`).
+- At `300K`, none of the non-C# WASM runtimes surpass aligned C# WASM on reservation ops/sec yet. MoonBit is the strongest non-C# reservation path (`209.2 ops/sec`), Rust is still the query leader (`2053.8 qps`), and Go is the next-strongest query path (`746.0 qps`).
+- Rust, MoonBit, Go, and TypeScript all show strong weather-phase decay between `50K` and `300K`, so the remaining bottleneck is now scale retention rather than basic correctness.
+- MoonBit keeps the lowest `300K` memory footprint among the non-C# runtimes (`~2362.9 MB`).
+- TypeScript now completes `300K` under `~3 GB`, but it still reports a small number of reservation conflict validations (`4` at `50K`, `3` at `300K`) that the other runtimes do not emit.
+
+### C# WASM vs Native C# Strict Investigation
+
+After aligning the Native draft path, the scale comparison is consistent:
+
+| Scale | Native reservation ops/sec | C# WASM reservation ops/sec | Gap |
+|---|---:|---:|---:|
+| `10K` | `873.4` | `411.3` | C# WASM is `52.9%` slower |
+| `50K` | `939.7` | `571.3` | C# WASM is `39.2%` slower |
+| `300K` | `932.6` | `588.3` | C# WASM is `36.9%` slower |
+
+Interpretation:
+
+- Native is faster than C# WASM at every measured scale once both runtimes execute comparable reservation work.
+- The remaining gap is no longer "multiple times slower" but a several-tens-of-percent penalty, which is much closer to the original expectation for a WASM host with an extra remote hop.
+- Native no longer shows the severe reservation decay that the earlier mixed strict table suggested; that apparent collapse was mostly the cost of the Native-only draft governance path.
+- The architectural caveat remains: C# WASM still pays `benchmark -> ClientApi -> WasmServer -> TagStateGrain`, while Native executes in-process.
+- Even with that caveat, the strict 2026-04-09 reruns show that the dominant earlier regressions were the broken WASM tag-state cache and the Native/C# WASM draft-path mismatch, not unavoidable WASM overhead.
+
+The saved 2026-04-08 HTTP-hop analysis is still useful as historical evidence for the pre-fix behavior, but it no longer describes the current strict C# WASM runtime.
+
+### Strict 50K Validation
+
+The `50,000` event reruns were used to verify the aligned comparison before the full `300K` pass and to fill in a comparable mid-scale table for every implemented runtime.
 
 ### Strict Profile Notes
 
-The first strict C# WASM query run was invalid because the checked-in `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm` was stale relative to the source tree. That stale module could not instantiate `RoomListProjection`, which caused `create_instance failed with code -1` during query catch-up.
+The first strict C# WASM query run from 2026-04-08 was invalid because the checked-in `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm` was stale relative to the source tree. That stale module could not instantiate `RoomListProjection`, which caused `create_instance failed with code -1` during query catch-up.
 
 This was fixed by:
 
 - rebuilding the sample C# WASM module with `build/scripts/build-sample-csharp-wasm.sh`
 - copying the fresh output back to `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm`
-- making `scripts/run-benchmark-runtime.sh` auto-rebuild the sample module when the source tree is newer than the checked-in module
+- making `scripts/run-benchmark-runtime.sh` auto-rebuild the sample module only when real source files (not `obj/` or `bin/` restore noise) are newer than the checked-in module
+
+The 2026-04-09 C# WASM reruns additionally fixed the manifest/projector-version mismatch described above, which is why the latest strict rows differ so sharply from the earlier 2026-04-08 C# WASM line.
+
+The original strict Rust rows from 2026-04-08 were also invalid for runtime-comparison purposes after the quick-reservation alignment work:
+
+- the Rust source tree had been updated with `CreateQuickReservation`, `RoomReservationTag`, and `RoomReservationsProjector`
+- but `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider-rust.wasm` had not been rebuilt
+- the benchmark therefore exercised a stale module that could not instantiate `RoomReservationsProjector`, which surfaced as `create_instance failed with code -1` / tag-state `500` failures during reservation traffic
+
+This was fixed by:
+
+- rebuilding the sample Rust WASM module from `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/Cargo.toml`
+- copying the fresh output back to `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider-rust.wasm`
+- making `scripts/run-benchmark-runtime.sh` auto-rebuild the sample Rust module when Rust source or Cargo manifests are newer than the checked-in module
+
+Corrected Rust validation after the rebuild:
+
+- `50K quick-only`: `490.2 reservation ops/sec`, `1470.5 reservation events/sec`, `2491.3 query ops/sec`, `0` errors
+- `50K mixed strict`: `566.8 reservation ops/sec`, `1473.6 reservation events/sec`, `2469.3 query ops/sec`, `0` errors
+- `300K mixed strict`: `201.1 reservation ops/sec`, `523.0 reservation events/sec`, `2128.7 query ops/sec`, `0` errors
 
 The strict TypeScript rerun initially failed for a different reproducibility reason: `ts-clientapi` had no local `node_modules`, so `npx tsx` could not resolve `@hono/node-server`. This was fixed by making `scripts/run-benchmark-runtime.sh` auto-run `npm install --no-audit --no-fund` for `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Ts/ts-clientapi` when those dependencies are missing.
 
 Result files:
 
-- `benchmarks/results/native-50k-tagstategrain-memory-20260408.json`
-- `benchmarks/results/native-300k-tagstategrain-memory-20260408.json`
-- `benchmarks/results/cs-wasm-50k-tagstategrain-memory-20260408-fix2.json`
-- `benchmarks/results/cs-wasm-300k-tagstategrain-memory-20260408.json`
-- `benchmarks/results/rs-wasm-300k-tagstategrain-memory-20260408.json`
-- `benchmarks/results/mb-wasm-300k-tagstategrain-memory-20260408.json`
-- `benchmarks/results/go-wasm-300k-tagstategrain-memory-20260408.json`
-- `benchmarks/results/ts-wasm-300k-tagstategrain-memory-20260408.json`
+- `benchmarks/results/native-10k-strict-aligned.json`
+- `benchmarks/results/native-50k-quickonly.json`
+- `benchmarks/results/native-50k-quickonly-packagealigned.json`
+- `benchmarks/results/native-50k-draftonly.json`
+- `benchmarks/results/native-50k-draftonly-aligned.json`
+- `benchmarks/results/native-300k-quickonly-packagealigned.json`
+- `benchmarks/results/cs-wasm-50k-quickonly-packagealigned.json`
+- `benchmarks/results/cs-wasm-300k-quickonly-packagealigned.json`
+- `benchmarks/results/native-50k-strict-aligned.json`
+- `benchmarks/results/native-300k-strict-aligned.json`
+- `benchmarks/results/cs-wasm-10k-postfix.json`
+- `benchmarks/results/cs-wasm-50k-quickonly.json`
+- `benchmarks/results/cs-wasm-50k-draftonly.json`
+- `benchmarks/results/cs-wasm-50k-postfix.json`
+- `benchmarks/results/cs-wasm-300k-postfix.json`
+- `benchmarks/results/cs-wasm-300k-tagstategrain-memory-20260408-http-analysis.json`
+- `benchmarks/results/rs-wasm-50k-quickonly-fixed2.json`
+- `benchmarks/results/rs-wasm-50k-strict-fixed.json`
+- `benchmarks/results/rs-wasm-50k-quickonly-strict-20260408.json`
+- `benchmarks/results/rs-wasm-300k-quickonly-strict-20260408.json`
+- `benchmarks/results/mb-wasm-50k-quickonly-strict-20260408.json`
+- `benchmarks/results/mb-wasm-300k-quickonly-strict-20260408.json`
+- `benchmarks/results/go-wasm-50k-quickonly-strict-20260408.json`
+- `benchmarks/results/go-wasm-300k-quickonly-strict-20260408.json`
+- `benchmarks/results/ts-wasm-50k-quickonly-strict-20260408.json`
+- `benchmarks/results/ts-wasm-300k-quickonly-strict-20260408.json`
 
 ## 2026-04-04 Optimized 300K Baseline
 

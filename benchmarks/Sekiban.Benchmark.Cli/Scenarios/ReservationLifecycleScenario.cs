@@ -4,6 +4,13 @@ namespace Sekiban.Benchmark.Cli.Scenarios;
 
 public static class ReservationLifecycleScenario
 {
+    private enum ReservationMixMode
+    {
+        Mixed,
+        QuickOnly,
+        DraftOnly
+    }
+
     /// <summary>
     /// Uses QuickReservation endpoint which internally executes:
     /// draft(1) + hold(1) + confirm(1) = 3 events per call.
@@ -21,8 +28,9 @@ public static class ReservationLifecycleScenario
         // UserMonthlyReservation tag contention
         var effectiveConcurrency = concurrency;
         var estimatedCalls = targetEvents / 3;
+        var mixMode = ResolveMixMode();
 
-        Console.WriteLine($"\n=== Phase 3: Reservation Lifecycle (~{estimatedCalls:N0} quick reservations, target {targetEvents:N0} events, concurrency={effectiveConcurrency}) ===");
+        Console.WriteLine($"\n=== Phase 3: Reservation Lifecycle (~{estimatedCalls:N0} quick reservations, target {targetEvents:N0} events, concurrency={effectiveConcurrency}, mix={mixMode}) ===");
         var phase = new PhaseResult { Name = "ReservationLifecycle" };
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var eventsCreated = 0;
@@ -89,8 +97,7 @@ public static class ReservationLifecycleScenario
                     // Use unique organizerId per request to avoid UserMonthlyReservation tag contention
                     var organizerId = Guid.NewGuid();
 
-                    // Mix: 80% quick reservation, 20% draft-only
-                    if (idx % 5 != 0)
+                    if (ShouldUseQuickReservation(idx, mixMode))
                     {
                         // Quick reservation (3 events)
                         var payload = new
@@ -249,4 +256,23 @@ public static class ReservationLifecycleScenario
             lastReportedOps = currentOps;
         }
     }
+
+    private static ReservationMixMode ResolveMixMode()
+    {
+        var raw = Environment.GetEnvironmentVariable("BENCHMARK_RESERVATION_MODE");
+        return raw?.Trim().ToLowerInvariant() switch
+        {
+            "quick-only" => ReservationMixMode.QuickOnly,
+            "draft-only" => ReservationMixMode.DraftOnly,
+            _ => ReservationMixMode.Mixed
+        };
+    }
+
+    private static bool ShouldUseQuickReservation(int idx, ReservationMixMode mixMode) =>
+        mixMode switch
+        {
+            ReservationMixMode.QuickOnly => true,
+            ReservationMixMode.DraftOnly => false,
+            _ => idx % 5 != 0
+        };
 }

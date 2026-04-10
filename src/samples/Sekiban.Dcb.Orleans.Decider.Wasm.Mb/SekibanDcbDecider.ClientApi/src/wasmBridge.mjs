@@ -43,6 +43,7 @@ export class MoonBitClientApiWasm {
       "create_room",
       "update_room",
       "create_reservation_draft",
+      "create_quick_reservation",
       "commit_reservation_hold",
       "confirm_reservation",
       "cancel_reservation",
@@ -132,6 +133,47 @@ export class MoonBitClientApiWasm {
     }
   }
 
+  #callTernary(
+    exportName,
+    firstStateJson,
+    firstVersion,
+    secondStateJson,
+    secondVersion,
+    thirdStateJson,
+    thirdVersion,
+    request,
+  ) {
+    const first = this.#writeUtf8(firstStateJson ?? "{}");
+    const second = this.#writeUtf8(secondStateJson ?? "{}");
+    const third = this.#writeUtf8(thirdStateJson ?? "{}");
+    const req = this.#writeUtf8(JSON.stringify(request ?? {}));
+
+    try {
+      const packed = this.#instance.exports[exportName](
+        first.ptr,
+        first.len,
+        firstVersion ?? 0,
+        second.ptr,
+        second.len,
+        secondVersion ?? 0,
+        third.ptr,
+        third.len,
+        thirdVersion ?? 0,
+        req.ptr,
+        req.len,
+      );
+      const { ptr, len } = unpackPtrLen(packed);
+      const json = this.#readUtf8(ptr, len);
+      this.#free(ptr, len);
+      return JSON.parse(json || '{"ok":false,"status":500,"error":"EmptyResponse","message":"Empty wasm response"}');
+    } finally {
+      this.#free(first.ptr, first.len);
+      this.#free(second.ptr, second.len);
+      this.#free(third.ptr, third.len);
+      this.#free(req.ptr, req.len);
+    }
+  }
+
   createWeather(stateJson, version, request) {
     return this.#callUnary("create_weather", stateJson, version, request);
   }
@@ -191,6 +233,27 @@ export class MoonBitClientApiWasm {
       reservationVersion,
       roomStateJson,
       roomVersion,
+      request,
+    );
+  }
+
+  createQuickReservation(
+    reservationStateJson,
+    reservationVersion,
+    roomStateJson,
+    roomVersion,
+    roomReservationsStateJson,
+    roomReservationsVersion,
+    request,
+  ) {
+    return this.#callTernary(
+      "create_quick_reservation",
+      reservationStateJson,
+      reservationVersion,
+      roomStateJson,
+      roomVersion,
+      roomReservationsStateJson,
+      roomReservationsVersion,
       request,
     );
   }

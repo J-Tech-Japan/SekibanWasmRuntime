@@ -7,6 +7,7 @@ import {
   type Command,
   type CommandContext,
   type CommandOutput,
+  type EventOutput,
   tagString,
   isEmptyJSON,
   newCommandOutput,
@@ -48,6 +49,7 @@ const TagGroupClassRoom = "ClassRoom";
 const TagGroupUser = "User";
 const TagGroupUserAccess = "UserAccess";
 const TagGroupRoom = "Room";
+const TagGroupRoomReservation = "RoomReservation";
 const TagGroupReservation = "Reservation";
 const TagGroupApprovalRequest = "ApprovalRequest";
 
@@ -59,6 +61,7 @@ const tagProjectorMap: Record<string, string> = {
   [TagGroupUser]: "UserDirectoryProjector",
   [TagGroupUserAccess]: "UserAccessProjector",
   [TagGroupRoom]: "RoomProjector",
+  [TagGroupRoomReservation]: "RoomReservationsProjector",
   [TagGroupReservation]: "ReservationProjector",
   [TagGroupApprovalRequest]: "ApprovalRequestProjector",
 };
@@ -99,6 +102,7 @@ interface UserAccessState {
 
 interface RoomState {
   roomId?: string;
+  requiresApproval?: boolean;
 }
 
 interface ReservationState {
@@ -117,6 +121,15 @@ interface ReservationState {
 interface ApprovalRequestState {
   approvalRequestId?: string;
   reservationId?: string;
+}
+
+interface ReservationSlot {
+  startTime: string;
+  endTime: string;
+}
+
+interface RoomReservationsState {
+  activeReservations?: Record<string, ReservationSlot>;
 }
 
 // ---------------------------------------------------------------------------
@@ -140,6 +153,41 @@ function isEmpty(state: Record<string, any> | null, idField: string): boolean {
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+function parseIsoDate(value: string, fieldName: string): Date {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new ValidationError(`${fieldName} must be a valid ISO-8601 timestamp`);
+  }
+  return parsed;
+}
+
+function hasRoomReservationConflict(
+  state: RoomReservationsState | null,
+  startTime: string,
+  endTime: string,
+  excludeReservationId?: string | null,
+): boolean {
+  const start = parseIsoDate(startTime, "startTime").getTime();
+  const end = parseIsoDate(endTime, "endTime").getTime();
+  if (start >= end) {
+    throw new ValidationError("startTime must be before endTime");
+  }
+
+  for (const [reservationId, slot] of Object.entries(state?.activeReservations ?? {})) {
+    if (excludeReservationId && reservationId === excludeReservationId) {
+      continue;
+    }
+
+    const slotStart = parseIsoDate(slot.startTime, "slot.startTime").getTime();
+    const slotEnd = parseIsoDate(slot.endTime, "slot.endTime").getTime();
+    if (start < slotEnd && slotStart < end) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -725,6 +773,132 @@ class CreateReservationDraft implements Command {
       [reservationTag, roomTag], [reservationTag],
       {},
     );
+  }
+}
+
+class CreateQuickReservation implements Command {
+  reservationId?: string | null;
+  roomId: string;
+  organizerId: string;
+  organizerName: string;
+  startTime: string;
+  endTime: string;
+  purpose: string;
+  approvalRequestComment?: string | null;
+  selectedEquipment: string[];
+
+  constructor(data: {
+    reservationId?: string | null;
+    roomId: string;
+    organizerId: string;
+    organizerName: string;
+    startTime: string;
+    endTime: string;
+    purpose: string;
+    approvalRequestComment?: string | null;
+    selectedEquipment?: string[];
+  }) {
+    this.reservationId = data.reservationId;
+    this.roomId = data.roomId;
+    this.organizerId = data.organizerId;
+    this.organizerName = data.organizerName;
+    this.startTime = data.startTime;
+    this.endTime = data.endTime;
+    this.purpose = data.purpose;
+    this.approvalRequestComment = data.approvalRequestComment;
+    this.selectedEquipment = data.selectedEquipment ?? [];
+  }
+
+  commandType(): string { return "CreateQuickReservation"; }
+
+  async handle(ctx: CommandContext): Promise<CommandOutput> {
+    const reservationId = (this.reservationId && this.reservationId !== "") ? this.reservationId : uuidv4();
+    const reservationTag = tagString(TagGroupReservation, reservationId);
+
+    const reservationResp = await ctx.getTagState(TagGroupReservation, reservationId);
+    const reservation = parseState<ReservationState>(reservationResp.stateJson);
+    if (!isEmpty(reservation, "reservationId")) {
+      throw new AlreadyExistsError(`reservation ${reservationId}`);
+    }
+
+    const roomResp = await ctx.getTagState(TagGroupRoom, this.roomId);
+    const room = parseState<RoomState>(roomResp.stateJson);
+    if (isEmpty(room, "roomId")) {
+      throw new NotFoundError(`room ${this.roomId}`);
+    }
+
+    const roomReservationsResp = await ctx.getTagState(TagGroupRoomReservation, this.roomId);
+    const roomReservations = parseState<RoomReservationsState>(roomReservationsResp.stateJson);
+    if (hasRoomReservationConflict(roomReservations, this.startTime, this.endTime, null)) {
+      throw new ValidationError("Reservation time conflicts with another held or confirmed reservation");
+    }
+
+    const roomReservationTag = tagString(TagGroupRoomReservation, this.roomId);
+    const tags = [reservationTag, roomReservationTag];
+    const versions = { [roomReservationTag]: roomReservationsResp.version };
+    const events: EventOutput[] = [
+      {
+        eventType: EventReservationDraftCreated,
+        payload: {
+          reservationId,
+          roomId: this.roomId,
+          organizerId: this.organizerId,
+          organizerName: this.organizerName,
+          startTime: this.startTime,
+          endTime: this.endTime,
+          purpose: this.purpose,
+          selectedEquipment: this.selectedEquipment,
+        },
+        tags,
+        versions,
+      },
+      {
+        eventType: EventReservationHoldCommitted,
+        payload: {
+          reservationId,
+          roomId: this.roomId,
+          organizerId: this.organizerId,
+          organizerName: this.organizerName,
+          startTime: this.startTime,
+          endTime: this.endTime,
+          purpose: this.purpose,
+          selectedEquipment: this.selectedEquipment,
+          requiresApproval: Boolean(room?.requiresApproval),
+          approvalRequestId: null,
+          approvalRequestComment: this.approvalRequestComment ?? null,
+        },
+        tags,
+        versions,
+      },
+    ];
+
+    if (!Boolean(room?.requiresApproval)) {
+      events.push({
+        eventType: EventReservationConfirmed,
+        payload: {
+          reservationId,
+          roomId: this.roomId,
+          organizerId: this.organizerId,
+          organizerName: this.organizerName,
+          startTime: this.startTime,
+          endTime: this.endTime,
+          purpose: this.purpose,
+          selectedEquipment: this.selectedEquipment,
+          confirmedAt: nowIso(),
+          approvalRequestId: null,
+          approvalRequestComment: null,
+          approvalDecisionComment: null,
+        },
+        tags,
+        versions,
+      });
+    }
+
+    return {
+      events,
+      tags,
+      consistencyTags: tags,
+    };
   }
 }
 
@@ -1345,32 +1519,13 @@ app.post("/api/reservations/draft", async (c) => {
 app.post("/api/reservations/quick", async (c) => {
   try {
     const body = await c.req.json();
-
-    // Ensure reservation ID is set before creating draft
     let resId = body.reservationId;
     if (!resId || resId === "") {
       resId = uuidv4();
       body.reservationId = resId;
     }
-
-    // Step 1: Create draft
-    const draftCmd = new CreateReservationDraft(body);
-    const draftResp = await runtime.finalizeCommand(draftCmd);
-
-    // Step 2: Commit hold
-    const holdCmd = new CommitReservationHold({
-      reservationId: resId,
-      roomId: body.roomId,
-      requiresApproval: false,
-    });
-    await runtime.finalizeCommand(holdCmd);
-
-    // Step 3: Confirm
-    const confirmCmd = new ConfirmReservation({
-      reservationId: resId,
-      roomId: body.roomId,
-    });
-    const confirmResp = await runtime.finalizeCommand(confirmCmd);
+    const quickCmd = new CreateQuickReservation(body);
+    const confirmResp = await runtime.finalizeCommand(quickCmd);
 
     return c.json({
       reservationId: resId,

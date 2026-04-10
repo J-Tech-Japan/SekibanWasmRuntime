@@ -1,0 +1,95 @@
+╔══════════════════════════════════════════════════════╗
+║  Sekiban Event Sourcing Benchmark                    ║
+║  Mode: native-300k-tagstategrain-memory-20260409-040708                       ║
+║  Target:    300,000 events                      ║
+║  Concurrency:   8                                ║
+║  URL: http://127.0.0.1:5141                      ║
+╚══════════════════════════════════════════════════════╝
+
+--- Attempting authentication (for Native template) ---
+  Authenticated as: benchmark-bb08737bbb9f4ce8b7e0323765d862a9@test.local (expires 04:22:22)
+
+=== Phase 1: Setup (rooms) ===
+  Provisioning 69 rooms for ~120,000 reservation events
+  Created 69 rooms in 0.3s
+
+=== Phase 2: Weather Bulk (180,000 events, concurrency=8) ===
+  Progress: 5,000/180,000 (1574 ops/sec)
+  Progress: 10,000/180,000 (1647 ops/sec)
+  Progress: 15,000/180,000 (1704 ops/sec)
+  Progress: 20,000/180,000 (1769 ops/sec)
+  Progress: 25,000/180,000 (1816 ops/sec)
+  Progress: 30,000/180,000 (1857 ops/sec)
+  Progress: 35,000/180,000 (1886 ops/sec)
+  Progress: 40,000/180,000 (1908 ops/sec)
+  Progress: 45,000/180,000 (1925 ops/sec)
+  Progress: 50,000/180,000 (1935 ops/sec)
+  Progress: 55,000/180,000 (1949 ops/sec)
+  Progress: 60,000/180,000 (1957 ops/sec)
+  Progress: 65,000/180,000 (1966 ops/sec)
+  Progress: 70,000/180,000 (1973 ops/sec)
+  Progress: 75,000/180,000 (1977 ops/sec)
+  Progress: 80,000/180,000 (1958 ops/sec)
+  Progress: 85,000/180,000 (1965 ops/sec)
+  Progress: 90,000/180,000 (1971 ops/sec)
+  Progress: 95,000/180,000 (1974 ops/sec)
+  Progress: 100,000/180,000 (1979 ops/sec)
+  Progress: 105,000/180,000 (1980 ops/sec)
+  Progress: 110,000/180,000 (1917 ops/sec)
+  Progress: 115,000/180,000 (1873 ops/sec)
+  Progress: 120,000/180,000 (1881 ops/sec)
+  Progress: 125,000/180,000 (1889 ops/sec)
+  Progress: 130,000/180,000 (1892 ops/sec)
+  Progress: 135,000/180,000 (1898 ops/sec)
+  Progress: 140,000/180,000 (1904 ops/sec)
+  Progress: 145,000/180,000 (1908 ops/sec)
+  Progress: 150,000/180,000 (1911 ops/sec)
+  Progress: 155,000/180,000 (1914 ops/sec)
+  Progress: 160,000/180,000 (1918 ops/sec)
+  Progress: 165,000/180,000 (1923 ops/sec)
+  Progress: 170,000/180,000 (1925 ops/sec)
+  Progress: 175,000/180,000 (1929 ops/sec)
+  Progress: 180,000/180,000 (1933 ops/sec)
+  Completed: 180,000 events in 93.1s (1933 events/sec), errors=0
+  Latency: p50=3.8ms p95=5.8ms p99=10.4ms max=87.2ms
+
+=== Phase 3: Reservation Lifecycle (~40,000 quick reservations, target 120,000 events, concurrency=8) ===
+  Progress: events=14,416/120,000 ops=5,542 avg=961 eps interval=961 eps deltaEvents=14,416 deltaOps=5,542 errors=0 deltaErrors=0
+  Progress: events=28,109/120,000 ops=10,809 avg=937 eps interval=913 eps deltaEvents=13,693 deltaOps=5,267 errors=0 deltaErrors=0
+  Progress: events=40,972/120,000 ops=15,756 avg=910 eps interval=857 eps deltaEvents=12,863 deltaOps=4,947 errors=0 deltaErrors=0
+  Progress: events=53,121/120,000 ops=20,429 avg=885 eps interval=809 eps deltaEvents=12,149 deltaOps=4,673 errors=0 deltaErrors=0
+  Progress: events=64,698/120,000 ops=24,882 avg=862 eps interval=772 eps deltaEvents=11,577 deltaOps=4,453 errors=0 deltaErrors=0
+  Progress: events=75,759/120,000 ops=29,135 avg=842 eps interval=737 eps deltaEvents=11,061 deltaOps=4,253 errors=0 deltaErrors=0
+  Progress: events=85,920/120,000 ops=33,044 avg=818 eps interval=677 eps deltaEvents=10,161 deltaOps=3,909 errors=0 deltaErrors=0
+  Progress: events=95,585/120,000 ops=36,761 avg=796 eps interval=644 eps deltaEvents=9,665 deltaOps=3,717 errors=0 deltaErrors=0
+  Progress: events=104,652/120,000 ops=40,248 avg=775 eps interval=604 eps deltaEvents=9,067 deltaOps=3,487 errors=0 deltaErrors=0
+  Progress: events=113,228/120,000 ops=43,546 avg=755 eps interval=572 eps deltaEvents=8,576 deltaOps=3,298 errors=0 deltaErrors=0
+  Progress: events=120,016/120,000 ops=46,160 avg=739 eps interval=551 eps deltaEvents=6,788 deltaOps=2,614 errors=0 deltaErrors=0
+  Completed: 120,016 events in 162.3s (739 events/sec), errors=0
+  Latency: p50=11.2ms p95=88.5ms p99=117.4ms max=382.4ms
+
+=== Phase 4/5: Query Performance (50 iterations) ===
+  Query iteration 10/50
+  Query iteration 20/50
+  Query iteration 30/50
+  Query iteration 40/50
+  Query iteration 50/50
+  Completed: 250 queries in 0.1s (1698 queries/sec), errors=0
+  Latency: p50=0.2ms p95=0.5ms p99=8.9ms max=54.8ms
+
+╔══════════════════════════════════════════════════════════════════════════╗
+║                           BENCHMARK SUMMARY                             ║
+╠═══════════════════╦═══════════╦═══════════╦════════╦════════╦════════════╣
+║ Phase             ║   Events  ║  Ops/sec  ║  p50   ║  p95   ║   Errors   ║
+╠═══════════════════╬═══════════╬═══════════╬════════╬════════╬════════════╣
+║ Setup             ║        69 ║       272 ║     3ms ║     6ms ║          0 ║
+║ WeatherBulk       ║   180,000 ║      1933 ║     4ms ║     6ms ║          0 ║
+║ ReservationLifecycle ║   120,016 ║       284 ║    11ms ║    88ms ║          0 ║
+║ QueryPerformance  ║         0 ║      1698 ║     0ms ║     0ms ║          0 ║
+╠═══════════════════╬═══════════╬═══════════╬════════╬════════╬════════════╣
+║ TOTAL             ║   300,085 ║      1171 ║   --   ║   --   ║          0 ║
+╚═══════════════════╩═══════════╩═══════════╩════════╩════════╩════════════╝
+
+Total wall-clock time: 256.3s
+
+Results saved to: benchmarks/results/native-300k-package.json

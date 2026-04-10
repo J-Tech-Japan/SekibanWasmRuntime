@@ -52,6 +52,12 @@ pub struct ReservationTag {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Tag)]
+#[tag(group = "RoomReservation")]
+pub struct RoomReservationTag {
+    pub room_id: Uuid,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Tag)]
 #[tag(group = "ApprovalRequest")]
 pub struct ApprovalRequestTag {
     pub approval_request_id: Uuid,

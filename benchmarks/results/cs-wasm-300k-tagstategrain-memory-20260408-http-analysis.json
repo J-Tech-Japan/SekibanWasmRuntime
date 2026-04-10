@@ -1,0 +1,115 @@
+{
+  "phase_windows": [
+    {
+      "name": "Setup",
+      "start_utc": "2026-04-08T15:44:37.150528Z",
+      "end_utc": "2026-04-08T15:44:37.569118Z",
+      "total_operations": 69
+    },
+    {
+      "name": "WeatherBulk",
+      "start_utc": "2026-04-08T15:44:37.569118Z",
+      "end_utc": "2026-04-08T15:46:31.355358Z",
+      "total_operations": 180000
+    },
+    {
+      "name": "ReservationLifecycle",
+      "start_utc": "2026-04-08T15:46:31.355358Z",
+      "end_utc": "2026-04-08T15:54:23.075111Z",
+      "total_operations": 46163
+    },
+    {
+      "name": "QueryPerformance",
+      "start_utc": "2026-04-08T15:54:23.075111Z",
+      "end_utc": "2026-04-08T15:54:23.340487Z",
+      "total_operations": 250
+    }
+  ],
+  "endpoints": {
+    "client_quick": {
+      "url": "http://127.0.0.1:5198/api/reservations/quick",
+      "request_starts_by_phase": {
+        "Setup": 0,
+        "WeatherBulk": 0,
+        "ReservationLifecycle": 36913,
+        "QueryPerformance": 14
+      },
+      "latency_ms": {
+        "count": 36930,
+        "first5000_avg_ms": 50.382,
+        "last5000_avg_ms": 127.692,
+        "p50_ms": 82.783,
+        "p95_ms": 141.991,
+        "max_ms": 1154.646
+      }
+    },
+    "client_draft": {
+      "url": "http://127.0.0.1:5198/api/reservations/draft",
+      "request_starts_by_phase": {
+        "Setup": 0,
+        "WeatherBulk": 0,
+        "ReservationLifecycle": 9229,
+        "QueryPerformance": 3
+      },
+      "latency_ms": {
+        "count": 9233,
+        "first5000_avg_ms": 35.578,
+        "last5000_avg_ms": 53.592,
+        "p50_ms": 42.238,
+        "p95_ms": 74.127,
+        "max_ms": 1129.024
+      }
+    },
+    "serialized_tag_state": {
+      "url": "http://127.0.0.1:5199/api/sekiban/serialized/tag-state",
+      "request_starts_by_phase": {
+        "Setup": 0,
+        "WeatherBulk": 0,
+        "ReservationLifecycle": 83051,
+        "QueryPerformance": 32
+      },
+      "latency_ms": {
+        "count": 83093,
+        "first5000_avg_ms": 20.07,
+        "last5000_avg_ms": 56.33,
+        "p50_ms": 32.702,
+        "p95_ms": 68.02,
+        "max_ms": 1088.415
+      }
+    },
+    "serialized_commit": {
+      "url": "http://127.0.0.1:5199/api/sekiban/serialized/commit",
+      "request_starts_by_phase": {
+        "Setup": 4,
+        "WeatherBulk": 179451,
+        "ReservationLifecycle": 46749,
+        "QueryPerformance": 18
+      },
+      "latency_ms": {
+        "count": 226233,
+        "first5000_avg_ms": 4.058,
+        "last5000_avg_ms": 10.551,
+        "p50_ms": 3.535,
+        "p95_ms": 10.861,
+        "max_ms": 100.61
+      }
+    },
+    "serialized_tag_latest": {
+      "url": "http://127.0.0.1:5199/api/sekiban/serialized/tag-latest-sortable",
+      "request_starts_by_phase": {
+        "Setup": 4,
+        "WeatherBulk": 179458,
+        "ReservationLifecycle": 46745,
+        "QueryPerformance": 19
+      },
+      "latency_ms": {
+        "count": 226233,
+        "first5000_avg_ms": 1.535,
+        "last5000_avg_ms": 2.294,
+        "p50_ms": 0.957,
+        "p95_ms": 2.237,
+        "max_ms": 131.968
+      }
+    }
+  }
+}

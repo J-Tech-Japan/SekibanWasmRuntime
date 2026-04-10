@@ -182,6 +182,84 @@ pub struct RoomListState {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ActiveReservationSlot {
+    pub start_time: String,
+    pub end_time: String,
+    pub purpose: String,
+    pub organizer_id: Uuid,
+    pub status: ReservationSlotStatus,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "PascalCase")]
+pub enum ReservationSlotStatus {
+    Held,
+    Confirmed,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, State, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct RoomReservationsState {
+    pub active_reservations: HashMap<Uuid, ActiveReservationSlot>,
+}
+
+impl RoomReservationsState {
+    pub fn has_conflict(&self, start_time: &str, end_time: &str, exclude_reservation_id: Option<Uuid>) -> bool {
+        let Ok(start) = DateTime::parse_from_rfc3339(start_time).map(|dt| dt.with_timezone(&Utc)) else {
+            return false;
+        };
+        let Ok(end) = DateTime::parse_from_rfc3339(end_time).map(|dt| dt.with_timezone(&Utc)) else {
+            return false;
+        };
+
+        self.active_reservations.iter().any(|(reservation_id, slot)| {
+            if exclude_reservation_id.is_some_and(|exclude| exclude == *reservation_id) {
+                return false;
+            }
+
+            let Ok(slot_start) = DateTime::parse_from_rfc3339(&slot.start_time).map(|dt| dt.with_timezone(&Utc)) else {
+                return false;
+            };
+            let Ok(slot_end) = DateTime::parse_from_rfc3339(&slot.end_time).map(|dt| dt.with_timezone(&Utc)) else {
+                return false;
+            };
+
+            start < slot_end && slot_start < end
+        })
+    }
+
+    pub fn add_or_update_reservation(
+        &self,
+        reservation_id: Uuid,
+        start_time: String,
+        end_time: String,
+        purpose: String,
+        organizer_id: Uuid,
+        status: ReservationSlotStatus,
+    ) -> Self {
+        let mut next = self.clone();
+        next.active_reservations.insert(
+            reservation_id,
+            ActiveReservationSlot {
+                start_time,
+                end_time,
+                purpose,
+                organizer_id,
+                status,
+            },
+        );
+        next
+    }
+
+    pub fn remove_reservation(&self, reservation_id: Uuid) -> Self {
+        let mut next = self.clone();
+        next.active_reservations.remove(&reservation_id);
+        next
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 pub enum ApprovalDecision {
     Approved,

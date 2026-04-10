@@ -68,6 +68,18 @@ func parseRoomState(raw string) RoomState {
 	return s
 }
 
+func parseRoomReservationsState(raw string) RoomReservationsState {
+	var s RoomReservationsState
+	if sekiban.IsEmptyJSON(raw) {
+		return s
+	}
+	_ = json.Unmarshal([]byte(raw), &s)
+	if s.ActiveReservations == nil {
+		s.ActiveReservations = map[string]ReservationSlot{}
+	}
+	return s
+}
+
 func parseReservationState(raw string) ReservationState {
 	var s ReservationState
 	if sekiban.IsEmptyJSON(raw) {
@@ -84,6 +96,19 @@ func parseApprovalRequestState(raw string) ApprovalRequestState {
 	}
 	_ = json.Unmarshal([]byte(raw), &s)
 	return s
+}
+
+func parseIsoTime(value string) (time.Time, error) {
+	if value == "" {
+		return time.Time{}, fmt.Errorf("%w: time value is required", sekiban.ErrValidation)
+	}
+	if parsed, err := time.Parse(time.RFC3339Nano, value); err == nil {
+		return parsed, nil
+	}
+	if parsed, err := time.Parse(time.RFC3339, value); err == nil {
+		return parsed, nil
+	}
+	return time.Time{}, fmt.Errorf("%w: invalid timestamp %q", sekiban.ErrValidation, value)
 }
 
 // ── 1. CreateWeatherForecast ─────────────────────────────────────────────────
@@ -746,6 +771,140 @@ func (c CreateReservationDraft) Handle(ctx sekiban.CommandContext) (*sekiban.Com
 		return nil, err
 	}
 	return &out, nil
+}
+
+// ── 15. CreateQuickReservation ───────────────────────────────────────────────
+
+type CreateQuickReservation struct {
+	ReservationId          *string  `json:"reservationId"`
+	RoomId                 string   `json:"roomId"`
+	OrganizerId            string   `json:"organizerId"`
+	OrganizerName          string   `json:"organizerName"`
+	StartTime              string   `json:"startTime"`
+	EndTime                string   `json:"endTime"`
+	Purpose                string   `json:"purpose"`
+	ApprovalRequestComment *string  `json:"approvalRequestComment"`
+	SelectedEquipment      []string `json:"selectedEquipment"`
+}
+
+func (c CreateQuickReservation) CommandType() string { return "CreateQuickReservation" }
+
+func (c CreateQuickReservation) Handle(ctx sekiban.CommandContext) (*sekiban.CommandOutput, error) {
+	id := newID()
+	if c.ReservationId != nil && *c.ReservationId != "" {
+		id = *c.ReservationId
+	}
+
+	reservationResp, err := ctx.GetTagState(TagGroupReservation, id)
+	if err != nil {
+		return nil, err
+	}
+	if !parseReservationState(reservationResp.StateJson).IsEmpty() {
+		return nil, fmt.Errorf("%w: reservation %s", sekiban.ErrAlreadyExists, id)
+	}
+
+	roomResp, err := ctx.GetTagState(TagGroupRoom, c.RoomId)
+	if err != nil {
+		return nil, err
+	}
+	room := parseRoomState(roomResp.StateJson)
+	if room.IsEmpty() {
+		return nil, fmt.Errorf("%w: room %s", sekiban.ErrNotFound, c.RoomId)
+	}
+
+	roomReservationsResp, err := ctx.GetTagState(TagGroupRoomReservation, c.RoomId)
+	if err != nil {
+		return nil, err
+	}
+	roomReservations := parseRoomReservationsState(roomReservationsResp.StateJson)
+	startTime, err := parseIsoTime(c.StartTime)
+	if err != nil {
+		return nil, err
+	}
+	endTime, err := parseIsoTime(c.EndTime)
+	if err != nil {
+		return nil, err
+	}
+	if !startTime.Before(endTime) {
+		return nil, fmt.Errorf("%w: startTime must be before endTime", sekiban.ErrValidation)
+	}
+	if roomReservations.HasConflict(startTime, endTime, nil) {
+		return nil, fmt.Errorf("%w: reservation time conflicts with another held or confirmed reservation", sekiban.ErrValidation)
+	}
+
+	selectedEquipment := c.SelectedEquipment
+	if selectedEquipment == nil {
+		selectedEquipment = []string{}
+	}
+
+	draftPayload, err := json.Marshal(ReservationDraftCreated{
+		ReservationId:     id,
+		RoomId:            c.RoomId,
+		OrganizerId:       c.OrganizerId,
+		OrganizerName:     c.OrganizerName,
+		StartTime:         c.StartTime,
+		EndTime:           c.EndTime,
+		Purpose:           c.Purpose,
+		SelectedEquipment: selectedEquipment,
+	})
+	if err != nil {
+		return nil, err
+	}
+	holdPayload, err := json.Marshal(ReservationHoldCommitted{
+		ReservationId:          id,
+		RoomId:                 c.RoomId,
+		OrganizerId:            c.OrganizerId,
+		OrganizerName:          c.OrganizerName,
+		StartTime:              c.StartTime,
+		EndTime:                c.EndTime,
+		Purpose:                c.Purpose,
+		SelectedEquipment:      selectedEquipment,
+		RequiresApproval:       room.RequiresApproval,
+		ApprovalRequestId:      nil,
+		ApprovalRequestComment: c.ApprovalRequestComment,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	reservationTag := sekiban.TagString(TagGroupReservation, id)
+	roomReservationTag := sekiban.TagString(TagGroupRoomReservation, c.RoomId)
+	events := []sekiban.EventOutput{
+		{EventType: EventReservationDraftCreated, Payload: string(draftPayload)},
+		{EventType: EventReservationHoldCommitted, Payload: string(holdPayload)},
+	}
+
+	if !room.RequiresApproval {
+		confirmedPayload, marshalErr := json.Marshal(ReservationConfirmed{
+			ReservationId:           id,
+			RoomId:                  c.RoomId,
+			OrganizerId:             c.OrganizerId,
+			OrganizerName:           c.OrganizerName,
+			StartTime:               c.StartTime,
+			EndTime:                 c.EndTime,
+			Purpose:                 c.Purpose,
+			SelectedEquipment:       selectedEquipment,
+			ConfirmedAt:             nowIso(),
+			ApprovalRequestId:       nil,
+			ApprovalRequestComment:  nil,
+			ApprovalDecisionComment: nil,
+		})
+		if marshalErr != nil {
+			return nil, marshalErr
+		}
+		events = append(events, sekiban.EventOutput{
+			EventType: EventReservationConfirmed,
+			Payload:   string(confirmedPayload),
+		})
+	}
+
+	output := sekiban.NewMultiEventCommandOutput(
+		events,
+		[]string{reservationTag, roomReservationTag},
+		[]string{reservationTag, roomReservationTag},
+		map[string]int{roomReservationTag: roomReservationsResp.Version},
+	)
+	return &output, nil
 }
 
 // ── 15. CommitReservationHold ────────────────────────────────────────────────

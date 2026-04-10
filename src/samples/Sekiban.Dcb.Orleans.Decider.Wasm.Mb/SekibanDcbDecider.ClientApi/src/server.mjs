@@ -17,6 +17,7 @@ const tagGroups = {
   user: "User",
   userAccess: "UserAccess",
   room: "Room",
+  roomReservation: "RoomReservation",
   reservation: "Reservation",
   approvalRequest: "ApprovalRequest",
 };
@@ -800,7 +801,7 @@ async function handleQuickReservation(req, res) {
   const organizerId = randomUUID();
   const organizerName = "Sample User";
 
-  const draft = await createReservationDraftCommand({
+  const quickRequest = {
     reservationId,
     roomId,
     organizerId,
@@ -809,52 +810,15 @@ async function handleQuickReservation(req, res) {
     endTime: String(body.endTime ?? ""),
     purpose: String(body.purpose ?? ""),
     selectedEquipment: normalizeStringArray(body.selectedEquipment),
-  });
-  if (!draft.ok) {
-    sendJson(res, draft.status, reservationFailureBody(reservationId, draft.error, draft.sortableUniqueId));
+  };
+  if (body.approvalRequestComment != null) {
+    quickRequest.approvalRequestComment = String(body.approvalRequestComment);
+  }
+
+  const quick = await createQuickReservationCommand(quickRequest);
+  if (!quick.ok) {
+    sendJson(res, quick.status, reservationFailureBody(reservationId, quick.error, quick.sortableUniqueId));
     return;
-  }
-
-  let approvalRequestId = null;
-  if (Boolean(roomState.payload.requiresApproval)) {
-    approvalRequestId = randomUUID();
-    const approval = await startApprovalFlowCommand({
-      approvalRequestId,
-      reservationId,
-      roomId,
-      requesterId: organizerId,
-      approverIds: [],
-      requestComment: body.approvalRequestComment == null ? null : String(body.approvalRequestComment),
-    });
-    if (!approval.ok) {
-      sendJson(res, approval.status, reservationFailureBody(reservationId, approval.error, approval.sortableUniqueId));
-      return;
-    }
-  }
-
-  const hold = await commitReservationHoldCommand({
-    reservationId,
-    roomId,
-    requiresApproval: Boolean(roomState.payload.requiresApproval),
-    approvalRequestId,
-    approvalRequestComment: body.approvalRequestComment == null ? null : String(body.approvalRequestComment),
-  });
-  if (!hold.ok) {
-    sendJson(res, hold.status, reservationFailureBody(reservationId, hold.error, hold.sortableUniqueId));
-    return;
-  }
-
-  let sortableUniqueId = hold.sortableUniqueId;
-  if (!Boolean(roomState.payload.requiresApproval)) {
-    const confirm = await confirmReservationCommand({
-      reservationId,
-      roomId,
-    });
-    if (!confirm.ok) {
-      sendJson(res, confirm.status, reservationFailureBody(reservationId, confirm.error, confirm.sortableUniqueId));
-      return;
-    }
-    sortableUniqueId = confirm.sortableUniqueId ?? sortableUniqueId;
   }
 
   sendJson(res, 200, {
@@ -863,8 +827,8 @@ async function handleQuickReservation(req, res) {
     organizerId,
     organizerName,
     requiresApproval: Boolean(roomState.payload.requiresApproval),
-    approvalRequestId,
-    sortableUniqueId,
+    approvalRequestId: null,
+    sortableUniqueId: quick.sortableUniqueId,
     error: null,
   });
 }
@@ -1164,6 +1128,26 @@ async function createReservationDraftCommand(request) {
   );
 
   return finalizeCommand(wasmResult, [reservationState, roomState]);
+}
+
+async function createQuickReservationCommand(request) {
+  const [reservationState, roomState, roomReservationsState] = await Promise.all([
+    appState.runtime.getTagState(tagGroups.reservation, request.reservationId),
+    appState.runtime.getTagState(tagGroups.room, request.roomId),
+    appState.runtime.getTagState(tagGroups.roomReservation, request.roomId),
+  ]);
+
+  const wasmResult = appState.wasm.createQuickReservation(
+    reservationState.payloadJson,
+    reservationState.version,
+    roomState.payloadJson,
+    roomState.version,
+    roomReservationsState.payloadJson,
+    roomReservationsState.version,
+    request,
+  );
+
+  return finalizeCommand(wasmResult, [reservationState, roomState, roomReservationsState]);
 }
 
 async function startApprovalFlowCommand(request) {

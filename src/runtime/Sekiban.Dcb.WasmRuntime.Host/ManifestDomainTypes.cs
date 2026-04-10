@@ -22,7 +22,7 @@ public static class ManifestDomainTypes
         new(
             eventTypes: new DynamicJsonEventTypes(manifest.EventTypes, jsonOptions),
             tagTypes: new AotTagTypes(),
-            tagProjectorTypes: new AotTagProjectorTypes(),
+            tagProjectorTypes: new ManifestTagProjectorTypes(manifest),
             tagStatePayloadTypes: new AotTagStatePayloadTypes(),
             multiProjectorTypes: new AotMultiProjectorTypes(),
             queryTypes: new AotQueryTypes(),

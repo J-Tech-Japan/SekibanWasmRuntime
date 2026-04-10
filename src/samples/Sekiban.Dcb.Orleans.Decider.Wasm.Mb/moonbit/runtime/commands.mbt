@@ -379,6 +379,111 @@ fn handle_create_reservation_draft(
   ok(new_command_output(event_reservation_draft_created, json_stringify(ev.to_json()), [tag_string(tag_group_reservation, req.reservationId)]))
 }
 
+fn handle_create_quick_reservation(
+  reservation_state_json : String,
+  _reservation_version : Int,
+  room_state_json : String,
+  _room_version : Int,
+  room_reservations_state_json : String,
+  room_reservations_version : Int,
+  req_json : String
+) -> WasmResult {
+  let reservation = parse_json(reservation_state_json, empty_reservation_state())
+  if reservation.reservationId != "" {
+    return err(409, "AlreadyExists", "reservation already exists")
+  }
+  let room = parse_json(room_state_json, empty_room_state())
+  if room.roomId == "" {
+    return err(404, "NotFound", "room not found")
+  }
+
+  let fallback : CreateQuickReservationReq = {
+    reservationId: "",
+    roomId: "",
+    organizerId: "",
+    organizerName: "",
+    startTime: "",
+    endTime: "",
+    purpose: "",
+    approvalRequestComment: None,
+    selectedEquipment: [],
+  }
+  let req = parse_json(req_json, fallback)
+  if req.reservationId == "" || req.roomId == "" {
+    return err(400, "Validation", "reservationId and roomId are required")
+  }
+  if req.startTime >= req.endTime {
+    return err(400, "Validation", "startTime must be before endTime")
+  }
+
+  let empty_room_reservations : RoomReservationsState = { activeReservations: Map::new() }
+  let room_reservations = parse_json(room_reservations_state_json, empty_room_reservations)
+  for kv in room_reservations.activeReservations.iter() {
+    let (_, slot) = kv
+    if req.startTime < slot.endTime && slot.startTime < req.endTime {
+      return err(400, "Validation", "Reservation time conflicts with another held or confirmed reservation")
+    }
+  }
+
+  let draft_ev : ReservationDraftCreated = {
+    reservationId: req.reservationId,
+    roomId: req.roomId,
+    organizerId: req.organizerId,
+    organizerName: req.organizerName,
+    startTime: req.startTime,
+    endTime: req.endTime,
+    purpose: req.purpose,
+    selectedEquipment: req.selectedEquipment,
+  }
+  let hold_ev : ReservationHoldCommitted = {
+    reservationId: req.reservationId,
+    roomId: req.roomId,
+    organizerId: req.organizerId,
+    organizerName: req.organizerName,
+    startTime: req.startTime,
+    endTime: req.endTime,
+    purpose: req.purpose,
+    selectedEquipment: req.selectedEquipment,
+    requiresApproval: room.requiresApproval,
+    approvalRequestId: None,
+    approvalRequestComment: req.approvalRequestComment,
+  }
+
+  let reservation_tag = tag_string(tag_group_reservation, req.reservationId)
+  let room_reservation_tag = tag_string(tag_group_room_reservation, req.roomId)
+  let tags = [reservation_tag, room_reservation_tag]
+  let event_types = [event_reservation_draft_created, event_reservation_hold_committed]
+  let payload_jsons = [json_stringify(draft_ev.to_json()), json_stringify(hold_ev.to_json())]
+
+  if !room.requiresApproval {
+    let confirm_ev : ReservationConfirmed = {
+      reservationId: req.reservationId,
+      roomId: req.roomId,
+      organizerId: req.organizerId,
+      organizerName: req.organizerName,
+      startTime: req.startTime,
+      endTime: req.endTime,
+      purpose: req.purpose,
+      selectedEquipment: req.selectedEquipment,
+      confirmedAt: req.startTime,
+      approvalRequestId: None,
+      approvalRequestComment: None,
+      approvalDecisionComment: None,
+    }
+    event_types.push(event_reservation_confirmed)
+    payload_jsons.push(json_stringify(confirm_ev.to_json()))
+  }
+
+  let expected_versions : Map[String, Int] = Map::new()
+  expected_versions[room_reservation_tag] = room_reservations_version
+  ok(new_multi_json_command_output(
+    event_types,
+    payload_jsons,
+    tags,
+    tags,
+    expected_versions))
+}
+
 fn handle_commit_reservation_hold(state_json : String, _version : Int, req_json : String) -> WasmResult {
   let state = parse_json(state_json, empty_reservation_state())
   if state.reservationId == "" {
@@ -664,6 +769,33 @@ pub fn cmd_create_reservation_draft(
   let room_json = read_utf8(room_state_ptr.reinterpret_as_int(), room_state_len.reinterpret_as_int())
   let req_json = read_utf8(req_ptr.reinterpret_as_int(), req_len.reinterpret_as_int())
   write_utf8(json_stringify(handle_create_reservation_draft(reservation_json, reservation_version, room_json, room_version, req_json).to_json()))
+}
+
+pub fn cmd_create_quick_reservation(
+  reservation_state_ptr : UInt,
+  reservation_state_len : UInt,
+  reservation_version : Int,
+  room_state_ptr : UInt,
+  room_state_len : UInt,
+  room_version : Int,
+  room_reservations_state_ptr : UInt,
+  room_reservations_state_len : UInt,
+  room_reservations_version : Int,
+  req_ptr : UInt,
+  req_len : UInt
+) -> Int64 {
+  let reservation_json = read_utf8(reservation_state_ptr.reinterpret_as_int(), reservation_state_len.reinterpret_as_int())
+  let room_json = read_utf8(room_state_ptr.reinterpret_as_int(), room_state_len.reinterpret_as_int())
+  let room_reservations_json = read_utf8(room_reservations_state_ptr.reinterpret_as_int(), room_reservations_state_len.reinterpret_as_int())
+  let req_json = read_utf8(req_ptr.reinterpret_as_int(), req_len.reinterpret_as_int())
+  write_utf8(json_stringify(handle_create_quick_reservation(
+    reservation_json,
+    reservation_version,
+    room_json,
+    room_version,
+    room_reservations_json,
+    room_reservations_version,
+    req_json).to_json()))
 }
 
 pub fn cmd_commit_reservation_hold(state_ptr : UInt, state_len : UInt, version : Int, req_ptr : UInt, req_len : UInt) -> Int64 {

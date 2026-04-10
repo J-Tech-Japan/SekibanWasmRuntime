@@ -554,9 +554,9 @@ func (s *appState) handleRejectReservation(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// Quick reservation: draft + hold + confirm in one request
+// Quick reservation: single command that emits draft + hold (+ confirm)
 func (s *appState) handleQuickReservation(w http.ResponseWriter, r *http.Request) {
-	var body domain.CreateReservationDraft
+	var body domain.CreateQuickReservation
 	if err := parseBody(r, &body); err != nil {
 		writeErrorJSON(w, http.StatusBadRequest, "InvalidJson", "request body must be valid JSON")
 		return
@@ -571,32 +571,7 @@ func (s *appState) handleQuickReservation(w http.ResponseWriter, r *http.Request
 		body.ReservationId = &resId
 	}
 
-	// Step 1: Create draft
-	draftResp, err := s.runtime.FinalizeCommand(body)
-	if err != nil {
-		writeErrorFromCommand(w, err)
-		return
-	}
-	_ = draftResp
-
-	// Step 2: Commit hold
-	holdCmd := domain.CommitReservationHold{
-		ReservationId:    resId,
-		RoomId:           body.RoomId,
-		RequiresApproval: false,
-	}
-	_, err = s.runtime.FinalizeCommand(holdCmd)
-	if err != nil {
-		writeErrorFromCommand(w, err)
-		return
-	}
-
-	// Step 3: Confirm
-	confirmCmd := domain.ConfirmReservation{
-		ReservationId: resId,
-		RoomId:        body.RoomId,
-	}
-	confirmResp, err := s.runtime.FinalizeCommand(confirmCmd)
+	confirmResp, err := s.runtime.FinalizeCommand(body)
 	if err != nil {
 		writeErrorFromCommand(w, err)
 		return

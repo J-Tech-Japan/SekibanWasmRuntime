@@ -30,6 +30,7 @@
     { "projectorName": "UserDirectoryProjector", "modulePath": "./sekiban-dcb-decider-moonbit.wasm", "projectorVersion": "1.0.0" },
     { "projectorName": "UserAccessProjector", "modulePath": "./sekiban-dcb-decider-moonbit.wasm", "projectorVersion": "1.0.0" },
     { "projectorName": "RoomProjector", "modulePath": "./sekiban-dcb-decider-moonbit.wasm", "projectorVersion": "1.0.0" },
+    { "projectorName": "RoomReservationsProjector", "modulePath": "./sekiban-dcb-decider-moonbit.wasm", "projectorVersion": "1.0.0" },
     { "projectorName": "ReservationProjector", "modulePath": "./sekiban-dcb-decider-moonbit.wasm", "projectorVersion": "1.0.0" },
     { "projectorName": "ApprovalRequestProjector", "modulePath": "./sekiban-dcb-decider-moonbit.wasm", "projectorVersion": "1.0.0" },
     { "projectorName": "WeatherForecastMultiProjection", "modulePath": "./sekiban-dcb-decider-moonbit.wasm", "projectorVersion": "1.0.0" },
