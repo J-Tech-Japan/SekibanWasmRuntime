@@ -18,7 +18,7 @@ class PhaseWindow:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Summarize ASP.NET apphost request counts and latency drift by benchmark phase."
+        description="Summarize ASP.NET apphost request counts by benchmark phase and overall latency drift."
     )
     parser.add_argument("--benchmark-json", required=True, type=Path)
     parser.add_argument("--apphost-log", required=True, type=Path)
@@ -110,12 +110,48 @@ def extract_duration_ms(line: str) -> Optional[float]:
         return None
 
 
+def parse_endpoints(endpoint_args: List[str]) -> Dict[str, str]:
+    if not endpoint_args:
+        raise SystemExit("At least one --endpoint value must be provided.")
+
+    endpoints: Dict[str, str] = {}
+    for item in endpoint_args:
+        if "=" not in item:
+            raise SystemExit(f"Invalid --endpoint value: {item}")
+
+        label, url = item.split("=", 1)
+        label = label.strip()
+        url = url.strip()
+
+        if not label:
+            raise SystemExit(f"Invalid --endpoint value with empty label: {item}")
+        if not url:
+            raise SystemExit(f"Invalid --endpoint value with empty url: {item}")
+        if label in endpoints:
+            raise SystemExit(f"Duplicate --endpoint label: {label}")
+
+        endpoints[label] = url
+
+    return endpoints
+
+
+def find_phase_name(timestamp: datetime, phase_windows: List[PhaseWindow]) -> Optional[str]:
+    for phase in phase_windows:
+        if phase.start <= timestamp < phase.end:
+            return phase.name
+    return None
+
+
 def analyze_log(
     log_path: Path,
     phase_windows: List[PhaseWindow],
     endpoints: Dict[str, str],
 ) -> Dict[str, object]:
     phase_counts = {
+        label: {phase.name: 0 for phase in phase_windows}
+        for label in endpoints
+    }
+    finish_counts = {
         label: {phase.name: 0 for phase in phase_windows}
         for label in endpoints
     }
@@ -130,24 +166,33 @@ def analyze_log(
                 if timestamp_token is None:
                     continue
                 timestamp = parse_datetime(timestamp_token)
+                phase_name = find_phase_name(timestamp, phase_windows)
+                if phase_name is None:
+                    continue
                 for label, url in endpoints.items():
                     if url not in line:
                         continue
-                    for phase in phase_windows:
-                        if phase.start <= timestamp < phase.end:
-                            phase_counts[label][phase.name] += 1
-                            break
+                    phase_counts[label][phase_name] += 1
                     break
                 continue
 
             if finish_marker in line:
+                timestamp_token = extract_timestamp_token(line)
+                if timestamp_token is None:
+                    continue
+                timestamp = parse_datetime(timestamp_token)
+                phase_name = find_phase_name(timestamp, phase_windows)
+                if phase_name is None:
+                    continue
                 duration_ms = extract_duration_ms(line)
                 if duration_ms is None:
                     continue
                 for label, url in endpoints.items():
-                    if url in line:
-                        latencies[label].append(duration_ms)
-                        break
+                    if url not in line:
+                        continue
+                    finish_counts[label][phase_name] += 1
+                    latencies[label].append(duration_ms)
+                    break
 
     return {
         "phase_windows": [
@@ -163,6 +208,7 @@ def analyze_log(
             label: {
                 "url": endpoints[label],
                 "request_starts_by_phase": phase_counts[label],
+                "request_finishes_by_phase": finish_counts[label],
                 "latency_ms": summarize_latencies(latencies[label]),
             }
             for label in endpoints
@@ -172,13 +218,7 @@ def analyze_log(
 
 def main() -> int:
     args = parse_args()
-    endpoints: Dict[str, str] = {}
-    for item in args.endpoint:
-        if "=" not in item:
-            raise SystemExit(f"Invalid --endpoint value: {item}")
-        label, url = item.split("=", 1)
-        endpoints[label] = url
-
+    endpoints = parse_endpoints(args.endpoint)
     phase_windows = load_phase_windows(args.benchmark_json)
     result = analyze_log(args.apphost_log, phase_windows, endpoints)
     output = json.dumps(result, indent=2)
