@@ -19,3 +19,5 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread", "net"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1", features = ["serde", "v7"] }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "macros"] }
+urlencoding = "2"
