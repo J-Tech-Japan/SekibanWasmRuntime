@@ -565,6 +565,27 @@ seedMvCommand.SetAction(async (parseResult, cancellationToken) =>
     Console.WriteLine($"[seed-mv] ClientApi = {clientApiUrl}");
     Console.WriteLine($"[seed-mv] wasmserver = {wasmServerUrl}");
 
+    // Sanity check that the wasmserver stays strictly generic: it must NOT expose /api/mv/*,
+    // because MV reads live on the ClientApi via sqlx. A 404 here is the expected contract.
+    try
+    {
+        using var probe = await http.GetAsync($"{wasmServerUrl}/api/mv/status", cancellationToken);
+        if (probe.StatusCode != System.Net.HttpStatusCode.NotFound)
+        {
+            Console.WriteLine(
+                $"[seed-mv] WARN wasmserver /api/mv/status returned {(int)probe.StatusCode}; " +
+                "expected 404 (wasmserver is supposed to be generic).");
+        }
+        else
+        {
+            Console.WriteLine("[seed-mv] wasmserver /api/mv/status -> 404 (generic, OK)");
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[seed-mv] wasmserver probe skipped: {ex.Message}");
+    }
+
     async Task<JsonElement> PostJsonAsync(string url, object body)
     {
         var response = await http.PostAsJsonAsync(url, body, cancellationToken);

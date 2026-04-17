@@ -1,11 +1,19 @@
 //! Macro that emits the three C-ABI materialized view exports (`mv_metadata` / `mv_initialize` /
-//! `mv_apply_event`) plus the `alloc`/`dealloc` helpers the host writes into during query callbacks.
+//! `mv_apply_event`).
 //!
-//! Usage (in a `cdylib` crate):
+//! This macro does **not** emit the `alloc` / `dealloc` / `memory` exports that the host relies
+//! on when writing host-import response buffers into linear memory (see
+//! [`crate::query_port::HostBackedMvQueryPort`]). Those come from `sekiban_wasm::export_domain!`
+//! in the same crate. If you ship an MV-only WASM module (no primitive projections), add those
+//! exports manually — the simplest way is still to call `export_domain!` with a dummy domain,
+//! or to copy the `#[no_mangle] pub extern "C" fn alloc` / `dealloc` pair from
+//! `sekiban-wasm/src/exports.rs`.
+//!
+//! Usage (in a `cdylib` crate that already calls `sekiban_wasm::export_domain!`):
 //! ```ignore
-//! sekiban_mv::export_mv!([
-//!     Box::new(MyProjectorV1),
-//!     Box::new(AnotherProjectorV2),
+//! sekiban_mv::export_mv!(vec![
+//!     std::sync::Arc::new(MyProjectorV1) as std::sync::Arc<dyn sekiban_mv::WasmMvProjector>,
+//!     std::sync::Arc::new(AnotherProjectorV2) as std::sync::Arc<dyn sekiban_mv::WasmMvProjector>,
 //! ]);
 //! ```
 //!

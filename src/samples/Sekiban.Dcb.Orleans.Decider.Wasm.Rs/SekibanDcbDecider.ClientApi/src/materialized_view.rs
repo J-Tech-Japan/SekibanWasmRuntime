@@ -26,6 +26,17 @@ pub const CLASSROOMS_LOGICAL: &str = "classrooms";
 pub const STUDENTS_LOGICAL: &str = "students";
 pub const ENROLLMENTS_LOGICAL: &str = "enrollments";
 
+/// Service id used to scope `sekiban_mv_registry` lookups. Matches Sekiban's
+/// `DefaultServiceIdProvider.DefaultServiceId` (`"default"`). Override at startup via
+/// `SEKIBAN_SERVICE_ID` to match a non-default deployment so read APIs never cross-contaminate
+/// entries across tenants that happen to share the same MV Postgres.
+fn current_service_id() -> String {
+    std::env::var("SEKIBAN_SERVICE_ID")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .unwrap_or_else(|| "default".to_string())
+}
+
 /// Connect lazily on startup. Accepts the Aspire-provided `DCBMATERIALIZEDVIEWPOSTGRES_URI`
 /// (a ready-to-use `postgresql://…` URL) as the primary source, with
 /// `ConnectionStrings__DcbMaterializedViewPostgres` (Npgsql key/value form) as the fallback
@@ -193,12 +204,14 @@ pub async fn get_enrollments(
 // --------------------------------------------------------------------------------------------
 
 async fn physical_table(pool: &PgPool, logical: &str) -> Result<String> {
+    let service_id = current_service_id();
     let row = sqlx::query(
         "SELECT physical_table \
          FROM sekiban_mv_registry \
-         WHERE view_name = $1 AND view_version = $2 AND logical_table = $3 \
+         WHERE service_id = $1 AND view_name = $2 AND view_version = $3 AND logical_table = $4 \
          LIMIT 1",
     )
+    .bind(&service_id)
     .bind(VIEW_NAME)
     .bind(VIEW_VERSION)
     .bind(logical)
@@ -208,7 +221,7 @@ async fn physical_table(pool: &PgPool, logical: &str) -> Result<String> {
     match row {
         Some(r) => Ok(r.try_get::<String, _>("physical_table")?),
         None => Err(anyhow!(
-            "materialized view '{logical}' not registered for {VIEW_NAME}/{VIEW_VERSION}"
+            "materialized view '{logical}' not registered for {service_id}/{VIEW_NAME}/{VIEW_VERSION}"
         )),
     }
 }
@@ -236,13 +249,15 @@ struct StatusResponse {
 }
 
 async fn fetch_status(pool: &PgPool) -> Result<StatusResponse> {
+    let service_id = current_service_id();
     let rows = sqlx::query(
         "SELECT service_id, view_name, view_version, logical_table, physical_table, status, \
          applied_event_version, current_position, last_catch_up_sortable_unique_id, last_updated \
          FROM sekiban_mv_registry \
-         WHERE view_name = $1 AND view_version = $2 \
+         WHERE service_id = $1 AND view_name = $2 AND view_version = $3 \
          ORDER BY logical_table",
     )
+    .bind(&service_id)
     .bind(VIEW_NAME)
     .bind(VIEW_VERSION)
     .fetch_all(pool)

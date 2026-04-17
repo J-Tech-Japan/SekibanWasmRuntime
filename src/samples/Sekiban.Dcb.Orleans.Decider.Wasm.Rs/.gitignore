@@ -7,3 +7,5 @@ target/
 **/target/
 .env
 secrets.json
+# AppHost rewrites this manifest on every run with absolute, developer-machine-specific paths.
+SekibanDcbDecider.AppHost/.generated/
