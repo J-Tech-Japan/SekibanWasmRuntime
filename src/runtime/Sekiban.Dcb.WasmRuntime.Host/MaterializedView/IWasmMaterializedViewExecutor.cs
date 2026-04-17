@@ -38,15 +38,15 @@ public interface IWasmMaterializedViewExecutor
 
     /// <summary>
     ///     Invoke <c>mv_apply_event</c>. The WASM module may call back into the host via
-    ///     <c>mv_host_query_rows</c> during execution; the <paramref name="applyContext"/> MUST
-    ///     be set via AsyncLocal before invoking this method so query callbacks can route to the
-    ///     apply-time Postgres connection/transaction.
+    ///     <c>mv_host_query_rows</c> during execution; the executor captures
+    ///     <paramref name="queryPort"/> in an AsyncLocal before invoking the WASM export so the
+    ///     host import can route query callbacks back through Sekiban's <see cref="IMvApplyQueryPort"/>.
     /// </summary>
     Task<IReadOnlyList<WasmMvSqlStatementDto>> ApplyEventAsync(
         string viewName,
         int viewVersion,
         WasmMvTableBindingsDto tableBindings,
         WasmMvSerializableEventDto serializableEvent,
-        IMvApplyContext applyContext,
+        IMvApplyQueryPort queryPort,
         CancellationToken cancellationToken = default);
 }

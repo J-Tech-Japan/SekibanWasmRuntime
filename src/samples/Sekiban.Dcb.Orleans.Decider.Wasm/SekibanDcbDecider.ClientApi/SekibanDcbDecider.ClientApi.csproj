@@ -17,8 +17,8 @@
          the same code the silo side uses. -->
     <PackageReference Include="Dapper" Version="2.1.66" />
     <PackageReference Include="Npgsql" Version="10.0.2" />
-    <PackageReference Include="Sekiban.Dcb.MaterializedView" Version="10.1.18" />
-    <PackageReference Include="Sekiban.Dcb.MaterializedView.Postgres" Version="10.1.18" />
+    <PackageReference Include="Sekiban.Dcb.MaterializedView" Version="10.2.0" />
+    <PackageReference Include="Sekiban.Dcb.MaterializedView.Postgres" Version="10.2.0" />
   </ItemGroup>
 
   <ItemGroup>

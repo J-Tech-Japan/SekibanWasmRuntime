@@ -90,8 +90,12 @@ public sealed class RemoteCommandContext(
             serializableState.Version,
             serializableState.LastSortedUniqueId);
 
+        // Sekiban 10.2.0 adds SerializableTagState.ResolvedPayloadName which falls back to
+        // TagPayloadName when ActualPayloadName is empty. Use it so discriminated-union payloads
+        // (e.g. ClassRoomProjector's AvailableClassRoomState / FilledClassRoomState) resolve to
+        // the real CLR type name rather than the projector-inferred generic one.
         var payloadResult = _domainTypes.TagStatePayloadTypes.DeserializePayload(
-            serializableState.TagPayloadName,
+            serializableState.ResolvedPayloadName,
             serializableState.Payload);
         if (!payloadResult.IsSuccess)
         {

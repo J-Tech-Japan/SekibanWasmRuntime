@@ -47,8 +47,10 @@ public sealed class RemoteSekibanExecutor(
             serializableState.Version,
             serializableState.LastSortedUniqueId);
 
+        // Sekiban 10.2.0: prefer ActualPayloadName via ResolvedPayloadName so discriminated-
+        // union payloads (e.g. ClassRoomProjector) deserialize to their concrete CLR type.
         var payloadResult = _domainTypes.TagStatePayloadTypes.DeserializePayload(
-            serializableState.TagPayloadName,
+            serializableState.ResolvedPayloadName,
             serializableState.Payload);
         if (!payloadResult.IsSuccess)
         {

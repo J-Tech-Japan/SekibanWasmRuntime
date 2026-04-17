@@ -28,19 +28,30 @@ runs, everything works — the log line is misleading.
 
 Prefer option 1 — no Sekiban change, bounded to this host.
 
-## 2. Upstream abstraction: `IMvApplyHost` (Step 2)
+## 2. Upstream abstraction: `IMvApplyHost` (Step 2 / Step 3)
 
 ✅ Filed as [Sekiban#1029](https://github.com/J-Tech-Japan/Sekiban/issues/1029)
-(2026-04-17). Timed to land alongside the Unsafe Window MV v1 redesign in
-[Sekiban#1028](https://github.com/J-Tech-Japan/Sekiban/issues/1028) /
-[Sekiban PR#1027](https://github.com/J-Tech-Japan/Sekiban/pull/1027) so the
-new v1 contract carries typed `MvParam`/`MvSqlStatementDto` DTOs and an
-`IMvApplyHost` seam from day one, rather than being retrofitted later.
+(2026-04-17), landed as [Sekiban PR#1030](https://github.com/J-Tech-Japan/Sekiban/pull/1030)
+and shipped in the [`dcb-v10.2.0`](https://github.com/J-Tech-Japan/Sekiban/releases/tag/dcb-v10.2.0)
+release together with the Unsafe Window MV v1 work
+([PR#1031](https://github.com/J-Tech-Japan/Sekiban/pull/1031)). The new
+contract carries typed `MvParam`/`MvSqlStatementDto` DTOs and the
+`IMvApplyHost`/`IMvApplyHostFactory`/`IMvApplyQueryPort` seam.
 
-Details: [`SEKIBAN_ABSTRACTION_PROPOSAL.md`](SEKIBAN_ABSTRACTION_PROPOSAL.md).
-Step 1 uses a shim projector, which works but requires awkward payload
-unwrapping and forces the WASM side to maintain a parallel DTO set. Once
-Sekiban#1029 merges, Step 3 can retire the shim here.
+Step 3 migration completed in this branch: the shim projector
+(`WasmBackedMaterializedViewProjector : IMaterializedViewProjector`) has
+been deleted, replaced by `WasmMvApplyHost` + `WasmMvApplyHostFactory`
+registered via `services.Replace<IMvApplyHostFactory>`. WASM wire types
+(`WasmMvParam`, `WasmMvSqlStatementDto`) are kept byte-compatible with
+Sekiban's typed DTOs so the WASM module did not need rebuilding — the
+translation in `WasmMvApplyHost.ToSekibanStatements` is a pure relabel.
+
+`UnwrapDiscriminatedTagPayload` still exists but now sets
+`SerializableTagState.ActualPayloadName` (new 10.2.0 field) instead of
+overriding `TagPayloadName`. The Remote-side `RemoteCommandContext` /
+`RemoteSekibanExecutor` deserialize via `ResolvedPayloadName` so
+discriminated-union payloads flow through unchanged. Generalizing this
+helper is still tracked in item 4 below.
 
 ## 3. `mv_host_query_rows` is implemented but unexercised
 

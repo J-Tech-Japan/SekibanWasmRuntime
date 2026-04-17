@@ -27,6 +27,7 @@ using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Sqlite;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sekiban.Dcb.WasmRuntime;
 using Sekiban.Dcb.WasmRuntime.Host;
 using Sekiban.Dcb.WasmRuntime.Host.MaterializedView;
@@ -230,18 +231,19 @@ if (materializedViewEnabled)
         registerHostedWorker: true);
     builder.Services.AddSekibanDcbMaterializedViewOrleans();
 
-    foreach (var mv in manifest.MaterializedViews)
-    {
-        var viewName = mv.ViewName;
-        var viewVersion = mv.ViewVersion;
-        var logicalTables = mv.LogicalTables.ToList();
-        builder.Services.AddSingleton<IMaterializedViewProjector>(sp =>
-            new WasmBackedMaterializedViewProjector(
-                viewName,
-                viewVersion,
-                logicalTables,
-                sp.GetRequiredService<IWasmMaterializedViewExecutor>()));
-    }
+    // Replace Sekiban's default NativeMvApplyHostFactory (which looks up CLR
+    // IMaterializedViewProjector instances) with WasmMvApplyHostFactory. In WASM mode the
+    // projector lives inside the .wasm module and there are no CLR projectors to enumerate;
+    // the factory hands out fresh WasmMvApplyHost per (viewName, viewVersion) from the
+    // manifest, and each host delegates init/apply through IWasmMaterializedViewExecutor to
+    // the WASM exports.
+    var wasmMvRegistrations = manifest.MaterializedViews
+        .Select(mv => new WasmMvApplyHostRegistration(mv.ViewName, mv.ViewVersion, mv.LogicalTables.ToList()))
+        .ToList();
+    builder.Services.Replace(ServiceDescriptor.Singleton<IMvApplyHostFactory>(sp =>
+        new WasmMvApplyHostFactory(
+            sp.GetRequiredService<IWasmMaterializedViewExecutor>(),
+            wasmMvRegistrations)));
 }
 
 var app = builder.Build();
@@ -541,10 +543,12 @@ app.MapPost("/api/sekiban/serialized/list-query", async (
 app.Run();
 
 // WASM projectors that return a discriminated-union payload serialize their state through a
-// wrapper JSON with a `stateKind` discriminator (e.g. ClassRoomProjectorSnapshot). The
-// RemoteCommandContext on the client side deserializes payloads by name via
-// ITagStatePayloadTypes, which only knows about concrete CLR types. Unwrap the snapshot here so
-// the payload JSON matches a real type name before we return it over the wire.
+// wrapper JSON with a `stateKind` discriminator (e.g. ClassRoomProjectorSnapshot). Sekiban
+// 10.2.0 added `SerializableTagState.ActualPayloadName` specifically for this case — the
+// TagStateGrain / GeneralTagStateActor already sets it from `Payload.GetType().Name` on the
+// CLR side, but WASM projectors don't embed CLR type names, so we patch it in here. The
+// receiver resolves the payload through `ResolvedPayloadName` which prefers ActualPayloadName
+// over the manifest-inferred TagPayloadName.
 static SerializableTagState UnwrapDiscriminatedTagPayload(SerializableTagState tagState)
 {
     if (tagState.Payload.Length == 0 ||
@@ -580,7 +584,7 @@ static SerializableTagState UnwrapDiscriminatedTagPayload(SerializableTagState t
         return tagState with
         {
             Payload = innerBytes,
-            TagPayloadName = typeName
+            ActualPayloadName = typeName
         };
     }
     catch

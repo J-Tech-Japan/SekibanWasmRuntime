@@ -4,10 +4,16 @@ Parallels the existing `IProjectionActorHost` pattern used by MultiProjection
 to let Native and WASM plug in via DI, but applied to the MaterializedView
 grain path.
 
-**Status**: filed upstream as [Sekiban#1029](https://github.com/J-Tech-Japan/Sekiban/issues/1029)
-(2026-04-17), timed so it can land together with the Unsafe Window MV v1
-design in [Sekiban#1028](https://github.com/J-Tech-Japan/Sekiban/issues/1028)
-/ [Sekiban PR#1027](https://github.com/J-Tech-Japan/Sekiban/pull/1027).
+**Status**: ✅ delivered upstream. Filed as
+[Sekiban#1029](https://github.com/J-Tech-Japan/Sekiban/issues/1029)
+(2026-04-17), landed as
+[Sekiban PR#1030](https://github.com/J-Tech-Japan/Sekiban/pull/1030) and
+paired with the Unsafe Window MV v1 work
+([PR#1031](https://github.com/J-Tech-Japan/Sekiban/pull/1031)); both are in
+the [`dcb-v10.2.0`](https://github.com/J-Tech-Japan/Sekiban/releases/tag/dcb-v10.2.0)
+release. SekibanWasmRuntime has migrated to the new abstraction — see Step 3
+notes in [`STEP1_RESULT.md`](STEP1_RESULT.md) and [`FOLLOW_UPS.md`](FOLLOW_UPS.md).
+
 The filed issue covers the same two topics as this document:
 
 1. Typed SQL parameter DTO (`MvParam` / `MvSqlStatementDto`) to replace

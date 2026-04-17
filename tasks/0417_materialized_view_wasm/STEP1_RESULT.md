@@ -82,3 +82,28 @@ abstraction proposal in Step 2).
 ## Files touched
 
 See `git diff --stat` on branch `feat/csharp-decider-materialized-view`.
+
+## Step 3 update (2026-04-17) — Sekiban 10.2.0 migration
+
+- Sekiban.Dcb.* NuGet refs bumped `10.1.18` → `10.2.0`; submodule moved to
+  the [`dcb-v10.2.0`](https://github.com/J-Tech-Japan/Sekiban/releases/tag/dcb-v10.2.0)
+  tag (includes [PR#1030](https://github.com/J-Tech-Japan/Sekiban/pull/1030)
+  `IMvApplyHost` + [PR#1031](https://github.com/J-Tech-Japan/Sekiban/pull/1031)
+  Unsafe Window MV v1).
+- Replaced `WasmBackedMaterializedViewProjector` with two direct
+  `IMvApplyHost` implementations:
+  + `WasmMvApplyHost` — one-pass translation between Sekiban's typed
+    `MvParam`/`MvSqlStatementDto` and our wire DTOs.
+  + `WasmMvApplyHostFactory` — enumerates manifest-declared views, swapped
+    in via `services.Replace<IMvApplyHostFactory>`.
+- `WasmtimeMaterializedViewExecutor` now takes an `IMvApplyQueryPort`
+  (typed `MvParam` in, `IReadOnlyList<JsonElement>` rows out) instead of
+  the old `IMvApplyContext`; the row translation step lives in a small
+  `RowToWasmJson` helper to keep the WASM wire format unchanged.
+- `UnwrapDiscriminatedTagPayload` now sets
+  `SerializableTagState.ActualPayloadName`; `ResolvedPayloadName` (new
+  10.2.0 field) is what the Remote-side consumers use for payload
+  deserialization (`RemoteCommandContext`, `RemoteSekibanExecutor`).
+- E2E re-verified via AppHost on 2026-04-17:
+  create classroom → create student → enroll returned HTTP 200 and MV
+  `/api/mv/enrollments` projected `enrolledCount: 1`.

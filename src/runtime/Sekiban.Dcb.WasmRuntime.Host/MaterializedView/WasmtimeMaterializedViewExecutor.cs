@@ -1,6 +1,5 @@
 using System.Text;
 using System.Text.Json;
-using Dapper;
 using Microsoft.Extensions.Logging;
 using Sekiban.Dcb.MaterializedView;
 using Sekiban.Dcb.WasmRuntime.Wasmtime;
@@ -32,9 +31,10 @@ public sealed class WasmtimeMaterializedViewExecutor : IWasmMaterializedViewExec
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    // Capture the apply context for the ongoing mv_apply_event call so the host import can
-    // route mv_host_query_rows back to the apply-time Postgres connection/transaction.
-    private static readonly AsyncLocal<IMvApplyContext?> CurrentApplyContext = new();
+    // Capture the Sekiban `IMvApplyQueryPort` for the ongoing mv_apply_event call so the host
+    // import can route `mv_host_query_rows` callbacks back through it. AsyncLocal works because
+    // Wasmtime host callbacks run synchronously on the same thread that invokes the WASM export.
+    private static readonly AsyncLocal<IMvApplyQueryPort?> CurrentQueryPort = new();
 
     private readonly WasmMaterializedViewRuntimeOptions _options;
     private readonly ILogger<WasmtimeMaterializedViewExecutor> _logger;
@@ -119,12 +119,12 @@ public sealed class WasmtimeMaterializedViewExecutor : IWasmMaterializedViewExec
         int viewVersion,
         WasmMvTableBindingsDto tableBindings,
         WasmMvSerializableEventDto serializableEvent,
-        IMvApplyContext applyContext,
+        IMvApplyQueryPort queryPort,
         CancellationToken cancellationToken = default)
     {
         await _instanceGate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        var previous = CurrentApplyContext.Value;
-        CurrentApplyContext.Value = applyContext;
+        var previous = CurrentQueryPort.Value;
+        CurrentQueryPort.Value = queryPort;
         try
         {
             EnsureInstance();
@@ -150,7 +150,7 @@ public sealed class WasmtimeMaterializedViewExecutor : IWasmMaterializedViewExec
         }
         finally
         {
-            CurrentApplyContext.Value = previous;
+            CurrentQueryPort.Value = previous;
             _instanceGate.Release();
         }
     }
@@ -232,16 +232,22 @@ public sealed class WasmtimeMaterializedViewExecutor : IWasmMaterializedViewExec
             var sql = ReadMemoryString(callerMemory, sqlPtr, sqlLen);
             var paramsJson = ReadMemoryString(callerMemory, paramsPtr, paramsLen);
 
+            // Wire-compat: our WASM module serializes WasmMvParam; Sekiban's IMvApplyQueryPort
+            // wants MvParam. The two records are byte-for-byte identical (Name/Kind/ValueJson)
+            // so we deserialize via WasmMvParam and then translate — keeping the WASM-side wire
+            // DTO stable even as Sekiban's internal types evolve.
             var mvParams = string.IsNullOrWhiteSpace(paramsJson)
                 ? new List<WasmMvParam>()
                 : JsonSerializer.Deserialize<List<WasmMvParam>>(paramsJson, JsonOptions) ?? new();
-            var dapperParams = MvParamDapperBridge.ToDapperParameters(mvParams);
+            var sekibanParams = mvParams
+                .Select(p => new MvParam(p.Name, (MvParamKind)(int)p.Kind, p.ValueJson))
+                .ToList();
 
-            var ctx = CurrentApplyContext.Value
+            var queryPort = CurrentQueryPort.Value
                 ?? throw new InvalidOperationException(
                     "mv_host_query_rows was invoked outside of an active apply context.");
 
-            var resultJson = ExecuteQueryToJson(ctx, sql, dapperParams, rowLimit);
+            var resultJson = ExecuteQueryToJson(queryPort, sql, sekibanParams, rowLimit);
             var bytes = Encoding.UTF8.GetBytes(resultJson);
             if (bytes.Length == 0)
             {
@@ -259,38 +265,80 @@ public sealed class WasmtimeMaterializedViewExecutor : IWasmMaterializedViewExec
         catch (Exception ex)
         {
             _logger.LogError(ex, "mv_host_query_rows host import failed.");
-            // Surface errors by writing a JSON envelope back to WASM. The projector will fail
-            // to deserialize it as MvQueryResultDto and bubble up as an apply-time exception,
-            // which the grain logs and retries.
+            // Surface errors by writing a JSON envelope back to WASM. WASM's HostBackedMvQueryPort
+            // detects `{"error":...}` via ThrowIfHostError and rethrows, which the MV grain logs
+            // and retries.
             return EncodeErrorForCaller(caller, ex.Message);
         }
     }
 
+    // Async → sync: Wasmtime host imports are synchronous. We block here because the
+    // MaterializedViewGrain already serializes apply operations per view. Long-running queries
+    // stall the grain; projectors should be written with that in mind.
+    //
+    // Sekiban's IMvApplyQueryPort returns each row as a JsonElement object (`{col: value, ...}`).
+    // WASM's wire contract expects `{rows: MvQueryRowDto[]}` where each row holds
+    // `{columns: {col: "<raw json>"}}`. Translate here so both sides agree and the WASM
+    // MvQueryRowReader helpers keep working.
     private static string ExecuteQueryToJson(
-        IMvApplyContext ctx,
+        IMvApplyQueryPort queryPort,
         string sql,
-        DynamicParameters parameters,
+        IReadOnlyList<MvParam> parameters,
         int rowLimit)
     {
-        // Async → sync: Wasmtime host imports are synchronous. We block here because the
-        // MaterializedViewGrain already serializes apply operations per view. Long-running
-        // queries will stall the grain; projectors should be written with that in mind.
         if (rowLimit == 1)
         {
-            var row = ctx.QuerySingleOrDefaultRowAsync(sql, parameters).GetAwaiter().GetResult();
+            var row = queryPort.QuerySingleOrDefaultAsync(sql, parameters, CancellationToken.None)
+                .GetAwaiter().GetResult();
             return row is null
                 ? "{\"rows\":[]}"
-                : "{\"rows\":[" + row.ToJson() + "]}";
+                : "{\"rows\":[" + RowToWasmJson(row.Value) + "]}";
         }
 
-        var set = ctx.QueryRowsAsync(sql, parameters).GetAwaiter().GetResult();
+        var rows = queryPort.QueryRowsAsync(sql, parameters, CancellationToken.None)
+            .GetAwaiter().GetResult();
         var sb = new StringBuilder("{\"rows\":[");
-        for (int i = 0; i < set.Count; i++)
+        for (int i = 0; i < rows.Count; i++)
         {
             if (i > 0) sb.Append(',');
-            sb.Append(set[i].ToJson());
+            sb.Append(RowToWasmJson(rows[i]));
         }
         sb.Append("]}");
+        return sb.ToString();
+    }
+
+    private static string RowToWasmJson(JsonElement row)
+    {
+        if (row.ValueKind != JsonValueKind.Object)
+        {
+            return "{\"columns\":{}}";
+        }
+
+        var sb = new StringBuilder("{\"columns\":{");
+        var first = true;
+        foreach (var prop in row.EnumerateObject())
+        {
+            if (!first) sb.Append(',');
+            first = false;
+            sb.Append(JsonSerializer.Serialize(prop.Name));
+            sb.Append(':');
+            if (prop.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            {
+                sb.Append("null");
+            }
+            else if (prop.Value.ValueKind == JsonValueKind.String)
+            {
+                // Keep as JSON string so WasmMvQueryRowDto.Columns[name] can round-trip.
+                sb.Append(JsonSerializer.Serialize(prop.Value.GetString()));
+            }
+            else
+            {
+                // Non-string scalars (numbers, bool, object) get stringified so every column
+                // value is string-or-null at the wire level, matching MvQueryRowDto.Columns.
+                sb.Append(JsonSerializer.Serialize(prop.Value.GetRawText()));
+            }
+        }
+        sb.Append("}}");
         return sb.ToString();
     }
 
@@ -373,7 +421,7 @@ public sealed class WasmtimeMaterializedViewExecutor : IWasmMaterializedViewExec
         // so disposing them here would break other consumers.
     }
 
-    internal static IMvApplyContext? CurrentContextForTesting => CurrentApplyContext.Value;
+    internal static IMvApplyQueryPort? CurrentQueryPortForTesting => CurrentQueryPort.Value;
 }
 
 public sealed class WasmMaterializedViewRuntimeOptions
