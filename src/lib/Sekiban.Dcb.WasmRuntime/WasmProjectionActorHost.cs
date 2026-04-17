@@ -349,6 +349,21 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
             SafeVersion: _version,
             SafeLastSortableUniqueId: _lastSortableUniqueId)));
 
+    // The WASM host does not keep a separate safe/unsafe projection head or a pending-stream
+    // counter, so Current and Consistent report the same position and catch-up is marked as
+    // complete once AddSerializableEventsAsync has been invoked with finishedCatchUp=true.
+    public Task<ProjectionHeadStatus> GetProjectionHeadStatusAsync() =>
+        Task.FromResult(new ProjectionHeadStatus(
+            ProjectorName: _projectorName,
+            ProjectorVersion: _projectorVersion,
+            Current: new ProjectionPosition(_version, _lastSortableUniqueId),
+            Consistent: new ProjectionPosition(_version, _lastSortableUniqueId),
+            CatchUp: new ProjectionCatchUpStatus(
+                IsInProgress: !_isCatchedUp,
+                CurrentSortableUniqueId: _lastSortableUniqueId,
+                TargetSortableUniqueId: null,
+                PendingStreamEventCount: 0)));
+
     public Task<ResultBox<MultiProjectionState>> GetStateAsync(bool canGetUnsafeState = true)
     {
         byte[] stateJsonUtf8 = EnsureInstance().SerializeStateUtf8();
@@ -392,6 +407,18 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
             return ResultBox.Error<bool>(ex);
         }
     }
+
+    // The native host supports offloading the heavy payload to blob storage when the snapshot
+    // exceeds offloadThresholdBytes so the envelope JSON stays small. The WASM host already
+    // compresses the projector state inline, so persistence and in-memory snapshots share the
+    // same serialization path here. If WASM snapshots grow large enough to warrant blob offload,
+    // revisit this in line with PostgresMultiProjectionStateStore's streaming writer.
+    public Task<ResultBox<bool>> WriteSnapshotForPersistenceToStreamAsync(
+        Stream target,
+        bool canGetUnsafeState,
+        int offloadThresholdBytes,
+        CancellationToken cancellationToken) =>
+        WriteSnapshotToStreamAsync(target, canGetUnsafeState, cancellationToken);
 
     public async Task<ResultBox<bool>> RestoreSnapshotFromStreamAsync(Stream source, CancellationToken cancellationToken)
     {

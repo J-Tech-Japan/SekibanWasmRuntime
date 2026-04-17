@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using SekibanDcbDecider.Wasm.MaterializedView;
 
 namespace SekibanDcbDecider.Wasm;
 
@@ -146,6 +147,59 @@ public static class WasmExports
         WasmDispatcher.RestoreState(instance, ReadString(statePtr, stateLen));
     }
 
+    // --- Materialized view exports ---
+
+    [UnmanagedCallersOnly(EntryPoint = "mv_metadata")]
+    public static long MvMetadata() => WriteString(WasmMvRegistry.Metadata());
+
+    [UnmanagedCallersOnly(EntryPoint = "mv_initialize")]
+    public static long MvInitialize(
+        int viewNamePtr,
+        int viewNameLen,
+        int viewVersion,
+        int tableBindingsPtr,
+        int tableBindingsLen)
+    {
+        string viewName = ReadString(viewNamePtr, viewNameLen);
+        string bindingsJson = ReadString(tableBindingsPtr, tableBindingsLen);
+        try
+        {
+            return WriteString(WasmMvRegistry.Initialize(viewName, viewVersion, bindingsJson));
+        }
+        catch (Exception ex)
+        {
+            return WriteString($"{{\"error\":{EscapeJsonString(ex.Message)}}}");
+        }
+    }
+
+    [UnmanagedCallersOnly(EntryPoint = "mv_apply_event")]
+    public static long MvApplyEvent(
+        int viewNamePtr,
+        int viewNameLen,
+        int viewVersion,
+        int tableBindingsPtr,
+        int tableBindingsLen,
+        int serializableEventPtr,
+        int serializableEventLen)
+    {
+        string viewName = ReadString(viewNamePtr, viewNameLen);
+        string bindingsJson = ReadString(tableBindingsPtr, tableBindingsLen);
+        string eventJson = ReadString(serializableEventPtr, serializableEventLen);
+        try
+        {
+            return WriteString(WasmMvRegistry.ApplyEvent(
+                viewName,
+                viewVersion,
+                bindingsJson,
+                eventJson,
+                HostBackedMvQueryPort.Instance));
+        }
+        catch (Exception ex)
+        {
+            return WriteString($"{{\"error\":{EscapeJsonString(ex.Message)}}}");
+        }
+    }
+
     private static WasmDispatcher.ProjectionInstanceState? GetInstance(int instanceId)
     {
         lock (Gate)
@@ -164,6 +218,40 @@ public static class WasmExports
         }
 
         return System.Text.Encoding.UTF8.GetString(new ReadOnlySpan<byte>((void*)ptr, len));
+    }
+
+    // AOT-friendly JSON string literal producer. Used by error-return paths that must be self
+    // contained and not rely on reflection-based JsonSerializer.
+    private static string EscapeJsonString(string value)
+    {
+        var sb = new System.Text.StringBuilder(value.Length + 2);
+        sb.Append('"');
+        foreach (char c in value)
+        {
+            switch (c)
+            {
+                case '\\': sb.Append("\\\\"); break;
+                case '"': sb.Append("\\\""); break;
+                case '\b': sb.Append("\\b"); break;
+                case '\f': sb.Append("\\f"); break;
+                case '\n': sb.Append("\\n"); break;
+                case '\r': sb.Append("\\r"); break;
+                case '\t': sb.Append("\\t"); break;
+                default:
+                    if (c < 0x20)
+                    {
+                        sb.Append("\\u");
+                        sb.Append(((int)c).ToString("x4", System.Globalization.CultureInfo.InvariantCulture));
+                    }
+                    else
+                    {
+                        sb.Append(c);
+                    }
+                    break;
+            }
+        }
+        sb.Append('"');
+        return sb.ToString();
     }
 
     private static unsafe long WriteString(string value)

@@ -139,6 +139,20 @@ namespace SekibanDcbDecider.Wasm;
 [JsonSerializable(typeof(ClassRoomProjectorSnapshot))]
 [JsonSerializable(typeof(WeatherForecastTagStateSnapshot))]
 [JsonSerializable(typeof(List<WeatherForecastTagStateSnapshot>))]
+// Materialized view DTOs crossing the WASM boundary.
+[JsonSerializable(typeof(SekibanDcbDecider.Wasm.MaterializedView.MvParam))]
+[JsonSerializable(typeof(SekibanDcbDecider.Wasm.MaterializedView.MvSqlStatementDto))]
+[JsonSerializable(typeof(SekibanDcbDecider.Wasm.MaterializedView.MvStatementBatchDto))]
+[JsonSerializable(typeof(SekibanDcbDecider.Wasm.MaterializedView.MvTableBindingEntry))]
+[JsonSerializable(typeof(SekibanDcbDecider.Wasm.MaterializedView.MvTableBindingsDto))]
+[JsonSerializable(typeof(SekibanDcbDecider.Wasm.MaterializedView.MvSerializableEventDto))]
+[JsonSerializable(typeof(SekibanDcbDecider.Wasm.MaterializedView.WasmMvMetadata))]
+[JsonSerializable(typeof(SekibanDcbDecider.Wasm.MaterializedView.MvQueryRowDto))]
+[JsonSerializable(typeof(SekibanDcbDecider.Wasm.MaterializedView.MvQueryResultDto))]
+[JsonSerializable(typeof(List<SekibanDcbDecider.Wasm.MaterializedView.WasmMvMetadata>))]
+[JsonSerializable(typeof(List<SekibanDcbDecider.Wasm.MaterializedView.MvParam>))]
+[JsonSerializable(typeof(List<SekibanDcbDecider.Wasm.MaterializedView.MvSqlStatementDto>))]
+[JsonSerializable(typeof(List<SekibanDcbDecider.Wasm.MaterializedView.MvQueryRowDto>))]
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     PropertyNameCaseInsensitive = true)]

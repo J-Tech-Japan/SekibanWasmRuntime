@@ -1,11 +1,14 @@
 using System.Security.Claims;
 using System.Text.Encodings.Web;
+using Dapper;
 using Dcb.EventSource;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.MaterializedView;
+using Sekiban.Dcb.MaterializedView.Postgres;
 using Sekiban.Dcb.WasmRuntime.Remote;
 using SekibanDcbDecider.ClientApi.Endpoints;
 
@@ -41,6 +44,21 @@ builder.Services.AddScoped<ISekibanExecutor>(sp =>
         sp.GetRequiredService<ILogger<RemoteSekibanExecutor>>(),
         sp.GetRequiredService<ILoggerFactory>()));
 
+// Read-only MV query wiring. When the `DcbMaterializedViewPostgres` connection string is
+// configured (set by Aspire in the AppHost), register the Sekiban MV registry store + storage
+// info so the endpoints can translate logical table names → physical names deterministically.
+// No catch-up / grain runtime is hosted here — that is the wasm runtime host's job.
+var mvConnectionString = builder.Configuration.GetConnectionString("DcbMaterializedViewPostgres");
+if (!string.IsNullOrWhiteSpace(mvConnectionString))
+{
+    DefaultTypeMap.MatchNamesWithUnderscores = true;
+    builder.Services.AddSekibanDcbMaterializedView();
+    builder.Services.AddSekibanDcbMaterializedViewPostgres(
+        builder.Configuration,
+        connectionStringName: "DcbMaterializedViewPostgres",
+        registerHostedWorker: false);
+}
+
 var app = builder.Build();
 
 app.UseAuthentication();
@@ -59,6 +77,11 @@ apiRoute.MapReservationEndpoints();
 apiRoute.MapApprovalEndpoints();
 apiRoute.MapUserDirectoryEndpoints();
 apiRoute.MapTestDataEndpoints();
+
+if (app.Services.GetService<IMvRegistryStore>() is not null)
+{
+    apiRoute.MapMaterializedViewEndpoints();
+}
 
 app.Run();
 
