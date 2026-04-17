@@ -183,68 +183,17 @@ builder.Services.AddOpenApi();
 // grain takes over when events arrive on `EventStreamProvider`. The two paths coordinate via
 // MvRegistryStore positions so no double-apply occurs.
 // ----------------------------------------------------------------------------
-var mvConnectionString = builder.Configuration.GetConnectionString("DcbMaterializedViewPostgres");
-var materializedViewEnabled = manifest.MaterializedViews.Count > 0 && !string.IsNullOrWhiteSpace(mvConnectionString);
+WasmMaterializedViewExtensions.ValidateModulePathAlignment(
+    manifest.DefaultModulePath,
+    manifest.MaterializedViews.Select(mv => (mv.ViewName, mv.ViewVersion, (string?)mv.ModulePath)));
 
-if (materializedViewEnabled)
-{
-    DefaultTypeMap.MatchNamesWithUnderscores = true;
-
-    // All MV projectors share a single Wasmtime instance backed by the manifest's default
-    // module. Reject per-view ModulePath overrides until the executor learns to route MV calls
-    // to view-specific modules, so misconfiguration is surfaced at startup rather than
-    // silently ignored.
-    foreach (var mv in manifest.MaterializedViews)
-    {
-        if (!string.IsNullOrWhiteSpace(mv.ModulePath) &&
-            !string.Equals(mv.ModulePath, manifest.DefaultModulePath, StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException(
-                $"Materialized view '{mv.ViewName}/{mv.ViewVersion}' declares ModulePath " +
-                $"'{mv.ModulePath}', but the MV Wasmtime executor currently uses a single shared " +
-                $"module ('{manifest.DefaultModulePath}'). Either omit the per-view ModulePath or " +
-                "extend WasmtimeMaterializedViewExecutor to support per-view modules.");
-        }
-    }
-
-    builder.Services.AddSingleton(new WasmMaterializedViewRuntimeOptions
-    {
-        ModulePath = manifest.DefaultModulePath
-    });
-    builder.Services.AddSingleton<IWasmMaterializedViewExecutor, WasmtimeMaterializedViewExecutor>();
-
-    builder.Services.AddSekibanDcbMaterializedView(options =>
-    {
-        options.BatchSize = 100;
-        options.PollInterval = TimeSpan.FromSeconds(1);
-    });
-    // registerHostedWorker:true enables the MvCatchUpWorker BackgroundService that polls the
-    // event store and drives IMvExecutor.CatchUpOnceAsync outside the Orleans grain. The grain
-    // still handles stream-driven apply when events are published to the Orleans stream, but
-    // the worker guarantees progress even when the Orleans stream has no publisher wired up
-    // (which is the current state in the WASM runtime host — commits go through the WASM
-    // serialized commit path, not through IEventPublisher → OrleansStream). Both paths
-    // coordinate via MvRegistryStore positions so no double-apply occurs.
-    builder.Services.AddSekibanDcbMaterializedViewPostgres(
-        builder.Configuration,
-        connectionStringName: "DcbMaterializedViewPostgres",
-        registerHostedWorker: true);
-    builder.Services.AddSekibanDcbMaterializedViewOrleans();
-
-    // Replace Sekiban's default NativeMvApplyHostFactory (which looks up CLR
-    // IMaterializedViewProjector instances) with WasmMvApplyHostFactory. In WASM mode the
-    // projector lives inside the .wasm module and there are no CLR projectors to enumerate;
-    // the factory hands out fresh WasmMvApplyHost per (viewName, viewVersion) from the
-    // manifest, and each host delegates init/apply through IWasmMaterializedViewExecutor to
-    // the WASM exports.
-    var wasmMvRegistrations = manifest.MaterializedViews
-        .Select(mv => new WasmMvApplyHostRegistration(mv.ViewName, mv.ViewVersion, mv.LogicalTables.ToList()))
-        .ToList();
-    builder.Services.Replace(ServiceDescriptor.Singleton<IMvApplyHostFactory>(sp =>
-        new WasmMvApplyHostFactory(
-            sp.GetRequiredService<IWasmMaterializedViewExecutor>(),
-            wasmMvRegistrations)));
-}
+var wasmMvRegistrations = manifest.MaterializedViews
+    .Select(mv => new WasmMvApplyHostRegistration(mv.ViewName, mv.ViewVersion, mv.LogicalTables.ToList()))
+    .ToList();
+var materializedViewEnabled = builder.Services.AddSekibanWasmMaterializedViewRuntime(
+    builder.Configuration,
+    manifest.DefaultModulePath,
+    wasmMvRegistrations);
 
 var app = builder.Build();
 if (storageConfiguration.RequiresRelationalMigration)
@@ -253,6 +202,12 @@ if (storageConfiguration.RequiresRelationalMigration)
 }
 
 app.MapOpenApi();
+
+if (materializedViewEnabled)
+{
+    app.MapSekibanWasmMaterializedViewEndpoints();
+}
+
 app.MapGet("/", () => Results.Ok(new
 {
     runtime = "Sekiban WASM Runtime Host",

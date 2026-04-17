@@ -923,6 +923,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "sekiban-mv"
+version = "0.1.0"
+dependencies = [
+ "sekiban-wasm",
+ "serde",
+ "serde_json",
+ "uuid",
+]
+
+[[package]]
 name = "sekiban-wasm"
 version = "0.1.0"
 dependencies = [

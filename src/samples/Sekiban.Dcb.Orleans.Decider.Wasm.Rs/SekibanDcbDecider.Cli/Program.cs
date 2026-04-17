@@ -1,6 +1,8 @@
 using System.CommandLine;
 using System.CommandLine.Parsing;
+using System.Net.Http.Json;
 using System.Reflection;
+using System.Text.Json;
 using Dcb.EventSource;
 using Microsoft.Azure.Cosmos;
 using Microsoft.EntityFrameworkCore;
@@ -503,6 +505,134 @@ profilesCommand.SetAction((parseResult, cancellationToken) =>
     return Task.CompletedTask;
 });
 
+// seed-mv — populate the materialized view with one classroom + one student + one enrollment via
+// the Rust ClientApi. Lets us validate the Rust MV WASM + host pipeline end-to-end without
+// digging into psql.
+var clientApiUrlOption = new Option<string>("--client-api-url")
+{
+    Description = "Rust ClientApi base URL (defaults to CLIENT_API_URL env var or http://127.0.0.1:6198)",
+    DefaultValueFactory = _ => Environment.GetEnvironmentVariable("CLIENT_API_URL")
+        ?? "http://127.0.0.1:6198"
+};
+var wasmServerUrlOption = new Option<string>("--wasmserver-url")
+{
+    Description = "wasmserver base URL (defaults to WASM_SERVER_URL env var or http://127.0.0.1:6199)",
+    DefaultValueFactory = _ => Environment.GetEnvironmentVariable("WASM_SERVER_URL")
+        ?? "http://127.0.0.1:6199"
+};
+var seedClassRoomNameOption = new Option<string>("--classroom-name")
+{
+    Description = "Classroom name",
+    DefaultValueFactory = _ => $"Rust MV Class {DateTime.UtcNow:HH:mm:ss}"
+};
+var seedStudentNameOption = new Option<string>("--student-name")
+{
+    Description = "Student name",
+    DefaultValueFactory = _ => $"Rust MV Student {DateTime.UtcNow:HH:mm:ss}"
+};
+var seedMaxStudentsOption = new Option<int>("--max-students")
+{
+    Description = "Max students per classroom",
+    DefaultValueFactory = _ => 10
+};
+var seedMaxClassCountOption = new Option<int>("--max-class-count")
+{
+    Description = "Max class count per student",
+    DefaultValueFactory = _ => 5
+};
+var seedMvCommand = new Command(
+    "seed-mv",
+    "Create one classroom + one student + one enrollment via Rust ClientApi, then verify the materialized view picked it up.")
+{
+    clientApiUrlOption,
+    wasmServerUrlOption,
+    seedClassRoomNameOption,
+    seedStudentNameOption,
+    seedMaxStudentsOption,
+    seedMaxClassCountOption
+};
+seedMvCommand.SetAction(async (parseResult, cancellationToken) =>
+{
+    var clientApiUrl = parseResult.GetValue(clientApiUrlOption)!.TrimEnd('/');
+    var wasmServerUrl = parseResult.GetValue(wasmServerUrlOption)!.TrimEnd('/');
+    var classRoomName = parseResult.GetValue(seedClassRoomNameOption)!;
+    var studentName = parseResult.GetValue(seedStudentNameOption)!;
+    var maxStudents = parseResult.GetValue(seedMaxStudentsOption);
+    var maxClassCount = parseResult.GetValue(seedMaxClassCountOption);
+
+    using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+
+    Console.WriteLine($"[seed-mv] ClientApi = {clientApiUrl}");
+    Console.WriteLine($"[seed-mv] wasmserver = {wasmServerUrl}");
+
+    async Task<JsonElement> PostJsonAsync(string url, object body)
+    {
+        var response = await http.PostAsJsonAsync(url, body, cancellationToken);
+        var text = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException($"POST {url} -> {(int)response.StatusCode} {text}");
+        }
+        return JsonSerializer.Deserialize<JsonElement>(text);
+    }
+
+    var classRoomId = Guid.NewGuid();
+    var studentId = Guid.NewGuid();
+
+    Console.WriteLine($"[seed-mv] creating classroom {classRoomId} name='{classRoomName}'");
+    _ = await PostJsonAsync($"{clientApiUrl}/api/classrooms", new
+    {
+        classRoomId,
+        name = classRoomName,
+        maxStudents
+    });
+
+    Console.WriteLine($"[seed-mv] creating student {studentId} name='{studentName}'");
+    _ = await PostJsonAsync($"{clientApiUrl}/api/students", new
+    {
+        studentId,
+        name = studentName,
+        maxClassCount
+    });
+
+    Console.WriteLine($"[seed-mv] enrolling student -> classroom");
+    var enrollResp = await PostJsonAsync($"{clientApiUrl}/api/enrollments/add", new
+    {
+        classRoomId,
+        studentId
+    });
+    Console.WriteLine($"[seed-mv] enroll response: {enrollResp}");
+
+    Console.WriteLine("[seed-mv] polling /api/mv/enrollments...");
+    var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
+    while (DateTime.UtcNow < deadline)
+    {
+        try
+        {
+            var mvResp = await http.GetAsync($"{wasmServerUrl}/api/mv/enrollments?studentId={studentId}", cancellationToken);
+            var mvText = await mvResp.Content.ReadAsStringAsync(cancellationToken);
+            if (mvResp.IsSuccessStatusCode)
+            {
+                var rows = JsonSerializer.Deserialize<JsonElement>(mvText);
+                if (rows.ValueKind == JsonValueKind.Array && rows.GetArrayLength() > 0)
+                {
+                    Console.WriteLine($"[seed-mv] OK — MV has {rows.GetArrayLength()} enrollment row(s) for student.");
+                    Console.WriteLine(mvText);
+                    return 0;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[seed-mv] poll: {ex.Message}");
+        }
+        await Task.Delay(500, cancellationToken);
+    }
+
+    Console.WriteLine("[seed-mv] FAIL — MV did not pick up the enrollment within timeout.");
+    return 1;
+});
+
 rootCommand.Add(buildCommand);
 rootCommand.Add(listCommand);
 rootCommand.Add(statusCommand);
@@ -516,6 +646,7 @@ rootCommand.Add(cacheSyncCommand);
 rootCommand.Add(cacheStatsCommand);
 rootCommand.Add(cacheClearCommand);
 rootCommand.Add(profilesCommand);
+rootCommand.Add(seedMvCommand);
 
 var parseResult = rootCommand.Parse(args);
 return await parseResult.InvokeAsync();
