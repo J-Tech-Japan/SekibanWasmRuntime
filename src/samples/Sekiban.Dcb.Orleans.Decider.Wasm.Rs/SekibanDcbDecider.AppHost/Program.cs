@@ -137,7 +137,9 @@ clientApiBuilder = clientApiBuilder.WithHttpEndpoint(
 var clientApi = clientApiBuilder
     .WithEnvironment("RUST_LOG", "info")
     .WithReference(wasmServer)
-    .WaitFor(wasmServer);
+    .WithReference(dcbMaterializedViewPostgres, "DcbMaterializedViewPostgres")
+    .WaitFor(wasmServer)
+    .WaitFor(dcbMaterializedViewPostgres);
 
 var webFrontend = builder
     .AddProject<SekibanDcbDecider_Web>("webfrontend")

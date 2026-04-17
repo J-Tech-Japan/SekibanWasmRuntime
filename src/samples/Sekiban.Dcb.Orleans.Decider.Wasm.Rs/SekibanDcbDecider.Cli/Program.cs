@@ -603,13 +603,16 @@ seedMvCommand.SetAction(async (parseResult, cancellationToken) =>
     });
     Console.WriteLine($"[seed-mv] enroll response: {enrollResp}");
 
-    Console.WriteLine("[seed-mv] polling /api/mv/enrollments...");
+    // Read-side `/api/mv/*` lives on the Rust ClientApi (it talks to
+    // DcbMaterializedViewPostgres directly via sqlx). The wasmserver is intentionally generic
+    // and only runs WASM modules + applies the MV SQL it generates.
+    Console.WriteLine("[seed-mv] polling /api/mv/enrollments on ClientApi...");
     var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
     while (DateTime.UtcNow < deadline)
     {
         try
         {
-            var mvResp = await http.GetAsync($"{wasmServerUrl}/api/mv/enrollments?studentId={studentId}", cancellationToken);
+            var mvResp = await http.GetAsync($"{clientApiUrl}/api/mv/enrollments?student_id={studentId}", cancellationToken);
             var mvText = await mvResp.Content.ReadAsStringAsync(cancellationToken);
             if (mvResp.IsSuccessStatusCode)
             {

@@ -203,10 +203,10 @@ if (storageConfiguration.RequiresRelationalMigration)
 
 app.MapOpenApi();
 
-if (materializedViewEnabled)
-{
-    app.MapSekibanWasmMaterializedViewEndpoints();
-}
+// The WASM runtime host is intentionally generic: its only contract is (a) run WASM modules and
+// (b) expose the serialized Sekiban transport endpoints. Materialized view read APIs belong in
+// the caller-owned ClientApi (which can talk to the MV Postgres using whatever native driver
+// the host language prefers, e.g. sqlx / tokio-postgres on the Rust side).
 
 app.MapGet("/", () => Results.Ok(new
 {
