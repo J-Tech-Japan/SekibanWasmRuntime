@@ -1,4 +1,5 @@
 using ResultBoxes;
+using Sekiban.Dcb;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Orleans.Serialization;
@@ -110,6 +111,25 @@ public sealed class DirectSnapshotQueryCacheTests
 
         public Task<ResultBox<bool>> WriteSnapshotToStreamAsync(Stream target, bool canGetUnsafeState, CancellationToken cancellationToken) =>
             Task.FromResult(ResultBox.FromValue(true));
+
+        public Task<ResultBox<bool>> WriteSnapshotForPersistenceToStreamAsync(
+            Stream target,
+            bool canGetUnsafeState,
+            int offloadThresholdBytes,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(ResultBox.FromValue(true));
+
+        public Task<ProjectionHeadStatus> GetProjectionHeadStatusAsync() =>
+            Task.FromResult(new ProjectionHeadStatus(
+                ProjectorName: "stub",
+                ProjectorVersion: "1.0.0",
+                Current: new ProjectionPosition(0, null),
+                Consistent: new ProjectionPosition(0, null),
+                CatchUp: new ProjectionCatchUpStatus(
+                    IsInProgress: false,
+                    CurrentSortableUniqueId: null,
+                    TargetSortableUniqueId: null,
+                    PendingStreamEventCount: 0)));
 
         public Task<ResultBox<bool>> RestoreSnapshotFromStreamAsync(Stream source, CancellationToken cancellationToken) =>
             Task.FromResult(ResultBox.FromValue(true));

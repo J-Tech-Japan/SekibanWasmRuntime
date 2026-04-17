@@ -350,6 +350,17 @@ public class SerializedCommandEndpointsExecuteTests
 
         Task<ListQueryResult<TResult>> ISekibanExecutor.QueryAsync<TResult>(IListQueryCommon<TResult> queryCommon) =>
             throw new NotSupportedException();
+
+        Task<string> ISekibanExecutor.GetLatestSortableUniqueIdAsync() =>
+            throw new NotSupportedException();
+
+        Task<ProjectionHeadStatus> ISekibanExecutor.GetProjectionHeadStatusAsync(
+            string projectorName,
+            string? expectedProjectorVersion) =>
+            throw new NotSupportedException();
+
+        Task<EventStoreHeadStatus> ISekibanExecutor.GetEventStoreHeadStatusAsync(bool includeTotalEventCount) =>
+            throw new NotSupportedException();
     }
 
     private sealed class StubPersistedEventObserver : IPersistedSerializableEventObserver
