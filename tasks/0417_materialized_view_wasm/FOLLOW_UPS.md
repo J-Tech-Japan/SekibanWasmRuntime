@@ -30,10 +30,17 @@ Prefer option 1 — no Sekiban change, bounded to this host.
 
 ## 2. Upstream abstraction: `IMvApplyHost` (Step 2)
 
-Documented in [`SEKIBAN_ABSTRACTION_PROPOSAL.md`](SEKIBAN_ABSTRACTION_PROPOSAL.md).
+✅ Filed as [Sekiban#1029](https://github.com/J-Tech-Japan/Sekiban/issues/1029)
+(2026-04-17). Timed to land alongside the Unsafe Window MV v1 redesign in
+[Sekiban#1028](https://github.com/J-Tech-Japan/Sekiban/issues/1028) /
+[Sekiban PR#1027](https://github.com/J-Tech-Japan/Sekiban/pull/1027) so the
+new v1 contract carries typed `MvParam`/`MvSqlStatementDto` DTOs and an
+`IMvApplyHost` seam from day one, rather than being retrofitted later.
+
+Details: [`SEKIBAN_ABSTRACTION_PROPOSAL.md`](SEKIBAN_ABSTRACTION_PROPOSAL.md).
 Step 1 uses a shim projector, which works but requires awkward payload
-unwrapping and forces the WASM side to maintain a parallel DTO set. A proper
-Native/WASM split in Sekiban core removes both wrinkles.
+unwrapping and forces the WASM side to maintain a parallel DTO set. Once
+Sekiban#1029 merges, Step 3 can retire the shim here.
 
 ## 3. `mv_host_query_rows` is implemented but unexercised
 

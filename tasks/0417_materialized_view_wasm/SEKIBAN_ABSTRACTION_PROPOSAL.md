@@ -4,9 +4,19 @@ Parallels the existing `IProjectionActorHost` pattern used by MultiProjection
 to let Native and WASM plug in via DI, but applied to the MaterializedView
 grain path.
 
-This document is the starting brief for a Sekiban-side Issue / PR. It belongs
-in this SekibanWasmRuntime repo (not in Sekiban) until the proposal is
-submitted — then link here from the Sekiban issue body.
+**Status**: filed upstream as [Sekiban#1029](https://github.com/J-Tech-Japan/Sekiban/issues/1029)
+(2026-04-17), timed so it can land together with the Unsafe Window MV v1
+design in [Sekiban#1028](https://github.com/J-Tech-Japan/Sekiban/issues/1028)
+/ [Sekiban PR#1027](https://github.com/J-Tech-Japan/Sekiban/pull/1027).
+The filed issue covers the same two topics as this document:
+
+1. Typed SQL parameter DTO (`MvParam` / `MvSqlStatementDto`) to replace
+   `MvSqlStatement.Parameters = object?` anonymous types.
+2. Runtime-swappable apply host abstraction (`IMvApplyHost` /
+   `IMvApplyHostFactory` / `IMvApplyQueryPort`).
+
+This document remains here as the long-form design brief that the upstream
+issue links back to.
 
 ## Why
 
