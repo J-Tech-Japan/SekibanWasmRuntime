@@ -10,6 +10,15 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.3" />
     <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
+    <!-- Read-only access to the materialized view DB. ClientApi does NOT host the MV runtime
+         itself (that lives in Sekiban.Dcb.WasmRuntime.Host together with the Orleans silo);
+         it just queries the already-projected tables via Dapper. MV registry package is pulled
+         in so we can translate logical table names → physical names deterministically using
+         the same code the silo side uses. -->
+    <PackageReference Include="Dapper" Version="2.1.66" />
+    <PackageReference Include="Npgsql" Version="10.0.2" />
+    <PackageReference Include="Sekiban.Dcb.MaterializedView" Version="10.2.0" />
+    <PackageReference Include="Sekiban.Dcb.MaterializedView.Postgres" Version="10.2.0" />
   </ItemGroup>
 
   <ItemGroup>

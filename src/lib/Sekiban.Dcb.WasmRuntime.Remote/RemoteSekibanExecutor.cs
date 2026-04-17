@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Sekiban.Dcb;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Events;
@@ -46,8 +47,10 @@ public sealed class RemoteSekibanExecutor(
             serializableState.Version,
             serializableState.LastSortedUniqueId);
 
+        // Sekiban 10.2.0: prefer ActualPayloadName via ResolvedPayloadName so discriminated-
+        // union payloads (e.g. ClassRoomProjector) deserialize to their concrete CLR type.
         var payloadResult = _domainTypes.TagStatePayloadTypes.DeserializePayload(
-            serializableState.TagPayloadName,
+            serializableState.ResolvedPayloadName,
             serializableState.Payload);
         if (!payloadResult.IsSuccess)
         {
@@ -158,6 +161,24 @@ public sealed class RemoteSekibanExecutor(
             command.GetType().Name,
             context => TCommand.HandleAsync(command, context),
             cancellationToken);
+
+    // The WASM runtime host does not currently expose executor-level head/status endpoints
+    // through its HTTP surface. Commands and queries are the only paths exercised by the sample,
+    // so these methods throw until a matching endpoint is added to Sekiban.Dcb.WasmRuntime.Host
+    // (e.g. a passthrough to IEventStore.GetLatestSortableUniqueIdAsync on the Postgres store).
+    public Task<string> GetLatestSortableUniqueIdAsync() =>
+        throw new NotSupportedException(
+            "RemoteSekibanExecutor does not expose GetLatestSortableUniqueIdAsync. Query the Postgres event store directly or add a dedicated endpoint to Sekiban.Dcb.WasmRuntime.Host.");
+
+    public Task<ProjectionHeadStatus> GetProjectionHeadStatusAsync(
+        string projectorName,
+        string? expectedProjectorVersion = null) =>
+        throw new NotSupportedException(
+            "RemoteSekibanExecutor does not expose GetProjectionHeadStatusAsync. Use /api/sekiban/projections/{projectorName}/status on the WASM runtime host directly.");
+
+    public Task<EventStoreHeadStatus> GetEventStoreHeadStatusAsync(bool includeTotalEventCount = false) =>
+        throw new NotSupportedException(
+            "RemoteSekibanExecutor does not expose GetEventStoreHeadStatusAsync. Query the Postgres event store directly if this data is needed.");
 
     private async Task<ExecutionResult> ExecuteCommandCoreAsync(
         ICommand command,

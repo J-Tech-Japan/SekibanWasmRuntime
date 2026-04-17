@@ -12,6 +12,14 @@ public sealed class SekibanRuntimeManifest
     public Dictionary<string, string> QueryProjectors { get; init; } =
         new(StringComparer.Ordinal);
 
+    /// <summary>
+    ///     Materialized view projectors exposed by the WASM module through the `mv_metadata`,
+    ///     `mv_initialize`, `mv_apply_event` exports. When empty, the MV runtime is not
+    ///     activated on the host even if the Sekiban.Dcb.MaterializedView.Postgres connection
+    ///     string is configured.
+    /// </summary>
+    public List<SekibanRuntimeMaterializedView> MaterializedViews { get; init; } = [];
+
     public static SekibanRuntimeManifest Load(
         IConfiguration configuration,
         string manifestPath)
@@ -113,7 +121,8 @@ public sealed class SekibanRuntimeManifest
             QueryAssemblyVersion = QueryAssemblyVersion,
             EventTypes = [.. EventTypes],
             QueryProjectors = new Dictionary<string, string>(QueryProjectors, StringComparer.Ordinal),
-            Projectors = Projectors.Select(projector => projector.ResolvePath(baseDirectory)).ToList()
+            Projectors = Projectors.Select(projector => projector.ResolvePath(baseDirectory)).ToList(),
+            MaterializedViews = MaterializedViews.Select(mv => mv.ResolvePath(baseDirectory)).ToList()
         };
     }
 
@@ -182,6 +191,38 @@ public sealed class SekibanRuntimeManifest
 
         return Path.GetFullPath(Path.Combine(baseDirectory, path));
     }
+}
+
+public sealed class SekibanRuntimeMaterializedView
+{
+    /// <summary>
+    ///     WASM module that exposes this materialized view. When omitted, the host falls back to
+    ///     the manifest's <see cref="SekibanRuntimeManifest.DefaultModulePath"/>.
+    /// </summary>
+    public string? ModulePath { get; init; }
+
+    public string ViewName { get; init; } = string.Empty;
+    public int ViewVersion { get; init; } = 1;
+
+    /// <summary>
+    ///     Logical table names the projector declares. These are mirrored in the WASM module via
+    ///     <c>IWasmMvProjector.LogicalTables</c> and are used by the host-side registry to compute
+    ///     physical table names.
+    /// </summary>
+    public List<string> LogicalTables { get; init; } = [];
+
+    public SekibanRuntimeMaterializedView ResolvePath(string baseDirectory) =>
+        new()
+        {
+            ModulePath = ModulePath is null
+                ? null
+                : Path.IsPathRooted(ModulePath)
+                    ? ModulePath
+                    : Path.GetFullPath(Path.Combine(baseDirectory, ModulePath)),
+            ViewName = ViewName,
+            ViewVersion = ViewVersion,
+            LogicalTables = [.. LogicalTables]
+        };
 }
 
 public sealed class SekibanRuntimeProjector

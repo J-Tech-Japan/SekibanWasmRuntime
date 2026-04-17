@@ -15,6 +15,13 @@ var postgresServer = builder
     .AddPostgres("dcbOrleansPostgres")
     .WithDbGate();
 var wasmPostgres = postgresServer.AddDatabase("SekibanCSharpDb");
+// Dedicated database for the Sekiban.Dcb.MaterializedView runtime. The MV runtime
+// (MaterializedViewGrain + PostgresMvExecutor + MvCatchUpWorker) runs inside `wasmserver`,
+// reads events from the event-store database above, and writes projected rows here. ClientApi
+// connects to this database read-only for `/api/mv/*` endpoints and does not perform catch-up.
+// Keeping the MV schema separate from the event store matches the Sekiban.Dcb.Orleans.Decider
+// template pattern.
+var mvPostgres = postgresServer.AddDatabase("SekibanCSharpMvDb");
 
 var csharpWasmModulePath = ResolveCSharpWasmModulePath();
 var csharpManifestPath = ResolveCSharpManifestPath(csharpWasmModulePath);
@@ -31,6 +38,11 @@ var wasmServerBuilder = builder
     .WithEnvironment("SEKIBAN_WASMTIME_STATIC_MEMORY_MAX_MB", "192")
     .WithReference(wasmPostgres, "SekibanDcb")
     .WaitFor(wasmPostgres)
+    // MV runtime (grain + catch-up) lives in the wasm runtime host. Wire the MV Postgres DB so
+    // `MaterializedViewGrain` + `PostgresMvExecutor` can initialize schemas, track position, and
+    // project into the MV tables.
+    .WithReference(mvPostgres, "DcbMaterializedViewPostgres")
+    .WaitFor(mvPostgres)
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
 
 wasmServerBuilder = ApplyTagStateDiagnostics(
@@ -60,7 +72,12 @@ var clientApiPort = ResolveConfiguredPort(5198, "E2E_CLIENT_API_PORT");
 var clientApiBuilder = builder
     .AddProject<SekibanDcbDecider_ClientApi>("clientapi")
     .WithReference(wasmServer)
-    .WaitFor(wasmServer);
+    .WaitFor(wasmServer)
+    // ClientApi also needs direct read access to the MV database so `/api/mv/*` endpoints can
+    // run SELECTs against the projected tables. The MV catch-up itself runs inside the wasm
+    // runtime host (wasmserver) via its `MaterializedViewGrain`, not here.
+    .WithReference(mvPostgres, "DcbMaterializedViewPostgres")
+    .WaitFor(mvPostgres);
 
 clientApiBuilder = clientApiBuilder
     .WithEndpoint("http", endpoint =>

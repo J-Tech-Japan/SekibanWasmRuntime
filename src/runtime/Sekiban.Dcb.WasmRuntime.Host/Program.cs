@@ -27,9 +27,15 @@ using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Sqlite;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sekiban.Dcb.WasmRuntime;
 using Sekiban.Dcb.WasmRuntime.Host;
+using Sekiban.Dcb.WasmRuntime.Host.MaterializedView;
 using Sekiban.Dcb.WasmRuntime.Wasmtime;
+using Sekiban.Dcb.MaterializedView;
+using Sekiban.Dcb.MaterializedView.Postgres;
+using Sekiban.Dcb.MaterializedView.Orleans;
+using Dapper;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -158,6 +164,87 @@ builder.Services.AddWasmTagStateRuntime(options =>
 });
 
 builder.Services.AddOpenApi();
+
+// ----------------------------------------------------------------------------
+// Materialized view runtime (opt-in).
+// When (a) the manifest declares at least one MV and (b) the
+// `DcbMaterializedViewPostgres` connection string is configured, wire:
+//   - Sekiban.Dcb.MaterializedView (base + options)
+//   - Sekiban.Dcb.MaterializedView.Postgres (event-store-reading catch-up executor + registry
+//     store, WITH the hosted MvCatchUpWorker enabled — see registerHostedWorker:true below).
+//   - Sekiban.Dcb.MaterializedView.Orleans (MaterializedViewGrain activation + stream
+//     subscription — receives events if any publisher pushes to the Orleans stream).
+//   - WasmtimeMaterializedViewExecutor + one WasmBackedMaterializedViewProjector per manifest
+//     entry. The shim implements IMaterializedViewProjector so the existing
+//     `MaterializedViewGrain` + `PostgresMvExecutor` treat it like a CLR projector.
+//
+// Catch-up in this wiring is driven by BOTH paths: the Postgres hosted worker polls the event
+// store (guaranteeing progress even without an Orleans event publisher), while the Orleans
+// grain takes over when events arrive on `EventStreamProvider`. The two paths coordinate via
+// MvRegistryStore positions so no double-apply occurs.
+// ----------------------------------------------------------------------------
+var mvConnectionString = builder.Configuration.GetConnectionString("DcbMaterializedViewPostgres");
+var materializedViewEnabled = manifest.MaterializedViews.Count > 0 && !string.IsNullOrWhiteSpace(mvConnectionString);
+
+if (materializedViewEnabled)
+{
+    DefaultTypeMap.MatchNamesWithUnderscores = true;
+
+    // All MV projectors share a single Wasmtime instance backed by the manifest's default
+    // module. Reject per-view ModulePath overrides until the executor learns to route MV calls
+    // to view-specific modules, so misconfiguration is surfaced at startup rather than
+    // silently ignored.
+    foreach (var mv in manifest.MaterializedViews)
+    {
+        if (!string.IsNullOrWhiteSpace(mv.ModulePath) &&
+            !string.Equals(mv.ModulePath, manifest.DefaultModulePath, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Materialized view '{mv.ViewName}/{mv.ViewVersion}' declares ModulePath " +
+                $"'{mv.ModulePath}', but the MV Wasmtime executor currently uses a single shared " +
+                $"module ('{manifest.DefaultModulePath}'). Either omit the per-view ModulePath or " +
+                "extend WasmtimeMaterializedViewExecutor to support per-view modules.");
+        }
+    }
+
+    builder.Services.AddSingleton(new WasmMaterializedViewRuntimeOptions
+    {
+        ModulePath = manifest.DefaultModulePath
+    });
+    builder.Services.AddSingleton<IWasmMaterializedViewExecutor, WasmtimeMaterializedViewExecutor>();
+
+    builder.Services.AddSekibanDcbMaterializedView(options =>
+    {
+        options.BatchSize = 100;
+        options.PollInterval = TimeSpan.FromSeconds(1);
+    });
+    // registerHostedWorker:true enables the MvCatchUpWorker BackgroundService that polls the
+    // event store and drives IMvExecutor.CatchUpOnceAsync outside the Orleans grain. The grain
+    // still handles stream-driven apply when events are published to the Orleans stream, but
+    // the worker guarantees progress even when the Orleans stream has no publisher wired up
+    // (which is the current state in the WASM runtime host — commits go through the WASM
+    // serialized commit path, not through IEventPublisher → OrleansStream). Both paths
+    // coordinate via MvRegistryStore positions so no double-apply occurs.
+    builder.Services.AddSekibanDcbMaterializedViewPostgres(
+        builder.Configuration,
+        connectionStringName: "DcbMaterializedViewPostgres",
+        registerHostedWorker: true);
+    builder.Services.AddSekibanDcbMaterializedViewOrleans();
+
+    // Replace Sekiban's default NativeMvApplyHostFactory (which looks up CLR
+    // IMaterializedViewProjector instances) with WasmMvApplyHostFactory. In WASM mode the
+    // projector lives inside the .wasm module and there are no CLR projectors to enumerate;
+    // the factory hands out fresh WasmMvApplyHost per (viewName, viewVersion) from the
+    // manifest, and each host delegates init/apply through IWasmMaterializedViewExecutor to
+    // the WASM exports.
+    var wasmMvRegistrations = manifest.MaterializedViews
+        .Select(mv => new WasmMvApplyHostRegistration(mv.ViewName, mv.ViewVersion, mv.LogicalTables.ToList()))
+        .ToList();
+    builder.Services.Replace(ServiceDescriptor.Singleton<IMvApplyHostFactory>(sp =>
+        new WasmMvApplyHostFactory(
+            sp.GetRequiredService<IWasmMaterializedViewExecutor>(),
+            wasmMvRegistrations)));
+}
 
 var app = builder.Build();
 if (storageConfiguration.RequiresRelationalMigration)
@@ -316,6 +403,13 @@ app.MapPost("/api/sekiban/serialized/tag-state", async (HttpContext http, TagSta
         };
     }
 
+    // Projectors whose payload is a discriminated union (e.g. ClassRoomProjector returns either
+    // `AvailableClassRoomState` or `FilledClassRoomState`) cannot be represented by a single
+    // inferred type name. The WASM side serializes these as `ClassRoomProjectorSnapshot`
+    // (`stateKind` + `availableState` + `filledState`). Unwrap here so the payload that crosses
+    // the wire matches a real CLR tag-state type name the client can deserialize.
+    tagState = UnwrapDiscriminatedTagPayload(tagState);
+
     return Results.Ok(tagState);
     }
     catch (TimeoutException ex)
@@ -447,6 +541,57 @@ app.MapPost("/api/sekiban/serialized/list-query", async (
 });
 
 app.Run();
+
+// WASM projectors that return a discriminated-union payload serialize their state through a
+// wrapper JSON with a `stateKind` discriminator (e.g. ClassRoomProjectorSnapshot). Sekiban
+// 10.2.0 added `SerializableTagState.ActualPayloadName` specifically for this case — the
+// TagStateGrain / GeneralTagStateActor already sets it from `Payload.GetType().Name` on the
+// CLR side, but WASM projectors don't embed CLR type names, so we patch it in here. The
+// receiver resolves the payload through `ResolvedPayloadName` which prefers ActualPayloadName
+// over the manifest-inferred TagPayloadName.
+static SerializableTagState UnwrapDiscriminatedTagPayload(SerializableTagState tagState)
+{
+    if (tagState.Payload.Length == 0 ||
+        !string.Equals(tagState.TagProjector, "ClassRoomProjector", StringComparison.Ordinal))
+    {
+        return tagState;
+    }
+
+    try
+    {
+        using var document = System.Text.Json.JsonDocument.Parse(tagState.Payload);
+        if (!document.RootElement.TryGetProperty("stateKind", out var kindElement))
+        {
+            return tagState;
+        }
+
+        var kind = kindElement.GetString();
+        var (unwrappedProperty, typeName) = kind switch
+        {
+            "available" => ("availableState", "AvailableClassRoomState"),
+            "filled" => ("filledState", "FilledClassRoomState"),
+            _ => (string.Empty, string.Empty)
+        };
+
+        if (string.IsNullOrEmpty(unwrappedProperty) ||
+            !document.RootElement.TryGetProperty(unwrappedProperty, out var inner) ||
+            inner.ValueKind == System.Text.Json.JsonValueKind.Null)
+        {
+            return tagState;
+        }
+
+        var innerBytes = System.Text.Encoding.UTF8.GetBytes(inner.GetRawText());
+        return tagState with
+        {
+            Payload = innerBytes,
+            ActualPayloadName = typeName
+        };
+    }
+    catch
+    {
+        return tagState;
+    }
+}
 
 static async Task<IResult> ExecuteSerializedQueryAsync(
     HttpContext http,

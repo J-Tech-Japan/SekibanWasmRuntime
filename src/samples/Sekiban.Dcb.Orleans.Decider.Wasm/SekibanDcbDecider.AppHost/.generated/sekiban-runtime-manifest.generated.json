@@ -1,5 +1,5 @@
 {
-  "defaultModulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+  "defaultModulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
   "queryAssemblyVersion": "wasm",
   "eventTypes": [
     "ClassRoomCreated",
@@ -47,117 +47,117 @@
   "projectors": [
     {
       "projectorName": "StudentProjector",
-      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
       "projectorVersion": "1.0.0"
     },
     {
       "projectorName": "ClassRoomProjector",
-      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
       "projectorVersion": "1.0.0"
     },
     {
       "projectorName": "WeatherForecastProjector",
-      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
       "projectorVersion": "1.0.0"
     },
     {
       "projectorName": "ApprovalRequestProjector",
-      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
       "projectorVersion": "1.0.0"
     },
     {
       "projectorName": "EquipmentTypeProjector",
-      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
       "projectorVersion": "1.0.0"
     },
     {
       "projectorName": "ReservationProjector",
-      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
       "projectorVersion": "1.0.0"
     },
     {
       "projectorName": "RoomProjector",
-      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
       "projectorVersion": "1.0.0"
     },
     {
       "projectorName": "RoomDailyActivityProjector",
-      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
       "projectorVersion": "1.0.0"
     },
     {
       "projectorName": "RoomReservationsProjector",
-      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
       "projectorVersion": "1.0.0"
     },
     {
       "projectorName": "UserAccessProjector",
-      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
       "projectorVersion": "1.0.0"
     },
     {
       "projectorName": "UserDirectoryProjector",
-      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
       "projectorVersion": "1.0.0"
     },
     {
       "projectorName": "UserMonthlyReservationProjector",
-      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
       "projectorVersion": "1.0.0"
     },
     {
       "projectorName": "StudentListProjection",
-      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
       "projectorVersion": "1.0.0"
     },
     {
       "projectorName": "ClassRoomListProjection",
-      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
       "projectorVersion": "1.0.0"
     },
     {
       "projectorName": "WeatherForecastProjection",
-      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
       "projectorVersion": "1.0.0"
     },
     {
       "projectorName": "WeatherForecastProjectorWithTagStateProjector",
-      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
       "projectorVersion": "1.0.0"
     },
     {
       "projectorName": "ApprovalRequestListProjection",
-      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
       "projectorVersion": "1.0.0"
     },
     {
       "projectorName": "EquipmentTypeListProjection",
-      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
       "projectorVersion": "1.0.0"
     },
     {
       "projectorName": "ReservationListProjection",
-      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
       "projectorVersion": "1.0.0"
     },
     {
       "projectorName": "RoomListProjection",
-      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
       "projectorVersion": "1.0.0"
     },
     {
       "projectorName": "StudentSummaries",
-      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
       "projectorVersion": "1.0.0"
     },
     {
       "projectorName": "UserAccessListProjection",
-      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
       "projectorVersion": "1.0.0"
     },
     {
       "projectorName": "UserDirectoryListProjection",
-      "modulePath": "/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm",
       "projectorVersion": "1.0.0"
     }
   ],
@@ -176,5 +176,16 @@
     "GetWeatherForecastCountQuery": "WeatherForecastProjection",
     "GetWeatherForecastCountGenericQuery": "WeatherForecastProjection",
     "GetWeatherForecastCountSingleQuery": "WeatherForecastProjectorWithTagStateProjector"
-  }
+  },
+  "materializedViews": [
+    {
+      "viewName": "ClassRoomEnrollment",
+      "viewVersion": 1,
+      "logicalTables": [
+        "classrooms",
+        "students",
+        "enrollments"
+      ]
+    }
+  ]
 }
