@@ -127,6 +127,19 @@ public sealed class WasmtimePrimitiveProjectionHost :
             store.SetWasiConfiguration(wasiConfiguration);
 
             using var linker = _runtime.CreateLinker();
+            // If the same .wasm module also declares materialized view entry points (e.g. the
+            // Rust sample ships domain + MV in one binary), Wasmtime refuses to instantiate it
+            // here unless every imported function is defined. Primitive projection instances
+            // never call `mv_host_query_rows`, so a no-op stub is enough to unblock
+            // instantiation; the real implementation lives on the MV executor's dedicated
+            // linker. Leave non-MV modules unaffected — Linker.Define is tolerant of unused
+            // imports.
+            linker.Define(
+                "env",
+                "mv_host_query_rows",
+                Function.FromCallback<int, int, int, int, int, long>(
+                    store,
+                    static (Caller _, int _, int _, int _, int _, int _) => 0L));
             Trace($"host:create_instance:before_instantiate projector={projectorName}");
             var instance = linker.Instantiate(store, module);
             Trace($"host:create_instance:after_instantiate projector={projectorName}");

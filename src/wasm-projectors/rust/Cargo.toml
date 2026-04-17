@@ -4,6 +4,7 @@ members = [
   "sekiban-derive",
   "sekiban-executor",
   "sekiban-wasm",
+  "sekiban-mv",
   "domain",
   "wasm-projector",
 ]

@@ -1,5 +1,6 @@
 pub mod commands;
 pub mod events;
+pub mod materialized_view;
 pub mod projectors;
 pub mod queries;
 pub mod states;

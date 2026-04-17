@@ -1,5 +1,5 @@
 {
-  "defaultModulePath": "/private/tmp/sekibanwasmruntime-investigate-85/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider-rust.wasm",
+  "defaultModulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider-rust.wasm",
   "queryAssemblyVersion": "wasm",
   "eventTypes": [
     "WeatherForecastCreated",
@@ -26,82 +26,82 @@
   "projectors": [
     {
       "projectorName": "WeatherForecastProjector",
-      "modulePath": "/private/tmp/sekibanwasmruntime-investigate-85/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider-rust.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider-rust.wasm",
       "projectorVersion": "1.0.0"
     },
     {
       "projectorName": "StudentProjector",
-      "modulePath": "/private/tmp/sekibanwasmruntime-investigate-85/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider-rust.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider-rust.wasm",
       "projectorVersion": "1.0.0"
     },
     {
       "projectorName": "ClassRoomProjector",
-      "modulePath": "/private/tmp/sekibanwasmruntime-investigate-85/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider-rust.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider-rust.wasm",
       "projectorVersion": "1.0.0"
     },
     {
       "projectorName": "UserDirectoryProjector",
-      "modulePath": "/private/tmp/sekibanwasmruntime-investigate-85/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider-rust.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider-rust.wasm",
       "projectorVersion": "1.0.0"
     },
     {
       "projectorName": "UserAccessProjector",
-      "modulePath": "/private/tmp/sekibanwasmruntime-investigate-85/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider-rust.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider-rust.wasm",
       "projectorVersion": "1.0.0"
     },
     {
       "projectorName": "RoomProjector",
-      "modulePath": "/private/tmp/sekibanwasmruntime-investigate-85/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider-rust.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider-rust.wasm",
       "projectorVersion": "1.0.0"
     },
     {
       "projectorName": "ReservationProjector",
-      "modulePath": "/private/tmp/sekibanwasmruntime-investigate-85/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider-rust.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider-rust.wasm",
       "projectorVersion": "1.0.0"
     },
     {
       "projectorName": "ApprovalRequestProjector",
-      "modulePath": "/private/tmp/sekibanwasmruntime-investigate-85/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider-rust.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider-rust.wasm",
       "projectorVersion": "1.0.0"
     },
     {
       "projectorName": "WeatherForecastMultiProjection",
-      "modulePath": "/private/tmp/sekibanwasmruntime-investigate-85/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider-rust.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider-rust.wasm",
       "projectorVersion": "1.0.0"
     },
     {
       "projectorName": "StudentListProjection",
-      "modulePath": "/private/tmp/sekibanwasmruntime-investigate-85/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider-rust.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider-rust.wasm",
       "projectorVersion": "1.0.0"
     },
     {
       "projectorName": "ClassRoomListProjection",
-      "modulePath": "/private/tmp/sekibanwasmruntime-investigate-85/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider-rust.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider-rust.wasm",
       "projectorVersion": "1.0.0"
     },
     {
       "projectorName": "UserDirectoryListProjection",
-      "modulePath": "/private/tmp/sekibanwasmruntime-investigate-85/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider-rust.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider-rust.wasm",
       "projectorVersion": "1.0.0"
     },
     {
       "projectorName": "UserAccessListProjection",
-      "modulePath": "/private/tmp/sekibanwasmruntime-investigate-85/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider-rust.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider-rust.wasm",
       "projectorVersion": "1.0.0"
     },
     {
       "projectorName": "RoomListProjection",
-      "modulePath": "/private/tmp/sekibanwasmruntime-investigate-85/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider-rust.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider-rust.wasm",
       "projectorVersion": "1.0.0"
     },
     {
       "projectorName": "ReservationListProjection",
-      "modulePath": "/private/tmp/sekibanwasmruntime-investigate-85/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider-rust.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider-rust.wasm",
       "projectorVersion": "1.0.0"
     },
     {
       "projectorName": "ApprovalRequestListProjection",
-      "modulePath": "/private/tmp/sekibanwasmruntime-investigate-85/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider-rust.wasm",
+      "modulePath": "/Users/tomohisa/dev/claudeworktrees/SekibanWasmRuntime/csharp-decider-mv/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider-rust.wasm",
       "projectorVersion": "1.0.0"
     }
   ],
@@ -115,5 +115,16 @@
     "GetApprovalInboxQuery": "ApprovalRequestListProjection",
     "GetUserDirectoryListQuery": "UserDirectoryListProjection",
     "GetUserAccessListQuery": "UserAccessListProjection"
-  }
+  },
+  "materializedViews": [
+    {
+      "viewName": "ClassRoomEnrollment",
+      "viewVersion": 1,
+      "logicalTables": [
+        "classrooms",
+        "students",
+        "enrollments"
+      ]
+    }
+  ]
 }
