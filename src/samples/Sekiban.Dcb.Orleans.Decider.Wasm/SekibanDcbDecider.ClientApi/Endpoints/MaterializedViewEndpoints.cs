@@ -87,6 +87,8 @@ public static class MaterializedViewEndpoints
     private static async Task<IResult> GetEnrollmentsAsync(
         [FromQuery] Guid? classRoomId,
         [FromQuery] Guid? studentId,
+        [FromQuery] int? pageNumber,
+        [FromQuery] int? pageSize,
         [FromServices] IMvRegistryStore registryStore,
         [FromServices] IMvStorageInfoProvider storageInfoProvider,
         [FromServices] IServiceIdProvider serviceIdProvider)
@@ -100,11 +102,15 @@ public static class MaterializedViewEndpoints
             $"SELECT student_id AS StudentId, class_room_id AS ClassRoomId, enrolled_at AS EnrolledAt, " +
             $"_last_sortable_unique_id AS LastSortableUniqueId FROM {tableName}";
         var filters = new List<string>();
+        var (limit, offset) = ResolvePaging(pageNumber, pageSize);
         var parameters = new DynamicParameters();
+        parameters.Add("Limit", limit);
+        parameters.Add("Offset", offset);
         if (classRoomId is { } cid) { filters.Add("class_room_id = @ClassRoomId"); parameters.Add("ClassRoomId", cid); }
         if (studentId is { } sid) { filters.Add("student_id = @StudentId"); parameters.Add("StudentId", sid); }
         if (filters.Count > 0) sql += " WHERE " + string.Join(" AND ", filters);
-        sql += " ORDER BY enrolled_at DESC";
+        // Paging keeps unbounded enrollment tables from blowing up memory / response time.
+        sql += " ORDER BY enrolled_at DESC LIMIT @Limit OFFSET @Offset";
 
         var rows = await connection.QueryAsync<EnrollmentMvRow>(sql, parameters);
         return Results.Ok(rows);

@@ -170,15 +170,17 @@ builder.Services.AddOpenApi();
 // `DcbMaterializedViewPostgres` connection string is configured, wire:
 //   - Sekiban.Dcb.MaterializedView (base + options)
 //   - Sekiban.Dcb.MaterializedView.Postgres (event-store-reading catch-up executor + registry
-//     store). The catch-up hosted worker is disabled because we use the Orleans grain instead.
-//   - Sekiban.Dcb.MaterializedView.Orleans (grain activation + stream subscription)
+//     store, WITH the hosted MvCatchUpWorker enabled — see registerHostedWorker:true below).
+//   - Sekiban.Dcb.MaterializedView.Orleans (MaterializedViewGrain activation + stream
+//     subscription — receives events if any publisher pushes to the Orleans stream).
 //   - WasmtimeMaterializedViewExecutor + one WasmBackedMaterializedViewProjector per manifest
 //     entry. The shim implements IMaterializedViewProjector so the existing
 //     `MaterializedViewGrain` + `PostgresMvExecutor` treat it like a CLR projector.
 //
-// The actual Wasmtime linker plumbing (mv_host_query_rows host import, export invocation,
-// alloc/dealloc roundtripping) is a separate integration step tracked in
-// WasmtimeMaterializedViewExecutor.CallWasmExport / HandleHostQueryRowsImport.
+// Catch-up in this wiring is driven by BOTH paths: the Postgres hosted worker polls the event
+// store (guaranteeing progress even without an Orleans event publisher), while the Orleans
+// grain takes over when events arrive on `EventStreamProvider`. The two paths coordinate via
+// MvRegistryStore positions so no double-apply occurs.
 // ----------------------------------------------------------------------------
 var mvConnectionString = builder.Configuration.GetConnectionString("DcbMaterializedViewPostgres");
 var materializedViewEnabled = manifest.MaterializedViews.Count > 0 && !string.IsNullOrWhiteSpace(mvConnectionString);
@@ -186,6 +188,23 @@ var materializedViewEnabled = manifest.MaterializedViews.Count > 0 && !string.Is
 if (materializedViewEnabled)
 {
     DefaultTypeMap.MatchNamesWithUnderscores = true;
+
+    // All MV projectors share a single Wasmtime instance backed by the manifest's default
+    // module. Reject per-view ModulePath overrides until the executor learns to route MV calls
+    // to view-specific modules, so misconfiguration is surfaced at startup rather than
+    // silently ignored.
+    foreach (var mv in manifest.MaterializedViews)
+    {
+        if (!string.IsNullOrWhiteSpace(mv.ModulePath) &&
+            !string.Equals(mv.ModulePath, manifest.DefaultModulePath, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Materialized view '{mv.ViewName}/{mv.ViewVersion}' declares ModulePath " +
+                $"'{mv.ModulePath}', but the MV Wasmtime executor currently uses a single shared " +
+                $"module ('{manifest.DefaultModulePath}'). Either omit the per-view ModulePath or " +
+                "extend WasmtimeMaterializedViewExecutor to support per-view modules.");
+        }
+    }
 
     builder.Services.AddSingleton(new WasmMaterializedViewRuntimeOptions
     {

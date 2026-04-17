@@ -22,6 +22,7 @@ internal sealed class HostBackedMvQueryPort : IWasmMvQueryPort
             return null;
         }
 
+        ThrowIfHostError(resultJson);
         var result = JsonSerializer.Deserialize(resultJson, WasmJsonContext.Default.MvQueryResultDto);
         return result?.Rows.FirstOrDefault();
     }
@@ -34,6 +35,7 @@ internal sealed class HostBackedMvQueryPort : IWasmMvQueryPort
             return Array.Empty<MvQueryRowDto>();
         }
 
+        ThrowIfHostError(resultJson);
         var result = JsonSerializer.Deserialize(resultJson, WasmJsonContext.Default.MvQueryResultDto);
         return result?.Rows ?? (IReadOnlyList<MvQueryRowDto>)Array.Empty<MvQueryRowDto>();
     }
@@ -42,7 +44,34 @@ internal sealed class HostBackedMvQueryPort : IWasmMvQueryPort
     {
         var row = QuerySingleOrDefaultRow(sql, parameters);
         if (row is null) return null;
-        return row.Columns.Values.FirstOrDefault();
+        if (row.Columns.Count == 0) return null;
+        if (row.Columns.Count != 1)
+        {
+            // Dictionary enumeration order is not a reliable contract for "first column";
+            // require the query to project exactly one column so the caller gets a
+            // deterministic scalar back.
+            throw new InvalidOperationException(
+                "ExecuteScalarJson requires the query to return exactly one column.");
+        }
+        return row.Columns.Single().Value;
+    }
+
+    // The host import returns `{"error":"..."}` when the apply-time Dapper query fails. If we
+    // deserialize that into MvQueryResultDto, `Rows` ends up empty by default and the error is
+    // silently treated as "no rows" — which produces incorrect projections. Detect the
+    // envelope eagerly and throw so MV catch-up fails and retries.
+    private static void ThrowIfHostError(string resultJson)
+    {
+        if (resultJson.Length < 2 || resultJson[0] != '{') return;
+        using var document = System.Text.Json.JsonDocument.Parse(resultJson);
+        if (document.RootElement.TryGetProperty("error", out var err))
+        {
+            var message = err.ValueKind == System.Text.Json.JsonValueKind.String
+                ? err.GetString()
+                : err.GetRawText();
+            throw new InvalidOperationException(
+                $"mv_host_query_rows returned an error envelope: {message}");
+        }
     }
 
     private static unsafe string CallHostQuery(string sql, IReadOnlyList<MvParam> parameters, int? rowLimit)

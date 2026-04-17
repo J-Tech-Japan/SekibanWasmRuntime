@@ -8,10 +8,12 @@ namespace SekibanDcbDecider.Wasm.MaterializedView;
 /// </summary>
 internal static class WasmMvRegistry
 {
+    private static readonly ClassRoomEnrollmentMvV1 ClassRoomEnrollmentV1 = new();
+
     private static readonly Dictionary<string, IWasmMvProjector> Projectors =
         new(StringComparer.Ordinal)
         {
-            [KeyFor(new ClassRoomEnrollmentMvV1())] = new ClassRoomEnrollmentMvV1()
+            [KeyFor(ClassRoomEnrollmentV1)] = ClassRoomEnrollmentV1
         };
 
     public static string Metadata()

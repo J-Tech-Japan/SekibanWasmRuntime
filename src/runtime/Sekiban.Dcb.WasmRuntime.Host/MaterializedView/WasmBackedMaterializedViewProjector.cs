@@ -135,22 +135,69 @@ internal static class MvParamDapperBridge
             return null;
         }
 
-        var token = System.Text.Json.JsonDocument.Parse(param.ValueJson).RootElement;
+        using var document = System.Text.Json.JsonDocument.Parse(param.ValueJson);
+        var token = document.RootElement;
         return param.Kind switch
         {
-            WasmMvParamKind.String => token.GetString(),
-            WasmMvParamKind.Guid => Guid.Parse(token.GetString() ?? throw new FormatException("Guid param was null.")),
+            WasmMvParamKind.String => RequireString(param, token),
+            WasmMvParamKind.Guid => ReadGuid(param, token),
             WasmMvParamKind.Int32 => token.GetInt32(),
             WasmMvParamKind.Int64 => token.GetInt64(),
             WasmMvParamKind.Boolean => token.GetBoolean(),
             WasmMvParamKind.Decimal => token.GetDecimal(),
             WasmMvParamKind.Double => token.GetDouble(),
-            WasmMvParamKind.DateTimeOffset => DateTimeOffset.Parse(
-                token.GetString() ?? throw new FormatException("DateTimeOffset param was null."),
-                System.Globalization.CultureInfo.InvariantCulture),
-            WasmMvParamKind.Bytes => Convert.FromBase64String(
-                token.GetString() ?? throw new FormatException("Bytes param was null.")),
+            WasmMvParamKind.DateTimeOffset => ReadDateTimeOffset(param, token),
+            WasmMvParamKind.Bytes => ReadBytes(param, token),
             _ => throw new NotSupportedException($"Unsupported MvParamKind: {param.Kind}")
         };
+    }
+
+    private static string RequireString(WasmMvParam param, System.Text.Json.JsonElement token)
+    {
+        if (token.ValueKind != System.Text.Json.JsonValueKind.String)
+        {
+            throw new FormatException(
+                $"Param '{param.Name}' with kind '{param.Kind}' must be encoded as a JSON string.");
+        }
+        return token.GetString()
+            ?? throw new FormatException($"Param '{param.Name}' with kind '{param.Kind}' was null.");
+    }
+
+    private static Guid ReadGuid(WasmMvParam param, System.Text.Json.JsonElement token)
+    {
+        var value = RequireString(param, token);
+        if (!Guid.TryParse(value, out var guid))
+        {
+            throw new FormatException($"Param '{param.Name}' contained an invalid Guid value.");
+        }
+        return guid;
+    }
+
+    private static DateTimeOffset ReadDateTimeOffset(WasmMvParam param, System.Text.Json.JsonElement token)
+    {
+        var value = RequireString(param, token);
+        if (!DateTimeOffset.TryParse(
+                value,
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.RoundtripKind,
+                out var dateTimeOffset))
+        {
+            throw new FormatException(
+                $"Param '{param.Name}' contained an invalid DateTimeOffset value.");
+        }
+        return dateTimeOffset;
+    }
+
+    private static byte[] ReadBytes(WasmMvParam param, System.Text.Json.JsonElement token)
+    {
+        var value = RequireString(param, token);
+        try
+        {
+            return Convert.FromBase64String(value);
+        }
+        catch (FormatException ex)
+        {
+            throw new FormatException($"Param '{param.Name}' contained invalid base64 bytes.", ex);
+        }
     }
 }

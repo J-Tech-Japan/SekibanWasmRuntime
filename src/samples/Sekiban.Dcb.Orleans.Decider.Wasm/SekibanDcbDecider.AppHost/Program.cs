@@ -15,10 +15,12 @@ var postgresServer = builder
     .AddPostgres("dcbOrleansPostgres")
     .WithDbGate();
 var wasmPostgres = postgresServer.AddDatabase("SekibanCSharpDb");
-// Dedicated database for the Sekiban.Dcb.MaterializedView runtime. The MV catch-up worker runs
-// inside the ClientApi process, reads events from the event-store database above, and writes
-// projected rows here. Keeping the MV schema separate from the event store matches the pattern
-// shipped with the Sekiban.Dcb.Orleans.Decider template.
+// Dedicated database for the Sekiban.Dcb.MaterializedView runtime. The MV runtime
+// (MaterializedViewGrain + PostgresMvExecutor + MvCatchUpWorker) runs inside `wasmserver`,
+// reads events from the event-store database above, and writes projected rows here. ClientApi
+// connects to this database read-only for `/api/mv/*` endpoints and does not perform catch-up.
+// Keeping the MV schema separate from the event store matches the Sekiban.Dcb.Orleans.Decider
+// template pattern.
 var mvPostgres = postgresServer.AddDatabase("SekibanCSharpMvDb");
 
 var csharpWasmModulePath = ResolveCSharpWasmModulePath();
