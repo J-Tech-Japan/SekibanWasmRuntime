@@ -27,7 +27,7 @@ interface RegistryRow {
   logical_table: string;
   physical_table: string;
   status: string;
-  applied_event_version: number | string | null;
+  applied_event_version: string | null;
   current_position: string | null;
   last_catch_up_sortable_unique_id: string | null;
   last_updated: string | Date | null;
@@ -108,7 +108,7 @@ export async function getStatus(state: MaterializedViewState) {
       logicalTable: row.logical_table,
       physicalTable: row.physical_table,
       status: row.status,
-      appliedEventVersion: Number(row.applied_event_version ?? 0),
+      appliedEventVersion: String(row.applied_event_version ?? "0"),
       currentPosition: row.current_position,
       lastCatchUpSortableUniqueId: row.last_catch_up_sortable_unique_id,
       lastUpdated: row.last_updated,

@@ -10,8 +10,6 @@ const PARAM_KIND_STRING: i32 = 1;
 const PARAM_KIND_INT32: i32 = 2;
 const PARAM_KIND_GUID: i32 = 5;
 
-const _mvPinned: usize[] = [];
-
 function readStr(ptr: u32, len: u32): string {
   return String.UTF8.decodeUnsafe(ptr as usize, len as i32);
 }
@@ -20,7 +18,6 @@ function writeStr(value: string): u64 {
   const buf = String.UTF8.encode(value);
   const p = changetype<usize>(buf);
   __pin(p);
-  _mvPinned.push(p);
   return (u64(p) << 32) | u64(buf.byteLength);
 }
 
@@ -69,6 +66,11 @@ class WasmMvStatementBatchDto {
 }
 
 @json
+class WasmMvErrorDto {
+  error: string = "";
+}
+
+@json
 class ClassRoomCreatedEv {
   classRoomId: string = "";
   name: string = "";
@@ -95,7 +97,13 @@ class StudentDroppedEv {
 }
 
 function errorPayload(message: string): string {
-  return '{"error":"' + message + '"}';
+  const error = new WasmMvErrorDto();
+  error.error = message;
+  return JSON.stringify<WasmMvErrorDto>(error);
+}
+
+function jsonString(value: string): string {
+  return JSON.stringify<string>(value);
 }
 
 function statementBatchPayload(statements: WasmMvSqlStatementDto[]): string {
@@ -104,14 +112,26 @@ function statementBatchPayload(statements: WasmMvSqlStatementDto[]): string {
   return JSON.stringify<WasmMvStatementBatchDto>(batch);
 }
 
+function missingBinding(bindings: WasmMvTableBindingsDto): string | null {
+  if (tableName(bindings, CLASSROOMS_LOGICAL) == "") {
+    return CLASSROOMS_LOGICAL;
+  }
+  if (tableName(bindings, STUDENTS_LOGICAL) == "") {
+    return STUDENTS_LOGICAL;
+  }
+  if (tableName(bindings, ENROLLMENTS_LOGICAL) == "") {
+    return ENROLLMENTS_LOGICAL;
+  }
+  return null;
+}
+
 function tableName(bindings: WasmMvTableBindingsDto, logical: string): string {
   for (let i = 0; i < bindings.bindings.length; i++) {
     if (bindings.bindings[i].logical == logical) {
       return bindings.bindings[i].physical;
     }
   }
-  throw new Error("Missing physical table binding for logical table: " + logical);
-  return logical;
+  return "";
 }
 
 function sqlParam(name: string, kind: i32, valueJson: string): WasmMvParam {
@@ -123,11 +143,11 @@ function sqlParam(name: string, kind: i32, valueJson: string): WasmMvParam {
 }
 
 function guidParam(name: string, value: string): WasmMvParam {
-  return sqlParam(name, PARAM_KIND_GUID, '"' + value + '"');
+  return sqlParam(name, PARAM_KIND_GUID, jsonString(value));
 }
 
 function stringParam(name: string, value: string): WasmMvParam {
-  return sqlParam(name, PARAM_KIND_STRING, '"' + value + '"');
+  return sqlParam(name, PARAM_KIND_STRING, jsonString(value));
 }
 
 function int32Param(name: string, value: i32): WasmMvParam {
@@ -301,6 +321,11 @@ export function mv_initialize(
   }
 
   const bindings = JSON.parse<WasmMvTableBindingsDto>(readStr(bindingsPtr, bindingsLen));
+  const missing = missingBinding(bindings);
+  if (missing !== null) {
+    return writeStr(errorPayload("Missing physical table binding for logical table: " + missing));
+  }
+
   return writeStr(statementBatchPayload(initializeStatements(bindings)));
 }
 
@@ -319,6 +344,11 @@ export function mv_apply_event(
   }
 
   const bindings = JSON.parse<WasmMvTableBindingsDto>(readStr(bindingsPtr, bindingsLen));
+  const missing = missingBinding(bindings);
+  if (missing !== null) {
+    return writeStr(errorPayload("Missing physical table binding for logical table: " + missing));
+  }
+
   const serializableEvent = JSON.parse<WasmMvSerializableEventDto>(readStr(serializableEventPtr, serializableEventLen));
   return writeStr(statementBatchPayload(applyEventStatements(bindings, serializableEvent)));
 }

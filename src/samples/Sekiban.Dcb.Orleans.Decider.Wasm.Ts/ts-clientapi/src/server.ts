@@ -21,6 +21,7 @@ import {
   listClassrooms as listMaterializedViewClassrooms,
   listEnrollments as listMaterializedViewEnrollments,
   listStudents as listMaterializedViewStudents,
+  type MaterializedViewState,
 } from "./materializedView.js";
 
 // ---------------------------------------------------------------------------
@@ -1240,7 +1241,16 @@ console.log(`WasmServer URL: ${wasmServerURL}`);
 console.log(`Starting TS ClientAPI on port ${port}`);
 
 const runtime = new SekibanRuntimeClient(wasmServerURL, tagProjectorMap);
-const materializedView = await createMaterializedViewState();
+let materializedView: MaterializedViewState;
+try {
+  materializedView = await createMaterializedViewState();
+} catch (error) {
+  console.warn(
+    "Materialized view initialization failed; /api/mv/* endpoints will return 503 while non-MV endpoints remain available.",
+    error,
+  );
+  materializedView = { pool: null };
+}
 
 const app = new Hono();
 app.use("*", logger());
