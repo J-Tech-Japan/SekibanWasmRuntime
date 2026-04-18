@@ -29,6 +29,8 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
+mod materialized_view;
+
 #[derive(Clone)]
 struct AppState {
     executor: Arc<RemoteSekibanExecutor>,
@@ -60,7 +62,27 @@ async fn main() -> Result<()> {
             .with_tag_group("ApprovalRequest", "ApprovalRequestProjector"),
     ));
 
+    // Materialized view Postgres (optional). When Aspire wires the DcbMaterializedViewPostgres
+    // reference onto the clientapi executable we connect here and expose /api/mv/*. Absent the
+    // env var (e.g. direct `cargo run`) the handlers reply 503 so the rest of the API still
+    // works.
+    let mv_pool = materialized_view::connect_from_env()
+        .await
+        .unwrap_or_else(|err| {
+            tracing::error!(?err, "failed to connect to DcbMaterializedViewPostgres");
+            None
+        });
+    let mv_state = materialized_view::MvState { pool: mv_pool };
+
+    let mv_router = Router::new()
+        .route("/status", get(materialized_view::get_status))
+        .route("/classrooms", get(materialized_view::get_classrooms))
+        .route("/students", get(materialized_view::get_students))
+        .route("/enrollments", get(materialized_view::get_enrollments))
+        .with_state(mv_state);
+
     let app = Router::new()
+        .nest("/api/mv", mv_router)
         .route("/health", get(health))
         .route("/api/weatherforecast", get(get_forecasts).post(create_forecast))
         .route("/api/weatherforecast/count", get(get_forecast_count))
