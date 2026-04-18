@@ -79,6 +79,18 @@ var staticMemoryMaximumSizeBytes = ResolveWasmtimeStaticMemoryMaximumSizeBytes(b
 var enableProjectionStatusEndpoint = builder.Environment.IsDevelopment()
     || builder.Configuration.GetValue<bool>("KENBAI_WASM_ENABLE_PROJECTION_STATUS_ENDPOINT");
 
+// SEKIBAN_PROJECTION_MODE selects which projection path the runtime host exposes for the
+// benchmark matrix: "dual" (default — MultiProjection in-memory grain AND materialized view
+// both wired), "memory-only" (skip MV registration), "materialized-view-only" (MV wired, but
+// MultiProjection endpoints return 503 so `MultiProjectionGrain` never activates and no
+// projection WASM is loaded). See docs/benchmark-results.md for the intent.
+var projectionMode = (Environment.GetEnvironmentVariable("SEKIBAN_PROJECTION_MODE") ?? "dual")
+    .Trim()
+    .ToLowerInvariant();
+var projectionModeEnabled = projectionMode is "dual" or "memory-only";
+var materializedViewRequested = projectionMode is "dual" or "materialized-view-only";
+Console.WriteLine($"SEKIBAN_PROJECTION_MODE={projectionMode} (multiProjection={projectionModeEnabled}, materializedView={materializedViewRequested})");
+
 builder.UseOrleans(silo =>
 {
     silo.UseLocalhostClustering();
@@ -187,13 +199,20 @@ WasmMaterializedViewExtensions.ValidateModulePathAlignment(
     manifest.DefaultModulePath,
     manifest.MaterializedViews.Select(mv => (mv.ViewName, mv.ViewVersion, (string?)mv.ModulePath)));
 
-var wasmMvRegistrations = manifest.MaterializedViews
-    .Select(mv => new WasmMvApplyHostRegistration(mv.ViewName, mv.ViewVersion, mv.LogicalTables.ToList()))
-    .ToList();
-var materializedViewEnabled = builder.Services.AddSekibanWasmMaterializedViewRuntime(
-    builder.Configuration,
-    manifest.DefaultModulePath,
-    wasmMvRegistrations);
+var wasmMvRegistrations = materializedViewRequested
+    ? manifest.MaterializedViews
+        .Select(mv => new WasmMvApplyHostRegistration(mv.ViewName, mv.ViewVersion, mv.LogicalTables.ToList()))
+        .ToList()
+    : new List<WasmMvApplyHostRegistration>();
+var materializedViewEnabled = materializedViewRequested
+    && builder.Services.AddSekibanWasmMaterializedViewRuntime(
+        builder.Configuration,
+        manifest.DefaultModulePath,
+        wasmMvRegistrations);
+if (!materializedViewRequested)
+{
+    Console.WriteLine("SEKIBAN_PROJECTION_MODE=memory-only: skipping materialized-view runtime registration.");
+}
 
 var app = builder.Build();
 if (storageConfiguration.RequiresRelationalMigration)
@@ -238,7 +257,7 @@ app.MapGet("/health", () => Results.Ok(new
     manifest.DefaultModulePath
 }));
 
-if (enableProjectionStatusEndpoint)
+if (enableProjectionStatusEndpoint && projectionModeEnabled)
 {
     app.MapGet("/api/sekiban/projections/{projectorName}/status", async (
         HttpContext http,
@@ -264,7 +283,7 @@ if (enableProjectionStatusEndpoint)
     });
 }
 
-// Memory diagnostic: report serialized state size per multi-projector
+// Memory diagnostic: report serialized state size per multi-projector.
 app.MapGet("/api/sekiban/memory-stats", async (HttpContext http) =>
 {
     var clusterClient = http.RequestServices.GetRequiredService<IClusterClient>();
@@ -457,43 +476,59 @@ app.MapPost("/api/sekiban/serialized/commit", async (
     }
 });
 
-app.MapPost("/api/sekiban/serialized/query", async (
-    HttpContext http,
-    SerializedQueryRequest request,
-    CancellationToken ct) =>
+// Serialized query endpoints are the only callers that activate the MultiProjectionGrain
+// (which, in turn, loads the projection WASM instance and holds its ~36 MB linear memory).
+// In materialized-view-only mode we leave them unmapped so activation never happens — the
+// benchmark driver treats missing endpoints as an expected signal for that mode.
+if (projectionModeEnabled)
 {
-    try
+    app.MapPost("/api/sekiban/serialized/query", async (
+        HttpContext http,
+        SerializedQueryRequest request,
+        CancellationToken ct) =>
     {
-            return await ExecuteSerializedQueryAsync(http, request, isListQuery: false, ct);
-    }
-    catch (TimeoutException ex)
-    {
-        return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status504GatewayTimeout);
-    }
-    catch (OperationCanceledException)
-    {
-        return Results.StatusCode(499);
-    }
-});
+        try
+        {
+                return await ExecuteSerializedQueryAsync(http, request, isListQuery: false, ct);
+        }
+        catch (TimeoutException ex)
+        {
+            return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status504GatewayTimeout);
+        }
+        catch (OperationCanceledException)
+        {
+            return Results.StatusCode(499);
+        }
+    });
 
-app.MapPost("/api/sekiban/serialized/list-query", async (
-    HttpContext http,
-    SerializedQueryRequest request,
-    CancellationToken ct) =>
+    app.MapPost("/api/sekiban/serialized/list-query", async (
+        HttpContext http,
+        SerializedQueryRequest request,
+        CancellationToken ct) =>
+    {
+        try
+        {
+                return await ExecuteSerializedQueryAsync(http, request, isListQuery: true, ct);
+        }
+        catch (TimeoutException ex)
+        {
+            return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status504GatewayTimeout);
+        }
+        catch (OperationCanceledException)
+        {
+            return Results.StatusCode(499);
+        }
+    });
+}
+else
 {
-    try
-    {
-            return await ExecuteSerializedQueryAsync(http, request, isListQuery: true, ct);
-    }
-    catch (TimeoutException ex)
-    {
-        return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status504GatewayTimeout);
-    }
-    catch (OperationCanceledException)
-    {
-        return Results.StatusCode(499);
-    }
-});
+    static IResult QueryDisabled() => Results.Json(
+        new { error = "MultiProjection disabled via SEKIBAN_PROJECTION_MODE=materialized-view-only." },
+        statusCode: StatusCodes.Status503ServiceUnavailable);
+
+    app.MapPost("/api/sekiban/serialized/query", () => QueryDisabled());
+    app.MapPost("/api/sekiban/serialized/list-query", () => QueryDisabled());
+}
 
 app.Run();
 

@@ -5,7 +5,7 @@ if (config is null) return 1;
 
 var runner = new BenchmarkRunner(
     config.BaseUrl, config.ModeLabel, config.TotalEvents,
-    config.Concurrency, config.Output, config.SkipSetup);
+    config.Concurrency, config.Output, config.SkipSetup, config.SkipQueries);
 await runner.RunAsync();
 return 0;
 
@@ -45,6 +45,9 @@ static BenchmarkConfig? ParseArgs(string[] args)
                 break;
             case "--skip-setup":
                 config.SkipSetup = true;
+                break;
+            case "--skip-queries":
+                config.SkipQueries = true;
                 break;
             case "--help" or "-h":
                 PrintUsage();
@@ -95,4 +98,5 @@ file sealed class BenchmarkConfig
     public int Concurrency { get; set; } = 8;
     public string? Output { get; set; }
     public bool SkipSetup { get; set; }
+    public bool SkipQueries { get; set; }
 }

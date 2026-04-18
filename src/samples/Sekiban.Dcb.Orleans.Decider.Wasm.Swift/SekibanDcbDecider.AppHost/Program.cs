@@ -13,7 +13,16 @@ using System.Text.Json.Nodes;
 // SerializableCommitRequest payloads at wasmserver directly — the Swift ClientApi is
 // intentionally read-only per the issue's acceptable scope reduction.
 
-var builder = DistributedApplication.CreateBuilder(args);
+var benchmarkProfile = Environment.GetEnvironmentVariable("BENCHMARK_PROFILE");
+var isStrictBenchmarkProfile = string.Equals(benchmarkProfile, "tagstategrain-memory", StringComparison.OrdinalIgnoreCase);
+var projectionMode = (Environment.GetEnvironmentVariable("SEKIBAN_PROJECTION_MODE") ?? "dual").Trim().ToLowerInvariant();
+var materializedViewEnabled = projectionMode is "dual" or "materialized-view-only";
+var builder = DistributedApplication.CreateBuilder(new DistributedApplicationOptions
+{
+    Args = args,
+    DisableDashboard = isStrictBenchmarkProfile,
+    EnableResourceLogging = isStrictBenchmarkProfile
+});
 
 var storage = builder
     .AddAzureStorage("azurestorage")
@@ -23,7 +32,9 @@ var grainStorage = storage.AddBlobs("DcbOrleansGrainState");
 
 var postgresServer = builder.AddPostgres("sekibanSwiftPostgres");
 var postgres = postgresServer.AddDatabase("SekibanSwiftDb");
-var dcbMaterializedViewPostgres = postgresServer.AddDatabase("DcbMaterializedViewPostgres");
+var dcbMaterializedViewPostgres = materializedViewEnabled
+    ? postgresServer.AddDatabase("DcbMaterializedViewPostgres")
+    : null;
 
 var dbGatePort = AppHostInfrastructure.ResolveConfiguredPort(6400, "E2E_DBGATE_PORT", "DBGATE_PORT");
 builder.AddDbGateForPostgres(
@@ -36,7 +47,7 @@ var swiftWasmModulePath = ResolveSwiftWasmModulePath();
 var swiftManifestPath = ResolveSwiftManifestPath(swiftWasmModulePath);
 
 var wasmApiPort = AppHostInfrastructure.ResolveConfiguredPort(6299, "E2E_API_PORT");
-var wasmServer = builder
+var wasmServerBuilder = builder
     .AddProject<Sekiban_Dcb_WasmRuntime_Host>("wasmserver")
     .WithEnvironment("SEKIBAN_STORAGE_PROVIDER", "postgres")
     .WithEnvironment("WASM_MODULE_PATH", swiftWasmModulePath)
@@ -47,10 +58,25 @@ var wasmServer = builder
     // doesn't trap on linear-memory growth.
     .WithEnvironment("SEKIBAN_WASMTIME_STATIC_MEMORY_MAX_MB", "256")
     .WithReference(postgres, "SekibanDcb")
-    .WithReference(dcbMaterializedViewPostgres, "DcbMaterializedViewPostgres")
     .WaitFor(postgres)
-    .WaitFor(dcbMaterializedViewPostgres)
-    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development")
+    .WithEnvironment("SEKIBAN_PROJECTION_MODE", projectionMode)
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
+
+if (isStrictBenchmarkProfile)
+{
+    wasmServerBuilder = wasmServerBuilder
+        .WithEnvironment("SEKIBAN_DIRECT_SNAPSHOT_QUERY_ENABLED", "false")
+        .WithEnvironment("SEKIBAN_TAG_STATE_FAST_PATH_ENABLED", "false");
+}
+
+if (dcbMaterializedViewPostgres is not null)
+{
+    wasmServerBuilder = wasmServerBuilder
+        .WithReference(dcbMaterializedViewPostgres, "DcbMaterializedViewPostgres")
+        .WaitFor(dcbMaterializedViewPostgres);
+}
+
+wasmServerBuilder = wasmServerBuilder
     .WithEndpoint("http", endpoint =>
     {
         endpoint.Port = wasmApiPort;
@@ -59,6 +85,8 @@ var wasmServer = builder
         endpoint.IsProxied = false;
     })
     .WithEnvironment("ASPNETCORE_URLS", "http://127.0.0.1:" + wasmApiPort);
+
+var wasmServer = wasmServerBuilder;
 
 // Swift ClientApi executable (Hummingbird + PostgresNIO). We shell out to `swift run -c release`
 // against the SwiftPM package so Aspire rebuilds it automatically when sources change. For a
@@ -77,15 +105,21 @@ var clientApiBuilder = builder
         swiftClientApiDir,
         new[] { "run", "-c", "release" })
     .WithEnvironment("WASM_SERVER_URL", "http://127.0.0.1:" + wasmApiPort)
+    .WithEnvironment("SEKIBAN_PROJECTION_MODE", projectionMode)
     .WithHttpEndpoint(
         targetPort: clientApiPort,
         port: clientApiPort,
         env: "PORT",
         isProxied: false)
     .WithReference(wasmServer)
-    .WithReference(dcbMaterializedViewPostgres, "DcbMaterializedViewPostgres")
-    .WaitFor(wasmServer)
-    .WaitFor(dcbMaterializedViewPostgres);
+    .WaitFor(wasmServer);
+
+if (dcbMaterializedViewPostgres is not null)
+{
+    clientApiBuilder = clientApiBuilder
+        .WithReference(dcbMaterializedViewPostgres, "DcbMaterializedViewPostgres")
+        .WaitFor(dcbMaterializedViewPostgres);
+}
 
 // Ensure the Swift binary can find swiftly's toolchain if Aspire inherits a sanitized PATH.
 var parentPath = Environment.GetEnvironmentVariable("PATH");

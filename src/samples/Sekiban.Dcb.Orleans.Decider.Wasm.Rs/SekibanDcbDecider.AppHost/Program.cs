@@ -5,6 +5,8 @@ using System.Text.Json.Nodes;
 
 var benchmarkProfile = Environment.GetEnvironmentVariable("BENCHMARK_PROFILE");
 var isStrictBenchmarkProfile = string.Equals(benchmarkProfile, "tagstategrain-memory", StringComparison.OrdinalIgnoreCase);
+var projectionMode = (Environment.GetEnvironmentVariable("SEKIBAN_PROJECTION_MODE") ?? "dual").Trim().ToLowerInvariant();
+var materializedViewEnabled = projectionMode is "dual" or "materialized-view-only";
 var builder = DistributedApplication.CreateBuilder(new DistributedApplicationOptions
 {
     Args = args,
@@ -27,8 +29,11 @@ var postgres = postgresServer.AddDatabase("SekibanRustDb");
 var dcbPostgres = postgresServer.AddDatabase("DcbPostgres");
 var identityPostgres = postgresServer.AddDatabase("IdentityPostgres");
 // Materialized view Postgres — Rust WASM module emits SQL through mv_initialize/mv_apply_event,
-// Sekiban's PostgresMvExecutor inside wasmserver runs it here.
-var dcbMaterializedViewPostgres = postgresServer.AddDatabase("DcbMaterializedViewPostgres");
+// Sekiban's PostgresMvExecutor inside wasmserver runs it here. Skipped in memory-only benchmark
+// mode to isolate the MultiProjection footprint.
+var dcbMaterializedViewPostgres = materializedViewEnabled
+    ? postgresServer.AddDatabase("DcbMaterializedViewPostgres")
+    : null;
 
 var apiOrleans = builder
     .AddOrleans("api-orleans")
@@ -61,10 +66,16 @@ var wasmServerBuilder = builder
     .WithEnvironment("SEKIBAN_WASM_FORCE_COMPACTING_GC_AFTER_COMPACTION", "true")
     .WithEnvironment("SEKIBAN_WASMTIME_STATIC_MEMORY_MAX_MB", "192")
     .WithReference(postgres, "SekibanDcb")
-    .WithReference(dcbMaterializedViewPostgres, "DcbMaterializedViewPostgres")
     .WaitFor(postgres)
-    .WaitFor(dcbMaterializedViewPostgres)
+    .WithEnvironment("SEKIBAN_PROJECTION_MODE", projectionMode)
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
+
+if (dcbMaterializedViewPostgres is not null)
+{
+    wasmServerBuilder = wasmServerBuilder
+        .WithReference(dcbMaterializedViewPostgres, "DcbMaterializedViewPostgres")
+        .WaitFor(dcbMaterializedViewPostgres);
+}
 
 if (isStrictBenchmarkProfile)
 {
@@ -134,12 +145,20 @@ clientApiBuilder = clientApiBuilder.WithHttpEndpoint(
     env: "PORT",
     isProxied: false);
 
-var clientApi = clientApiBuilder
+clientApiBuilder = clientApiBuilder
     .WithEnvironment("RUST_LOG", "info")
+    .WithEnvironment("SEKIBAN_PROJECTION_MODE", projectionMode)
     .WithReference(wasmServer)
-    .WithReference(dcbMaterializedViewPostgres, "DcbMaterializedViewPostgres")
-    .WaitFor(wasmServer)
-    .WaitFor(dcbMaterializedViewPostgres);
+    .WaitFor(wasmServer);
+
+if (dcbMaterializedViewPostgres is not null)
+{
+    clientApiBuilder = clientApiBuilder
+        .WithReference(dcbMaterializedViewPostgres, "DcbMaterializedViewPostgres")
+        .WaitFor(dcbMaterializedViewPostgres);
+}
+
+var clientApi = clientApiBuilder;
 
 var webFrontend = builder
     .AddProject<SekibanDcbDecider_Web>("webfrontend")

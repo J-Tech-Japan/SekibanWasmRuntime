@@ -4,6 +4,8 @@ using System.Text.Json.Nodes;
 
 var benchmarkProfile = Environment.GetEnvironmentVariable("BENCHMARK_PROFILE");
 var isStrictBenchmarkProfile = string.Equals(benchmarkProfile, "tagstategrain-memory", StringComparison.OrdinalIgnoreCase);
+var projectionMode = (Environment.GetEnvironmentVariable("SEKIBAN_PROJECTION_MODE") ?? "dual").Trim().ToLowerInvariant();
+var materializedViewEnabled = projectionMode is "dual" or "materialized-view-only";
 var builder = DistributedApplication.CreateBuilder(new DistributedApplicationOptions
 {
     Args = args,
@@ -19,9 +21,11 @@ var wasmPostgres = postgresServer.AddDatabase("SekibanCSharpDb");
 // (MaterializedViewGrain + PostgresMvExecutor + MvCatchUpWorker) runs inside `wasmserver`,
 // reads events from the event-store database above, and writes projected rows here. ClientApi
 // connects to this database read-only for `/api/mv/*` endpoints and does not perform catch-up.
-// Keeping the MV schema separate from the event store matches the Sekiban.Dcb.Orleans.Decider
-// template pattern.
-var mvPostgres = postgresServer.AddDatabase("SekibanCSharpMvDb");
+// In memory-only mode the MV database is skipped so the benchmark captures a pure
+// MultiProjection footprint without the overhead of a second Postgres instance.
+var mvPostgres = materializedViewEnabled
+    ? postgresServer.AddDatabase("SekibanCSharpMvDb")
+    : null;
 
 var csharpWasmModulePath = ResolveCSharpWasmModulePath();
 var csharpManifestPath = ResolveCSharpManifestPath(csharpWasmModulePath);
@@ -38,12 +42,18 @@ var wasmServerBuilder = builder
     .WithEnvironment("SEKIBAN_WASMTIME_STATIC_MEMORY_MAX_MB", "192")
     .WithReference(wasmPostgres, "SekibanDcb")
     .WaitFor(wasmPostgres)
+    .WithEnvironment("SEKIBAN_PROJECTION_MODE", projectionMode)
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
+
+if (mvPostgres is not null)
+{
     // MV runtime (grain + catch-up) lives in the wasm runtime host. Wire the MV Postgres DB so
     // `MaterializedViewGrain` + `PostgresMvExecutor` can initialize schemas, track position, and
     // project into the MV tables.
-    .WithReference(mvPostgres, "DcbMaterializedViewPostgres")
-    .WaitFor(mvPostgres)
-    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
+    wasmServerBuilder = wasmServerBuilder
+        .WithReference(mvPostgres, "DcbMaterializedViewPostgres")
+        .WaitFor(mvPostgres);
+}
 
 wasmServerBuilder = ApplyTagStateDiagnostics(
     wasmServerBuilder,
@@ -73,11 +83,17 @@ var clientApiBuilder = builder
     .AddProject<SekibanDcbDecider_ClientApi>("clientapi")
     .WithReference(wasmServer)
     .WaitFor(wasmServer)
+    .WithEnvironment("SEKIBAN_PROJECTION_MODE", projectionMode);
+
+if (mvPostgres is not null)
+{
     // ClientApi also needs direct read access to the MV database so `/api/mv/*` endpoints can
     // run SELECTs against the projected tables. The MV catch-up itself runs inside the wasm
     // runtime host (wasmserver) via its `MaterializedViewGrain`, not here.
-    .WithReference(mvPostgres, "DcbMaterializedViewPostgres")
-    .WaitFor(mvPostgres);
+    clientApiBuilder = clientApiBuilder
+        .WithReference(mvPostgres, "DcbMaterializedViewPostgres")
+        .WaitFor(mvPostgres);
+}
 
 clientApiBuilder = clientApiBuilder
     .WithEndpoint("http", endpoint =>
