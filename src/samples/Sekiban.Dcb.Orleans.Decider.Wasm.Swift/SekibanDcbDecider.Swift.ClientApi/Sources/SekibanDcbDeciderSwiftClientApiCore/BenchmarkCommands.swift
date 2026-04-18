@@ -174,8 +174,9 @@ public struct CreateQuickReservationRequest: Codable, Sendable {
     public var organizerName: String
     public var startTime: String
     public var endTime: String
-    public var attendeeCount: Int32
+    public var attendeeCount: Int32?
     public var purpose: String
+    public var selectedEquipment: [String]?
 
     public init(
         reservationId: UUID? = nil,
@@ -184,8 +185,9 @@ public struct CreateQuickReservationRequest: Codable, Sendable {
         organizerName: String,
         startTime: String,
         endTime: String,
-        attendeeCount: Int32,
-        purpose: String
+        attendeeCount: Int32? = nil,
+        purpose: String,
+        selectedEquipment: [String]? = nil
     ) {
         self.reservationId = reservationId
         self.roomId = roomId
@@ -195,6 +197,7 @@ public struct CreateQuickReservationRequest: Codable, Sendable {
         self.endTime = endTime
         self.attendeeCount = attendeeCount
         self.purpose = purpose
+        self.selectedEquipment = selectedEquipment
     }
 }
 
@@ -244,7 +247,7 @@ public func buildCreateQuickReservationCommit(
         organizerName: request.organizerName,
         startTime: request.startTime,
         endTime: request.endTime,
-        attendeeCount: request.attendeeCount,
+        attendeeCount: request.attendeeCount ?? 1,
         purpose: request.purpose,
         createdAt: timestamp)
     let held = ReservationHeld(

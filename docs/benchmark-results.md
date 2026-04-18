@@ -165,7 +165,18 @@ Timestamp: `2026-04-18T06:55:39Z` run (plus targeted retries for
 | Go WASM | materialized-view-only | 1,441 | 1,696 | skipped | 65.6 | **1,041.3** |
 | TypeScript WASM | memory-only | 1,280 | 1,757 | 194 | 71.6 | **966.3** |
 | TypeScript WASM | materialized-view-only | 1,320 | 1,527 | skipped | 72.1 | **990.6** |
-| Swift WASM | — | — | — | — | — | — |
+| Swift WASM | memory-only | 1,430 | 3,996 | 0* | 52.5 | **662.6** |
+| Swift WASM | materialized-view-only | 1,427 | 3,840 | skipped | 52.8 | **2,005.7** |
+
+\* Swift WASM module currently declares only the `ClassRoomEnrollment` MV / `ClassRoomList`
+MultiProjection; the benchmark driver's query phase hits `GetRoomListQuery` /
+`GetReservationListQuery` / `GetWeatherForecastListQuery` which no Swift projector resolves,
+so the memory-only query phase returns 0 successful ops. Writes succeed because the
+`/api/rooms`, `/api/weatherforecast`, `/api/reservations/quick` ClientApi endpoints build
+their own `SerializableCommitRequest`s directly (no WASM invocation) — see
+`BenchmarkWriteEndpoints.swift` and the 10 XCTest cases in
+`SekibanDcbDeciderSwiftClientApiCoreTests/`. Extending the Swift WASM with Room /
+Reservation / Weather projectors is the remaining follow-up for full query-phase parity.
 
 Notes:
 
@@ -177,17 +188,16 @@ Notes:
   2 s. The number excludes Aspire, Postgres, and Azurite containers — they each live in
   their own process tree. For the full host footprint add the container overhead back on
   top.
-- Swift WASM now has write-path ClientApi endpoints (`POST /api/rooms`,
+- Swift WASM now ships write-path ClientApi endpoints (`POST /api/rooms`,
   `POST /api/weatherforecast`, `POST /api/reservations/quick`) implemented in
   [`BenchmarkWriteEndpoints.swift`](../src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Swift/SekibanDcbDecider.Swift.ClientApi/Sources/SekibanDcbDeciderSwiftClientApi/BenchmarkWriteEndpoints.swift)
   backed by a reusable
   [`SekibanDcbDeciderSwiftClientApiCore`](../src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Swift/SekibanDcbDecider.Swift.ClientApi/Sources/SekibanDcbDeciderSwiftClientApiCore)
   library (event builders, tag helpers, commit-request forwarder). Event JSON matches the
-  Rust sample's wire format byte-for-byte; 10-test XCTest suite verifies the shape. The
-  benchmark row is still blank because the Swift WASM module's current projector set only
-  covers ClassRoom MV — wasmserver's `TagStateGrain` would not be able to reconstruct
-  Room/Reservation/Weather state from the Swift WASM. Extending the Swift WASM with those
-  projectors is tracked as a follow-up; the write-side infrastructure is ready for it.
+  Rust sample's wire format byte-for-byte; 10-test XCTest suite verifies the shape. Swift
+  runs the write phases of the benchmark end-to-end; the query phase is still gated on
+  extending the Swift WASM module's projector set (Room / Reservation / Weather), which is
+  the remaining follow-up.
 - The `memory-only` vs `materialized-view-only` peak-RSS delta for the WASM runtimes is
   tiny — single-digit percent in every case. The bulk of peak RSS is dominated by:
   1. The `wasmserver` host itself (ASP.NET Core + Orleans silo + Wasmtime engine), which
