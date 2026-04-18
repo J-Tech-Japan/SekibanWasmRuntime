@@ -7,8 +7,13 @@
     "StudentEnrolledInClassRoom",
     "StudentDroppedFromClassRoom"
   ],
-  "projectors": [],
-  "queryProjectors": {},
+  "projectors": [
+    { "projectorName": "ClassRoomListProjection", "modulePath": "./sekiban-dcb-decider-swift.wasm", "projectorVersion": "1.0.0" }
+  ],
+  "queryProjectors": {
+    "GetClassRoomListQuery": "ClassRoomListProjection",
+    "GetClassRoomCountQuery": "ClassRoomListProjection"
+  },
   "materializedViews": [
     {
       "viewName": "ClassRoomEnrollment",
