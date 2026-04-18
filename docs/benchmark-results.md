@@ -177,15 +177,17 @@ Notes:
   2 s. The number excludes Aspire, Postgres, and Azurite containers — they each live in
   their own process tree. For the full host footprint add the container overhead back on
   top.
-- Swift WASM is built, loaded, and invocable against `wasmserver`'s `/api/sekiban/*`
-  transport endpoints, but the Swift ClientApi at
-  `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Swift/SekibanDcbDecider.Swift.ClientApi`
-  is intentionally read-only (mirrors the Rust split). The benchmark driver POSTs rooms
-  to `/api/rooms` which that ClientApi does not expose, so the benchmark cannot be run
-  end-to-end against Swift without adding a write-path ClientApi or a benchmark shim that
-  talks directly to `/api/sekiban/serialized/commit`. The Swift AppHost is wired for both
-  projection modes so the matrix row can be filled in as soon as a write-capable Swift
-  ClientApi lands.
+- Swift WASM now has write-path ClientApi endpoints (`POST /api/rooms`,
+  `POST /api/weatherforecast`, `POST /api/reservations/quick`) implemented in
+  [`BenchmarkWriteEndpoints.swift`](../src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Swift/SekibanDcbDecider.Swift.ClientApi/Sources/SekibanDcbDeciderSwiftClientApi/BenchmarkWriteEndpoints.swift)
+  backed by a reusable
+  [`SekibanDcbDeciderSwiftClientApiCore`](../src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Swift/SekibanDcbDecider.Swift.ClientApi/Sources/SekibanDcbDeciderSwiftClientApiCore)
+  library (event builders, tag helpers, commit-request forwarder). Event JSON matches the
+  Rust sample's wire format byte-for-byte; 10-test XCTest suite verifies the shape. The
+  benchmark row is still blank because the Swift WASM module's current projector set only
+  covers ClassRoom MV — wasmserver's `TagStateGrain` would not be able to reconstruct
+  Room/Reservation/Weather state from the Swift WASM. Extending the Swift WASM with those
+  projectors is tracked as a follow-up; the write-side infrastructure is ready for it.
 - The `memory-only` vs `materialized-view-only` peak-RSS delta for the WASM runtimes is
   tiny — single-digit percent in every case. The bulk of peak RSS is dominated by:
   1. The `wasmserver` host itself (ASP.NET Core + Orleans silo + Wasmtime engine), which
