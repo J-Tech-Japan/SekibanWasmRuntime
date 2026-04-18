@@ -27,6 +27,7 @@ export default function StudentsPage() {
   const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
   const [lastSortableUniqueId, setLastSortableUniqueId] = useState<string | undefined>();
+  const [projectionMode, setProjectionMode] = useState<"memory" | "materializedView">("memory");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [newMaxClassCount, setNewMaxClassCount] = useState(5);
@@ -36,6 +37,7 @@ export default function StudentsPage() {
     pageNumber: currentPage,
     pageSize,
     waitForSortableUniqueId: lastSortableUniqueId,
+    projectionMode,
   });
 
   const createMutation = trpc.students.create.useMutation({
@@ -162,6 +164,17 @@ export default function StudentsPage() {
               <CardDescription>View and manage all registered students</CardDescription>
             </div>
             <div className="flex items-center gap-3">
+              <Select
+                value={projectionMode}
+                onChange={(e) => {
+                  setProjectionMode(e.target.value as "memory" | "materializedView");
+                  setCurrentPage(1);
+                }}
+                className="w-44"
+              >
+                <option value="memory">Memory Projection</option>
+                <option value="materializedView">Materialized View</option>
+              </Select>
               <span className="text-sm text-muted-foreground">Show</span>
               <Select
                 value={pageSize.toString()}

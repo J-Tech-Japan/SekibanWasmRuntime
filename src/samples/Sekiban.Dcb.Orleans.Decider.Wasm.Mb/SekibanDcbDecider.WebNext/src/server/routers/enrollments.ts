@@ -25,48 +25,31 @@ export const enrollmentsRouter = router({
   list: publicProcedure
     .input(
       z.object({
+        pageNumber: z.number().int().positive().optional(),
+        pageSize: z.number().int().positive().optional(),
         waitForSortableUniqueId: z.string().optional(),
+        projectionMode: z.enum(["memory", "materializedView"]).default("memory"),
       })
     )
     .query(async ({ input }) => {
-      // Build enrollments from students and classrooms data
       const params = new URLSearchParams();
+      params.set("projectionMode", input.projectionMode);
+      if (input.pageNumber) {
+        params.set("pageNumber", input.pageNumber.toString());
+      }
+      if (input.pageSize) {
+        params.set("pageSize", input.pageSize.toString());
+      }
       if (input.waitForSortableUniqueId) {
         params.set("waitForSortableUniqueId", input.waitForSortableUniqueId);
       }
 
-      const [studentsRes, classroomsRes] = await Promise.all([
-        fetch(`${eventApiBaseUrl}/api/students?${params.toString()}`),
-        fetch(`${eventApiBaseUrl}/api/classrooms?${params.toString()}`),
-      ]);
-
-      if (!studentsRes.ok || !classroomsRes.ok) {
+      const res = await fetch(`${eventApiBaseUrl}/api/enrollments?${params.toString()}`);
+      if (!res.ok) {
         throw new Error("Failed to fetch enrollment data");
       }
-
-      const students = await studentsRes.json();
-      const classrooms = await classroomsRes.json();
-
-      const enrollments: z.infer<typeof enrollmentSchema>[] = [];
-
-      for (const student of students) {
-        for (const classRoomId of student.enrolledClassRoomIds || []) {
-          const classroom = classrooms.find(
-            (c: { classRoomId: string }) => c.classRoomId === classRoomId
-          );
-          if (classroom) {
-            enrollments.push({
-              studentId: student.studentId,
-              studentName: student.name,
-              classRoomId: classroom.classRoomId,
-              className: classroom.name,
-              enrollmentDate: new Date().toISOString(),
-            });
-          }
-        }
-      }
-
-      return enrollments;
+      const data = await res.json();
+      return z.array(enrollmentSchema).parse(data);
     }),
 
   enroll: publicProcedure
