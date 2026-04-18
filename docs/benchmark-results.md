@@ -144,8 +144,62 @@ Query throughput is intentionally absent from `materialized-view-only` rows beca
 MultiProjection endpoints return 503 in that mode by design.
 
 <!-- BEGIN projection-mode-matrix -->
-Results to be inserted after the matrix orchestrator (`scripts/run-benchmark-matrix.sh`)
-completes. See `benchmarks/results/matrix/matrix-<timestamp>.txt` for the raw manifest.
+
+Timestamp: `2026-04-18T06:55:39Z` run (plus targeted retries for
+`mb-wasm × materialized-view-only`, `mb-wasm × memory-only`, and
+`go-wasm × materialized-view-only` that needed tighter port cleanup). Raw manifests:
+`benchmarks/results/matrix/matrix-20260418T065539Z.txt` +
+`matrix-20260418T065539Z-retry.txt`.
+
+| Runtime | Mode | Weather eps | Reservation eps | Query ops/sec | Wall-clock (s) | Peak RSS (MB) |
+|---|---|---:|---:|---:|---:|---:|
+| C# Native | memory-only | 1,612 | 519 | 1,520 | 55.7 | **4,161.1** |
+| C# Native | materialized-view-only | 1,700 | 434 | skipped | 57.3 | **4,112.0** |
+| C# WASM | memory-only | 1,375 | 1,506 | 510 | 71.3 | **2,113.0** |
+| C# WASM | materialized-view-only | 1,315 | 1,292 | skipped | 77.1 | **2,063.8** |
+| Rust WASM | memory-only | 1,459 | 2,185 | 955 | 60.2 | **1,053.6** |
+| Rust WASM | materialized-view-only | 1,495 | 2,187 | skipped | 58.8 | **1,022.6** |
+| MoonBit WASM | memory-only | 1,524 | 2,892 | 124 | 55.9 | **752.9** |
+| MoonBit WASM | materialized-view-only | 1,067 | 2,083 | skipped | 76.0 | **736.8** |
+| Go WASM | memory-only | 1,406 | 1,482 | 312 | 70.9 | **1,048.0** |
+| Go WASM | materialized-view-only | 1,441 | 1,696 | skipped | 65.6 | **1,041.3** |
+| TypeScript WASM | memory-only | 1,280 | 1,757 | 194 | 71.6 | **966.3** |
+| TypeScript WASM | materialized-view-only | 1,320 | 1,527 | skipped | 72.1 | **990.6** |
+| Swift WASM | — | — | — | — | — | — |
+
+Notes:
+
+- Weather eps / Reservation eps come from the benchmark CLI's phase summaries
+  (total events in phase ÷ phase duration). Query ops/sec reflects the 250-iteration
+  query phase which runs only in `memory-only` mode.
+- Peak RSS is the maximum resident-set size of the runtime process (for WASM rows that
+  is `wasmserver`, for native it is the Sekiban template's `apiservice`) sampled every
+  2 s. The number excludes Aspire, Postgres, and Azurite containers — they each live in
+  their own process tree. For the full host footprint add the container overhead back on
+  top.
+- Swift WASM is built, loaded, and invocable against `wasmserver`'s `/api/sekiban/*`
+  transport endpoints, but the Swift ClientApi at
+  `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Swift/SekibanDcbDecider.Swift.ClientApi`
+  is intentionally read-only (mirrors the Rust split). The benchmark driver POSTs rooms
+  to `/api/rooms` which that ClientApi does not expose, so the benchmark cannot be run
+  end-to-end against Swift without adding a write-path ClientApi or a benchmark shim that
+  talks directly to `/api/sekiban/serialized/commit`. The Swift AppHost is wired for both
+  projection modes so the matrix row can be filled in as soon as a write-capable Swift
+  ClientApi lands.
+- The `memory-only` vs `materialized-view-only` peak-RSS delta for the WASM runtimes is
+  tiny — single-digit percent in every case. The bulk of peak RSS is dominated by:
+  1. The `wasmserver` host itself (ASP.NET Core + Orleans silo + Wasmtime engine), which
+     is constant across modes.
+  2. The projection WASM linear memory when `MultiProjectionGrain` is active — but since
+     mode switching happens before either grain activates for the first time, the
+     `materialized-view-only` row was measured with zero MultiProjection WASM instances
+     resident. The small delta shows that `MaterializedViewGrain` + `PostgresMvExecutor`
+     + `MvCatchUpWorker` alone sit close to the noise floor in this benchmark.
+- The C# Native row is markedly heavier than the WASM rows (~4 GB vs ~1 GB). That is
+  expected: the Sekiban template's apiservice runs the full Orleans decider cluster
+  in-process plus a Dapper-backed MV reader. In the WASM topology, those responsibilities
+  are split across `wasmserver` (Orleans + Sekiban) and a per-language `clientapi`, and
+  only one of the two gets measured here.
 <!-- END projection-mode-matrix -->
 
 ### Interpreting the Delta

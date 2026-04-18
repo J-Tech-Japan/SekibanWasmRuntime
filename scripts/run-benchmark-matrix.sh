@@ -28,10 +28,21 @@ modes=(
 cleanup_background_state() {
   # Kill any stragglers from a prior run: AppHost dotnet processes, their wasmserver /
   # clientapi descendants, the sampler loop, and every Postgres / Azurite container Aspire
-  # might have spawned. Tolerate errors because "no match" is the happy path.
+  # might have spawned. Tolerate errors because "no match" is the happy path. Additionally,
+  # force-close every listener on the AppHost ports — language-specific clientapi executables
+  # (go-clientapi, ts-clientapi node, swift run, cargo run) don't all match one name pattern,
+  # and "Port already in use" is the #1 cause of cascade failures in the matrix.
   pkill -f 'SekibanDcbDecider|wasmserver|Sekiban.Dcb.WasmRuntime.Host|SekibanDcbDecider.AppHost' 2>/dev/null || true
   pkill -f 'run-benchmark-runtime.sh' 2>/dev/null || true
+  pkill -f 'go-clientapi|ts-clientapi|Hummingbird|clientapi/src/server' 2>/dev/null || true
   sleep 2
+  local pids
+  pids="$(lsof -ti tcp:5141,5198,5199,6198,6199,6298,6299,7198,7199,7208,7209 -sTCP:LISTEN 2>/dev/null || true)"
+  if [[ -n "$pids" ]]; then
+    echo "  Killing leftover listeners: $pids"
+    echo "$pids" | xargs -I {} kill -9 {} 2>/dev/null || true
+    sleep 2
+  fi
   local containers
   containers="$(docker ps --format '{{.Names}}' 2>/dev/null | grep -Ei 'postgres|azurite|sekiban' || true)"
   if [[ -n "$containers" ]]; then

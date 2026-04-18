@@ -324,6 +324,16 @@ ensure_ts_wasm_sample_module() {
   fi
 }
 
+ensure_mb_wasm_clientapi_dependencies() {
+  local clientapi_dir="$repo_root/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Mb/SekibanDcbDecider.ClientApi"
+  local marker="$clientapi_dir/node_modules/.package-lock.json"
+
+  if [[ ! -f "$marker" ]]; then
+    echo "[mb-wasm] ClientApi dependencies missing, running npm install"
+    (cd "$clientapi_dir" && npm install --no-audit --no-fund >/dev/null)
+  fi
+}
+
 ensure_swift_wasm_sample_module() {
   local sample_root="$repo_root/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Swift"
   local module_path="$sample_root/modules/sekiban-dcb-decider-swift.wasm"
@@ -537,7 +547,7 @@ elif [[ "$runtime" == "rs-wasm" ]]; then
 elif [[ "$runtime" == "go-wasm" ]]; then
   ensure_go_wasm_sample_module
 elif [[ "$runtime" == "mb-wasm" ]]; then
-  :
+  ensure_mb_wasm_clientapi_dependencies
 elif [[ "$runtime" == "ts-wasm" ]]; then
   ensure_ts_wasm_clientapi_dependencies
   ensure_ts_wasm_sample_module
