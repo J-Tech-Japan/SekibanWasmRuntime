@@ -165,20 +165,42 @@ Timestamp: `2026-04-18T06:55:39Z` run (plus targeted retries for
 | Go WASM | materialized-view-only | 1,441 | 1,696 | skipped | 65.6 | **1,041.3** |
 | TypeScript WASM | memory-only | 1,280 | 1,757 | 194 | 71.6 | **966.3** |
 | TypeScript WASM | materialized-view-only | 1,320 | 1,527 | skipped | 72.1 | **990.6** |
-| Swift WASM | memory-only | 1,334 | 3,751 | 111 | 58.4 | **1,785.3** |
-| Swift WASM | materialized-view-only | 1,257 | 3,917 | skipped | 58.3 | **2,132.6** |
+| Swift WASM† | memory-only | 1,334 | 3,751 | 111 | 58.4 | **1,785.3** |
+| Swift WASM† | materialized-view-only | 1,257 | 3,917 | skipped | 58.3 | **2,132.6** |
 
 Swift WASM now ships the full meeting-room projector set (`RoomListProjection`,
 `WeatherForecastListProjection`, `ReservationListProjection`) alongside the existing
 `ClassRoomListProjection`, so the benchmark driver's `GetRoomListQuery` /
 `GetReservationListQuery` / `GetReservationsByRoomQuery` / `GetWeatherForecastListQuery` /
-`GetWeatherForecastCountQuery` all resolve in-process and return the expected array /
-scalar shapes. Writes go through Swift-side `/api/rooms`, `/api/weatherforecast`,
-`/api/reservations/quick` endpoints (see `BenchmarkWriteEndpoints.swift`); reads go
-through Swift-side `/api/rooms` GET / `/api/reservations` GET / `/api/weatherforecast`
-GET / `/api/weatherforecast/count` / `/api/reservations/by-room/:roomId` (see
-`BenchmarkReadEndpoints.swift`). Zero-error end-to-end at 100K events in both modes —
-Swift is now a first-class runtime in the matrix.
+`GetWeatherForecastCountQuery` all resolve in-process. Zero-error end-to-end at 100K
+events in both modes.
+
+**† Fairness caveat.** The Swift write path (`/api/rooms`, `/api/weatherforecast`,
+`/api/reservations/quick`) deliberately does **not** match the Rust / C# / Go / MoonBit /
+TS command semantics. Those runtimes call the WASM module's `handle_command` export,
+which reads prior state (`ctx.get_state(&tag)` for `Room:`, `User:`, `UserAccess:`,
+`UserMonthlyReservation:`, `RoomDailyActivity:` tags) before deciding what events to
+emit, asks wasmserver for each consistency tag's `lastSortableUniqueId`, and writes
+events on **multiple tag groups** in one commit. Swift's current write path skips all of
+those steps:
+- no WASM `handle_command` invocation (the Swift WASM module has no such export);
+- no state reads (no "AlreadyExists" / "RoomNotFound" / overlap / monthly-limit checks);
+- empty `lastSortableUniqueId` for every consistency tag (no tag-latest-sortable fetch);
+- three reservation events committed on a **single** `RoomReservation:` tag instead of
+  the four-to-five tag fan-out the Rust handler writes.
+
+So the Swift `Reservation eps` headline number (~3,750–3,900) measures a genuinely
+lighter pipeline — the commit itself lands the same three events, but Swift skips the
+validation and multi-tag state work the other runtimes pay for. `Weather eps` is closer
+to apples-to-apples because even the Rust `CreateWeatherForecast` handler only does one
+`get_state` / one tag; Swift `Weather eps` of 1,257–1,334 is in the same neighbourhood
+as Rust (1,459–1,495) and MoonBit (1,067–1,524).
+
+Closing this gap means either adding a `handle_command` export to the Swift WASM module
+and porting the Rust command logic, or teaching the Swift ClientApi to issue the
+`/api/sekiban/serialized/tag-state` round-trips and multi-tag commits the other
+ClientApis do. Both are follow-ups; this PR's goal was to get Swift into the matrix at
+all.
 
 Notes:
 
