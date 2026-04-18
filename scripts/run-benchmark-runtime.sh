@@ -597,7 +597,7 @@ dotnet run --project "$repo_root/benchmarks/Sekiban.Benchmark.Cli/Sekiban.Benchm
   --total-events "$total_events" \
   --concurrency 8 \
   --output "$output_json" \
-  "${benchmark_extra_args[@]}" | tee "$benchmark_log"
+  ${benchmark_extra_args[@]+"${benchmark_extra_args[@]}"} | tee "$benchmark_log"
 
 if kill -0 "$sampler_pid" 2>/dev/null; then
   kill "$sampler_pid" 2>/dev/null || true
