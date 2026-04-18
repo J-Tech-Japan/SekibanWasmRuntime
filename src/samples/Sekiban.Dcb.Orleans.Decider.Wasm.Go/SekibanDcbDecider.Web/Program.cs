@@ -41,6 +41,19 @@ builder.Services.AddHttpClient<AuthApiClient>(client =>
     client.BaseAddress = new Uri(authApiBase);
 });
 
+// Materialized-view read client (direct-DB reads exposed by the Go ClientApi). Kept separate
+// from StudentApiClient / ClassRoomApiClient / EnrollmentApiClient so the toggle on each
+// page can choose which source to query without coupling the existing in-memory projection
+// clients to MV shapes.
+builder.Services.AddHttpClient<MaterializedViewApiClient>(client =>
+{
+    client.BaseAddress = new Uri(clientApiBase);
+});
+
+// Persists the user's projection-source selection across page navigations for a single
+// Blazor circuit.
+builder.Services.AddScoped<ProjectionSourceState>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

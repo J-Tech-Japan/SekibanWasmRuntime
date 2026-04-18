@@ -67,3 +67,15 @@ func WriteString(value string) int64 {
 func PackPtrLen(ptr uint32, length uint32) int64 {
 	return int64(uint64(ptr)<<32 | uint64(length))
 }
+
+// UnpackPtrLen splits a packed int64 back into (ptr, len). Inverse of PackPtrLen.
+func UnpackPtrLen(packed int64) (uint32, uint32) {
+	return uint32(uint64(packed) >> 32), uint32(uint64(packed) & 0xFFFFFFFF)
+}
+
+// BytesPointer returns the linear-memory address of the first byte of b. Callers must
+// guarantee len(b) > 0. Used by MV projectors to forward owned byte buffers into a host
+// import call without copying.
+func BytesPointer(b []byte) uint32 {
+	return uint32(uintptr(unsafe.Pointer(&b[0])))
+}

@@ -6,8 +6,11 @@
 @rendermode InteractiveServer
 
 @inject StudentApiClient StudentApiClient
+@inject MaterializedViewApiClient MvApiClient
+@inject ProjectionSourceState SourceState
 @inject IJSRuntime JsRuntime
 @inject ILogger<Students> Logger
+@implements IDisposable
 
 <PageTitle>Students</PageTitle>
 
@@ -19,7 +22,16 @@
 
 <h3>Student List</h3>
 
-<div class="row mb-3">
+<div class="row mb-3 align-items-center">
+    <div class="col-auto">
+        <label class="col-form-label">Data source:</label>
+    </div>
+    <div class="col-auto">
+        <select class="form-select" @onchange="OnSourceChanged">
+            <option value="Memory" selected="@(SourceState.Current == ProjectionSource.Memory)">Memory projection</option>
+            <option value="MaterializedView" selected="@(SourceState.Current == ProjectionSource.MaterializedView)">Materialized view</option>
+        </select>
+    </div>
     <div class="col-auto">
         <label class="col-form-label">Page Size:</label>
     </div>
@@ -35,7 +47,7 @@
         <span class="col-form-label text-muted">
             @if (students != null)
             {
-                @:Showing @students.Count items
+                @:Showing @students.Count items (@SourceState.Label)
             }
         </span>
     </div>
@@ -64,8 +76,8 @@
             <tr>
                 <td>@student.Name</td>
                 <td>@student.MaxClassCount</td>
-                <td>@student.EnrolledClassRoomIds.Count</td>
-                <td>@student.GetRemaining()</td>
+                <td>@student.EnrolledCount</td>
+                <td>@student.Remaining</td>
             </tr>
         }
         </tbody>
@@ -145,7 +157,12 @@
 
 
 @code {
-    private List<StudentState>? students;
+    // Display view model — populated from either the in-memory projection or the MV read path.
+    // Keeping the razor template source-agnostic means the toggle only has to swap which client
+    // is called, not rebuild the table.
+    private record StudentView(string Name, int MaxClassCount, int EnrolledCount, int Remaining);
+
+    private List<StudentView>? students;
     private StudentModel studentModel = new();
     private string? lastSortableUniqueId;
 
@@ -168,16 +185,60 @@
 
     protected override async Task OnInitializedAsync()
     {
+        SourceState.Changed += OnExternalSourceChanged;
         await LoadStudents();
+    }
+
+    public void Dispose()
+    {
+        SourceState.Changed -= OnExternalSourceChanged;
+    }
+
+    private void OnExternalSourceChanged()
+    {
+        _ = InvokeAsync(async () =>
+        {
+            await LoadStudents(lastSortableUniqueId);
+            StateHasChanged();
+        });
+    }
+
+    private async Task OnSourceChanged(ChangeEventArgs e)
+    {
+        if (Enum.TryParse<ProjectionSource>(e.Value?.ToString(), out var next))
+        {
+            SourceState.Set(next);
+            currentPage = 1;
+            await LoadStudents(lastSortableUniqueId);
+        }
     }
 
     private async Task LoadStudents(string? waitForSortableUniqueId = null)
     {
         try
         {
-            var result = await StudentApiClient.GetStudentsAsync(currentPage, pageSize, waitForSortableUniqueId);
-
-            students = result?.ToList() ?? new List<StudentState>();
+            if (SourceState.Current == ProjectionSource.MaterializedView)
+            {
+                var rows = await MvApiClient.GetStudentsAsync(currentPage, pageSize);
+                students = rows
+                    .Select(r => new StudentView(
+                        r.name,
+                        r.max_class_count,
+                        r.enrolled_count,
+                        Math.Max(0, r.max_class_count - r.enrolled_count)))
+                    .ToList();
+            }
+            else
+            {
+                var result = await StudentApiClient.GetStudentsAsync(currentPage, pageSize, waitForSortableUniqueId);
+                students = (result ?? Array.Empty<StudentState>())
+                    .Select(s => new StudentView(
+                        s.Name,
+                        s.MaxClassCount,
+                        s.EnrolledClassRoomIds.Count,
+                        s.GetRemaining()))
+                    .ToList();
+            }
 
             // For now, estimate total pages based on if we got a full page
             if (students.Count < pageSize && currentPage == 1)
@@ -198,7 +259,7 @@
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error loading students");
-            students = new List<StudentState>();
+            students = new List<StudentView>();
             totalPages = 1;
             totalItems = 0;
         }

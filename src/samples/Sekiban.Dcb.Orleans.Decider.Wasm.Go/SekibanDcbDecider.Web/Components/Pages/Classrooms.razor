@@ -5,8 +5,11 @@
 @rendermode InteractiveServer
 
 @inject ClassRoomApiClient ClassRoomApiClient
+@inject MaterializedViewApiClient MvApiClient
+@inject ProjectionSourceState SourceState
 @inject IJSRuntime JsRuntime
 @inject ILogger<Classrooms> Logger
+@implements IDisposable
 
 <PageTitle>Classrooms</PageTitle>
 
@@ -18,7 +21,16 @@
 
 <h3>Classroom List</h3>
 
-<div class="row mb-3">
+<div class="row mb-3 align-items-center">
+    <div class="col-auto">
+        <label class="col-form-label">Data source:</label>
+    </div>
+    <div class="col-auto">
+        <select class="form-select" @onchange="OnSourceChanged">
+            <option value="Memory" selected="@(SourceState.Current == ProjectionSource.Memory)">Memory projection</option>
+            <option value="MaterializedView" selected="@(SourceState.Current == ProjectionSource.MaterializedView)">Materialized view</option>
+        </select>
+    </div>
     <div class="col-auto">
         <label class="col-form-label">Page Size:</label>
     </div>
@@ -34,7 +46,7 @@
         <span class="col-form-label text-muted">
             @if (classrooms != null)
             {
-                @:Showing @classrooms.Count items
+                @:Showing @classrooms.Count items (@SourceState.Label)
             }
         </span>
     </div>
@@ -78,6 +90,8 @@
                 </td>
             </tr>
         }
+        @* ClassroomView below captures the shared shape both the memory and MV sources
+           produce — name, max, enrolled, remaining, full-flag. *@
         </tbody>
     </table>
 
@@ -150,7 +164,14 @@
 
 
 @code {
-    private List<ClassRoomItem>? classrooms;
+    private sealed record ClassroomView(
+        string Name,
+        int MaxStudents,
+        int EnrolledCount,
+        int RemainingCapacity,
+        bool IsFull);
+
+    private List<ClassroomView>? classrooms;
     private ClassroomModel classroomModel = new();
     private string errorMessage = string.Empty;
     private string? lastSortableUniqueId;
@@ -170,15 +191,66 @@
 
     protected override async Task OnInitializedAsync()
     {
+        SourceState.Changed += OnExternalSourceChanged;
         await LoadClassrooms();
+    }
+
+    public void Dispose()
+    {
+        SourceState.Changed -= OnExternalSourceChanged;
+    }
+
+    private void OnExternalSourceChanged()
+    {
+        _ = InvokeAsync(async () =>
+        {
+            await LoadClassrooms(lastSortableUniqueId);
+            StateHasChanged();
+        });
+    }
+
+    private async Task OnSourceChanged(ChangeEventArgs e)
+    {
+        if (Enum.TryParse<ProjectionSource>(e.Value?.ToString(), out var next))
+        {
+            SourceState.Set(next);
+            currentPage = 1;
+            await LoadClassrooms(lastSortableUniqueId);
+        }
     }
 
     private async Task LoadClassrooms(string? waitForSortableUniqueId = null)
     {
         try
         {
-            var result = await ClassRoomApiClient.GetClassRoomsAsync(currentPage, pageSize, waitForSortableUniqueId);
-            classrooms = result?.ToList() ?? new List<ClassRoomItem>();
+            if (SourceState.Current == ProjectionSource.MaterializedView)
+            {
+                var rows = await MvApiClient.GetClassroomsAsync(currentPage, pageSize);
+                classrooms = rows
+                    .Select(r =>
+                    {
+                        var remaining = Math.Max(0, r.max_students - r.enrolled_count);
+                        return new ClassroomView(
+                            r.name,
+                            r.max_students,
+                            r.enrolled_count,
+                            remaining,
+                            remaining <= 0);
+                    })
+                    .ToList();
+            }
+            else
+            {
+                var result = await ClassRoomApiClient.GetClassRoomsAsync(currentPage, pageSize, waitForSortableUniqueId);
+                classrooms = (result ?? Array.Empty<ClassRoomItem>())
+                    .Select(c => new ClassroomView(
+                        c.Name,
+                        c.MaxStudents,
+                        c.EnrolledCount,
+                        c.RemainingCapacity,
+                        c.IsFull))
+                    .ToList();
+            }
 
             // For now, estimate total pages based on if we got a full page
             if (classrooms.Count < pageSize && currentPage == 1)
@@ -199,7 +271,7 @@
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error loading classrooms");
-            classrooms = new List<ClassRoomItem>();
+            classrooms = new List<ClassroomView>();
             totalPages = 1;
             totalItems = 0;
         }

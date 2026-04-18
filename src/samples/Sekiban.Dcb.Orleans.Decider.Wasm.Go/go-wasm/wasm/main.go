@@ -8,6 +8,7 @@ import (
 
 	"sekiban-dcb-decider-go/domain"
 
+	"github.com/J-Tech-Japan/sekiban-go/mv"
 	"github.com/J-Tech-Japan/sekiban-go/wasm"
 )
 
@@ -2074,6 +2075,44 @@ func cmd_create_reservation_draft(firstStatePtr, firstStateLen uint32, firstVers
 	roomJSON := wasm.ReadString(secondStatePtr, secondStateLen)
 	reqJSON := wasm.ReadString(reqPtr, reqLen)
 	return wasm.WriteString(handleCreateReservationDraft(resJSON, int(firstVersion), roomJSON, int(secondVersion), reqJSON))
+}
+
+// ---------------------------------------------------------------------------
+// Materialized view exports
+// ---------------------------------------------------------------------------
+//
+// Mirrors the Rust / Swift shape: the module owns the projector array and wraps the shared
+// sekiban-go/mv helpers in `//export` C-ABI functions the host can call. The host drives
+// these through `WasmtimeMaterializedViewExecutor`.
+//
+// Projector list is built fresh per call so we dodge lazy-init quirks across TinyGo builds
+// (projector structs are pure value types with no state).
+
+func mvProjectors() []mv.Projector {
+	return []mv.Projector{domain.ClassRoomEnrollmentMvV1{}}
+}
+
+//export mv_metadata
+func mv_metadata() int64 {
+	return mv.Metadata(mvProjectors())
+}
+
+//export mv_initialize
+func mv_initialize(viewNamePtr, viewNameLen uint32, viewVersion int32,
+	bindingsPtr, bindingsLen uint32) int64 {
+	viewName := wasm.ReadString(viewNamePtr, viewNameLen)
+	bindingsJSON := wasm.ReadString(bindingsPtr, bindingsLen)
+	return mv.Initialize(mvProjectors(), viewName, viewVersion, bindingsJSON)
+}
+
+//export mv_apply_event
+func mv_apply_event(viewNamePtr, viewNameLen uint32, viewVersion int32,
+	bindingsPtr, bindingsLen uint32,
+	eventPtr, eventLen uint32) int64 {
+	viewName := wasm.ReadString(viewNamePtr, viewNameLen)
+	bindingsJSON := wasm.ReadString(bindingsPtr, bindingsLen)
+	eventJSON := wasm.ReadString(eventPtr, eventLen)
+	return mv.ApplyEvent(mvProjectors(), viewName, viewVersion, bindingsJSON, eventJSON)
 }
 
 // ---------------------------------------------------------------------------
