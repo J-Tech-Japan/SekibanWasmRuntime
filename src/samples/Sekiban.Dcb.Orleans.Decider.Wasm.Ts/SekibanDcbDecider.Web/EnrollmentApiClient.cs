@@ -31,6 +31,7 @@ public class EnrollmentApiClient(HttpClient httpClient)
 
     public async Task<EnrollmentView[]> GetEnrollmentsAsync(
         string? waitForSortableUniqueId = null,
+        ProjectionMode projectionMode = ProjectionMode.MemoryProjection,
         CancellationToken cancellationToken = default)
     {
         var queryParams = new List<string>();
@@ -38,9 +39,10 @@ public class EnrollmentApiClient(HttpClient httpClient)
         if (!string.IsNullOrEmpty(waitForSortableUniqueId))
             queryParams.Add($"waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}");
 
+        var basePath = projectionMode == ProjectionMode.MaterializedView ? "/api/mv/enrollments" : "/api/enrollments";
         var requestUri = queryParams.Count > 0
-            ? $"/api/enrollments?{string.Join("&", queryParams)}"
-            : "/api/enrollments";
+            ? $"{basePath}?{string.Join("&", queryParams)}"
+            : basePath;
 
         var enrollments = await httpClient.GetFromJsonAsync<List<EnrollmentView>>(requestUri, cancellationToken);
 

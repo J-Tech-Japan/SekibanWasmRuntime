@@ -2,6 +2,7 @@ import { z } from "zod";
 import { router, publicProcedure } from "../api/trpc";
 
 const eventApiBaseUrl = process.env.CLIENT_API_BASE_URL ?? process.env.API_BASE_URL;
+const projectionModeSchema = z.enum(["memory", "materializedView"]).default("memory");
 
 const enrollmentSchema = z.object({
   studentId: z.string().uuid(),
@@ -26,47 +27,22 @@ export const enrollmentsRouter = router({
     .input(
       z.object({
         waitForSortableUniqueId: z.string().optional(),
+        projectionMode: projectionModeSchema,
       })
     )
     .query(async ({ input }) => {
-      // Build enrollments from students and classrooms data
       const params = new URLSearchParams();
       if (input.waitForSortableUniqueId) {
         params.set("waitForSortableUniqueId", input.waitForSortableUniqueId);
       }
 
-      const [studentsRes, classroomsRes] = await Promise.all([
-        fetch(`${eventApiBaseUrl}/api/students?${params.toString()}`),
-        fetch(`${eventApiBaseUrl}/api/classrooms?${params.toString()}`),
-      ]);
-
-      if (!studentsRes.ok || !classroomsRes.ok) {
+      const path = input.projectionMode === "materializedView" ? "/api/mv/enrollments" : "/api/enrollments";
+      const res = await fetch(`${eventApiBaseUrl}${path}?${params.toString()}`);
+      if (!res.ok) {
         throw new Error("Failed to fetch enrollment data");
       }
-
-      const students = await studentsRes.json();
-      const classrooms = await classroomsRes.json();
-
-      const enrollments: z.infer<typeof enrollmentSchema>[] = [];
-
-      for (const student of students) {
-        for (const classRoomId of student.enrolledClassRoomIds || []) {
-          const classroom = classrooms.find(
-            (c: { classRoomId: string }) => c.classRoomId === classRoomId
-          );
-          if (classroom) {
-            enrollments.push({
-              studentId: student.studentId,
-              studentName: student.name,
-              classRoomId: classroom.classRoomId,
-              className: classroom.name,
-              enrollmentDate: new Date().toISOString(),
-            });
-          }
-        }
-      }
-
-      return enrollments;
+      const data = await res.json();
+      return z.array(enrollmentSchema).parse(data);
     }),
 
   enroll: publicProcedure

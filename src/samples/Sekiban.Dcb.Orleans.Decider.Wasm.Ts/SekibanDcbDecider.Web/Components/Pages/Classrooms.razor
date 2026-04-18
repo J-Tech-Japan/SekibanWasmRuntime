@@ -20,6 +20,15 @@
 
 <div class="row mb-3">
     <div class="col-auto">
+        <label class="col-form-label">Projection:</label>
+    </div>
+    <div class="col-auto">
+        <select class="form-select" @onchange="OnProjectionModeChanged">
+            <option value="@ProjectionMode.MemoryProjection" selected="@(projectionMode == ProjectionMode.MemoryProjection)">Memory Projection</option>
+            <option value="@ProjectionMode.MaterializedView" selected="@(projectionMode == ProjectionMode.MaterializedView)">Materialized View</option>
+        </select>
+    </div>
+    <div class="col-auto">
         <label class="col-form-label">Page Size:</label>
     </div>
     <div class="col-auto">
@@ -160,6 +169,7 @@
     private int pageSize = 10;
     private int totalPages = 1;
     private int totalItems;
+    private ProjectionMode projectionMode = ProjectionMode.MemoryProjection;
 
 
     public class ClassroomModel
@@ -177,7 +187,7 @@
     {
         try
         {
-            var result = await ClassRoomApiClient.GetClassRoomsAsync(currentPage, pageSize, waitForSortableUniqueId);
+            var result = await ClassRoomApiClient.GetClassRoomsAsync(currentPage, pageSize, waitForSortableUniqueId, projectionMode);
             classrooms = result?.ToList() ?? new List<ClassRoomItem>();
 
             // For now, estimate total pages based on if we got a full page
@@ -220,6 +230,16 @@
         {
             pageSize = newSize;
             currentPage = 1; // Reset to first page when changing page size
+            await LoadClassrooms(lastSortableUniqueId);
+        }
+    }
+
+    private async Task OnProjectionModeChanged(ChangeEventArgs e)
+    {
+        if (Enum.TryParse<ProjectionMode>(e.Value?.ToString(), out var selectedMode))
+        {
+            projectionMode = selectedMode;
+            currentPage = 1;
             await LoadClassrooms(lastSortableUniqueId);
         }
     }
