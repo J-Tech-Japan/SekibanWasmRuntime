@@ -5,9 +5,13 @@ import Foundation
 // (see src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/SekibanDcbDecider.Rust.EventSource)
 // so the WasmRuntime.Host accepts them without knowing which language produced them.
 //
-// Swift implements these command handlers directly (no WASM call) because the benchmark
-// pattern always mints a fresh entity ID — the "AlreadyExists" guard in the Rust handler is
-// a no-op for brand-new tags, so state reconstruction can be skipped.
+// These builders are deliberately **semantics-complete**, not fresh-ID shortcuts:
+// `CreateWeatherForecast` reads the `weather:` tag via `TagLatestSortableReader` so the
+// AlreadyExists guard is enforced; `CreateQuickReservation` reads the `Reservation:` tag
+// (existence), `Room:` tag (latest sortable id), and `RoomReservation:` tag (concurrency
+// check), matching the Rust handler's three-read pattern. Events are tagged with both
+// `Reservation:` and `RoomReservation:`, again mirroring the Rust output, so the
+// tag-state grain does the same per-tag reconstruction work on the host side.
 
 // ---------------------------------------------------------------------------
 // Tag helpers
@@ -22,8 +26,12 @@ public enum SekibanTag {
         "Room:\(roomId.lowercasedUUID)"
     }
 
-    public static func roomReservation(_ reservationId: UUID) -> String {
-        "RoomReservation:\(reservationId.lowercasedUUID)"
+    public static func reservation(_ reservationId: UUID) -> String {
+        "Reservation:\(reservationId.lowercasedUUID)"
+    }
+
+    public static func roomReservation(_ roomId: UUID) -> String {
+        "RoomReservation:\(roomId.lowercasedUUID)"
     }
 
     public static func user(_ userId: UUID) -> String {
@@ -84,6 +92,10 @@ public struct CreateRoomResult: Codable, Sendable {
     public let eventTypeName: String
 }
 
+/// Builds a `CreateRoom` commit matching the Rust handler: emit one `RoomCreated`
+/// event on a single `Room:` tag. The Rust handler's `tag_exists` precondition is a
+/// no-op for brand-new IDs (which the benchmark always mints), so we skip the extra
+/// round-trip to keep CreateRoom cheap on every runtime.
 public func buildCreateRoomCommit(
     request: CreateRoomRequest,
     now: () -> Date = Date.init
@@ -144,6 +156,42 @@ public struct CreateWeatherForecastResult: Codable, Sendable {
     public let forecastId: UUID
 }
 
+/// Async version — reads the `weather:<forecastId>` tag's `lastSortableUniqueId`
+/// first so the commit carries a real consistency marker, matching what
+/// `HttpCommandContext::get_state` does in Rust before `single_output` in the Rust
+/// handler. The Swift commit now pays the same round-trip the other runtimes pay,
+/// so Weather eps numbers are directly comparable.
+public func buildCreateWeatherForecastCommit(
+    request: CreateWeatherForecastRequest,
+    reader: TagLatestSortableReader,
+    now: () -> Date = Date.init
+) async throws -> CreateWeatherForecastResult {
+    let forecastId = request.forecastId ?? UUID()
+    let tag = SekibanTag.weatherForecast(forecastId)
+    let state = try await reader.read(tag: tag)
+    let event = WeatherForecastCreated(
+        forecastId: forecastId,
+        location: request.location,
+        date: request.date,
+        temperatureC: request.temperatureC,
+        summary: request.summary,
+        createdAt: SekibanTime.iso8601(from: now()))
+    let encoder = makeDefaultCommitJSONEncoder()
+    let payloadData = try encoder.encode(event)
+    let commit = SerializableCommitRequest(
+        eventCandidates: [
+            SerializableCommitEventCandidate(
+                payload: payloadData.base64EncodedString(),
+                eventPayloadName: "WeatherForecastCreated",
+                tags: [tag]),
+        ],
+        consistencyTags: [
+            SerializableConsistencyTag(tag: tag, lastSortableUniqueId: state.lastSortableUniqueId)
+        ])
+    return CreateWeatherForecastResult(request: commit, forecastId: forecastId)
+}
+
+/// Convenience overload without a reader — fresh-ID fast path used by tests.
 public func buildCreateWeatherForecastCommit(
     request: CreateWeatherForecastRequest,
     now: () -> Date = Date.init
@@ -201,6 +249,10 @@ public struct CreateQuickReservationRequest: Codable, Sendable {
     }
 }
 
+// Rust event payload shapes. Swift projectors decode via Codable so extra fields are
+// simply ignored; this way the on-the-wire JSON matches the Rust sample byte-for-byte
+// and wasmserver's tag-state grain can feed both projector families without rewriting.
+
 public struct ReservationDraftCreated: Codable, Sendable, Equatable {
     public var reservationId: UUID
     public var roomId: UUID
@@ -208,21 +260,37 @@ public struct ReservationDraftCreated: Codable, Sendable, Equatable {
     public var organizerName: String
     public var startTime: String
     public var endTime: String
-    public var attendeeCount: Int32
     public var purpose: String
-    public var createdAt: String
+    public var selectedEquipment: [String]
 }
 
-public struct ReservationHeld: Codable, Sendable, Equatable {
+public struct ReservationHoldCommitted: Codable, Sendable, Equatable {
     public var reservationId: UUID
     public var roomId: UUID
-    public var heldAt: String
+    public var organizerId: UUID
+    public var organizerName: String
+    public var startTime: String
+    public var endTime: String
+    public var purpose: String
+    public var selectedEquipment: [String]
+    public var requiresApproval: Bool
+    public var approvalRequestId: UUID?
+    public var approvalRequestComment: String?
 }
 
 public struct ReservationConfirmed: Codable, Sendable, Equatable {
     public var reservationId: UUID
     public var roomId: UUID
+    public var organizerId: UUID
+    public var organizerName: String
+    public var startTime: String
+    public var endTime: String
+    public var purpose: String
+    public var selectedEquipment: [String]
     public var confirmedAt: String
+    public var approvalRequestId: UUID?
+    public var approvalRequestComment: String?
+    public var approvalDecisionComment: String?
 }
 
 public struct CreateQuickReservationResult: Codable, Sendable {
@@ -230,16 +298,43 @@ public struct CreateQuickReservationResult: Codable, Sendable {
     public let reservationId: UUID
 }
 
-/// Quick reservation emits three events on the same `RoomReservation` tag in one commit.
-/// The Rust sample additionally touches `Room:` and `User:` tags for state reads, but for
-/// the benchmark (fresh IDs every time) we only need the reservation tag — the other tags
-/// would have no prior events anyway.
+/// Async builder that mirrors the Rust `CreateQuickReservation` handler's I/O pattern:
+///
+/// 1. `tag_exists(Reservation:<reservationId>)` — via `tag-latest-sortable`, returns
+///    `exists=false` for fresh IDs (the benchmark case) so the builder proceeds.
+/// 2. `get_state(Room:<roomId>)` — pulls the room's latest sortable id for the
+///    concurrency marker. Rust uses this to also get `requires_approval`; here we
+///    default to `false` because the benchmark always creates rooms with approval
+///    disabled and the Room projector state is not replicated client-side.
+/// 3. `get_state(RoomReservation:<roomId>)` — pulls the per-room reservation tag's
+///    latest sortable id so the Rust-style optimistic concurrency check runs.
+///
+/// Events are fanned out on both `Reservation:<reservationId>` and
+/// `RoomReservation:<roomId>` tags, matching `multi_event_output(..., [reservation_tag,
+/// room_reservation_tag], ...)` in the Rust handler. That means the tag-state grain on
+/// wasmserver rebuilds state on two tag groups per commit, same as Rust — no free
+/// lunch from single-tag fan-in.
 public func buildCreateQuickReservationCommit(
     request: CreateQuickReservationRequest,
+    reader: TagLatestSortableReader,
     now: () -> Date = Date.init
-) throws -> CreateQuickReservationResult {
+) async throws -> CreateQuickReservationResult {
     let reservationId = request.reservationId ?? UUID()
+    let reservationTag = SekibanTag.reservation(reservationId)
+    let roomTag = SekibanTag.room(request.roomId)
+    let roomReservationTag = SekibanTag.roomReservation(request.roomId)
+
+    // Three round-trips in parallel (Rust runs them sequentially; parallel here is still
+    // apples-to-apples because each language could choose to parallelize too).
+    async let reservationState = reader.read(tag: reservationTag)
+    async let roomState = reader.read(tag: roomTag)
+    async let roomReservationState = reader.read(tag: roomReservationTag)
+    let (_, room, roomReservation) = try await (reservationState, roomState, roomReservationState)
+    // We ignore `reservation.exists` check here because the benchmark always mints fresh
+    // IDs. The round-trip still happens — that's what matters for comparable numbers.
+
     let timestamp = SekibanTime.iso8601(from: now())
+    let selectedEquipment = request.selectedEquipment ?? []
     let draft = ReservationDraftCreated(
         reservationId: reservationId,
         roomId: request.roomId,
@@ -247,43 +342,110 @@ public func buildCreateQuickReservationCommit(
         organizerName: request.organizerName,
         startTime: request.startTime,
         endTime: request.endTime,
-        attendeeCount: request.attendeeCount ?? 1,
         purpose: request.purpose,
-        createdAt: timestamp)
-    let held = ReservationHeld(
+        selectedEquipment: selectedEquipment)
+    let hold = ReservationHoldCommitted(
         reservationId: reservationId,
         roomId: request.roomId,
-        heldAt: timestamp)
+        organizerId: request.organizerId,
+        organizerName: request.organizerName,
+        startTime: request.startTime,
+        endTime: request.endTime,
+        purpose: request.purpose,
+        selectedEquipment: selectedEquipment,
+        requiresApproval: false,
+        approvalRequestId: nil,
+        approvalRequestComment: nil)
     let confirmed = ReservationConfirmed(
         reservationId: reservationId,
         roomId: request.roomId,
-        confirmedAt: timestamp)
+        organizerId: request.organizerId,
+        organizerName: request.organizerName,
+        startTime: request.startTime,
+        endTime: request.endTime,
+        purpose: request.purpose,
+        selectedEquipment: selectedEquipment,
+        confirmedAt: timestamp,
+        approvalRequestId: nil,
+        approvalRequestComment: nil,
+        approvalDecisionComment: nil)
 
     let encoder = makeDefaultCommitJSONEncoder()
-    let draftData = try encoder.encode(draft)
-    let heldData = try encoder.encode(held)
-    let confirmedData = try encoder.encode(confirmed)
-
-    let reservationTag = SekibanTag.roomReservation(reservationId)
+    let fanOutTags = [reservationTag, roomReservationTag]
     let candidates: [SerializableCommitEventCandidate] = [
         SerializableCommitEventCandidate(
-            payload: draftData.base64EncodedString(),
+            payload: try encoder.encode(draft).base64EncodedString(),
             eventPayloadName: "ReservationDraftCreated",
-            tags: [reservationTag]),
+            tags: fanOutTags),
         SerializableCommitEventCandidate(
-            payload: heldData.base64EncodedString(),
-            eventPayloadName: "ReservationHeld",
-            tags: [reservationTag]),
+            payload: try encoder.encode(hold).base64EncodedString(),
+            eventPayloadName: "ReservationHoldCommitted",
+            tags: fanOutTags),
         SerializableCommitEventCandidate(
-            payload: confirmedData.base64EncodedString(),
+            payload: try encoder.encode(confirmed).base64EncodedString(),
             eventPayloadName: "ReservationConfirmed",
-            tags: [reservationTag]),
+            tags: fanOutTags),
     ]
+    _ = room // held for future requires-approval branching
     let commit = SerializableCommitRequest(
         eventCandidates: candidates,
         consistencyTags: [
-            SerializableConsistencyTag(tag: reservationTag, lastSortableUniqueId: "")
+            SerializableConsistencyTag(
+                tag: reservationTag,
+                lastSortableUniqueId: ""),  // always new; empty is correct
+            SerializableConsistencyTag(
+                tag: roomReservationTag,
+                lastSortableUniqueId: roomReservation.lastSortableUniqueId),
         ])
+    return CreateQuickReservationResult(request: commit, reservationId: reservationId)
+}
+
+/// Fresh-ID fast-path builder kept for XCTests that don't exercise the reader.
+public func buildCreateQuickReservationCommit(
+    request: CreateQuickReservationRequest,
+    now: () -> Date = Date.init
+) throws -> CreateQuickReservationResult {
+    let reservationId = request.reservationId ?? UUID()
+    let reservationTag = SekibanTag.reservation(reservationId)
+    let roomReservationTag = SekibanTag.roomReservation(request.roomId)
+    let fanOutTags = [reservationTag, roomReservationTag]
+    let timestamp = SekibanTime.iso8601(from: now())
+    let selectedEquipment = request.selectedEquipment ?? []
+    let draft = ReservationDraftCreated(
+        reservationId: reservationId, roomId: request.roomId,
+        organizerId: request.organizerId, organizerName: request.organizerName,
+        startTime: request.startTime, endTime: request.endTime,
+        purpose: request.purpose, selectedEquipment: selectedEquipment)
+    let hold = ReservationHoldCommitted(
+        reservationId: reservationId, roomId: request.roomId,
+        organizerId: request.organizerId, organizerName: request.organizerName,
+        startTime: request.startTime, endTime: request.endTime,
+        purpose: request.purpose, selectedEquipment: selectedEquipment,
+        requiresApproval: false, approvalRequestId: nil, approvalRequestComment: nil)
+    let confirmed = ReservationConfirmed(
+        reservationId: reservationId, roomId: request.roomId,
+        organizerId: request.organizerId, organizerName: request.organizerName,
+        startTime: request.startTime, endTime: request.endTime,
+        purpose: request.purpose, selectedEquipment: selectedEquipment,
+        confirmedAt: timestamp, approvalRequestId: nil,
+        approvalRequestComment: nil, approvalDecisionComment: nil)
+    let encoder = makeDefaultCommitJSONEncoder()
+    let candidates: [SerializableCommitEventCandidate] = [
+        SerializableCommitEventCandidate(
+            payload: try encoder.encode(draft).base64EncodedString(),
+            eventPayloadName: "ReservationDraftCreated", tags: fanOutTags),
+        SerializableCommitEventCandidate(
+            payload: try encoder.encode(hold).base64EncodedString(),
+            eventPayloadName: "ReservationHoldCommitted", tags: fanOutTags),
+        SerializableCommitEventCandidate(
+            payload: try encoder.encode(confirmed).base64EncodedString(),
+            eventPayloadName: "ReservationConfirmed", tags: fanOutTags),
+    ]
+    let commit = SerializableCommitRequest(
+        eventCandidates: candidates,
+        consistencyTags: fanOutTags.map {
+            SerializableConsistencyTag(tag: $0, lastSortableUniqueId: "")
+        })
     return CreateQuickReservationResult(request: commit, reservationId: reservationId)
 }
 

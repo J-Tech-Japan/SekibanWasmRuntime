@@ -54,6 +54,11 @@ public struct WeatherForecastCreated: Codable, Sendable {
     public var createdAt: String
 }
 
+// Reservation events mirror the Rust sample's payload shape so the same JSON flows
+// through the generic WasmRuntime.Host regardless of which language produced it. Fields
+// absent from the benchmark payload (`approvalRequestId`, `selectedEquipment`, etc.) are
+// optional/defaulted on decode — the benchmark's Swift ClientApi doesn't touch them.
+
 public struct ReservationDraftCreated: Codable, Sendable {
     public var reservationId: UUID
     public var roomId: UUID
@@ -61,19 +66,35 @@ public struct ReservationDraftCreated: Codable, Sendable {
     public var organizerName: String
     public var startTime: String
     public var endTime: String
-    public var attendeeCount: Int32
     public var purpose: String
-    public var createdAt: String
+    public var selectedEquipment: [String]?
 }
 
-public struct ReservationHeld: Codable, Sendable {
+public struct ReservationHoldCommitted: Codable, Sendable {
     public var reservationId: UUID
     public var roomId: UUID
-    public var heldAt: String
+    public var organizerId: UUID
+    public var organizerName: String
+    public var startTime: String
+    public var endTime: String
+    public var purpose: String
+    public var selectedEquipment: [String]?
+    public var requiresApproval: Bool?
+    public var approvalRequestId: UUID?
+    public var approvalRequestComment: String?
 }
 
 public struct ReservationConfirmed: Codable, Sendable {
     public var reservationId: UUID
     public var roomId: UUID
+    public var organizerId: UUID
+    public var organizerName: String
+    public var startTime: String
+    public var endTime: String
+    public var purpose: String
+    public var selectedEquipment: [String]?
     public var confirmedAt: String
+    public var approvalRequestId: UUID?
+    public var approvalRequestComment: String?
+    public var approvalDecisionComment: String?
 }

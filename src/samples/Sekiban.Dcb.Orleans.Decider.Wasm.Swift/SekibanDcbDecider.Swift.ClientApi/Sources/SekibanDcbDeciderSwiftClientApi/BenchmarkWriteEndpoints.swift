@@ -6,20 +6,14 @@ import NIOCore
 import SekibanDcbDeciderSwiftClientApiCore
 
 // Benchmark-driver write endpoints. Each handler decodes the driver's JSON body, hands it
-// to the corresponding builder in `SekibanDcbDeciderSwiftClientApiCore`, and forwards the
+// to the reader-backed builder in `SekibanDcbDeciderSwiftClientApiCore`, and forwards the
 // resulting `SerializableCommitRequest` to the wasmserver's generic
-// `/api/sekiban/serialized/commit` endpoint. Events match the Rust sample's wire shape so
-// the same WasmRuntime.Host accepts them identically.
+// `/api/sekiban/serialized/commit` endpoint.
 //
-// Routes mounted here:
-//   POST /api/rooms                       → RoomCreated
-//   POST /api/weatherforecast             → WeatherForecastCreated
-//   POST /api/reservations/quick          → ReservationDraftCreated + Held + Confirmed
-//
-// These endpoints intentionally skip the Rust sample's "AlreadyExists" / "RoomNotFound"
-// precondition checks — the benchmark driver always mints fresh entity IDs, so the guard
-// is a no-op for brand-new tags. State reconstruction via the WASM tag-state projector is
-// left to the host and is not needed for the happy path.
+// The builder path is deliberately the one that issues tag-latest-sortable round-trips
+// and fans events out across multiple tag groups so the Swift numbers are comparable to
+// the other language samples. The fresh-ID fast-path builders live in Core but are only
+// used from XCTests.
 
 func registerBenchmarkWriteRoutes(
     _ router: Router<BasicRequestContext>,
@@ -27,6 +21,7 @@ func registerBenchmarkWriteRoutes(
     logger: Logger
 ) {
     let forwarder = CommitRequestForwarder(wasmServerUrl: wasmServerUrl)
+    let reader = TagLatestSortableReader(wasmServerUrl: wasmServerUrl)
 
     router.post("/api/rooms") { request, context in
         try await handleCommit(
@@ -35,13 +30,6 @@ func registerBenchmarkWriteRoutes(
             forwarder: forwarder,
             build: { (body: CreateRoomRequest) in
                 try buildCreateRoomCommit(request: body).request
-            },
-            successBody: { result in
-                // Match Rust's response envelope: { success, roomId, sortableUniqueId, eventId }
-                [
-                    "success": result.isSuccess,
-                    "sortableUniqueId": result.sortableUniqueId ?? NSNull(),
-                ] as [String: Any]
             },
             logger: logger)
     }
@@ -52,13 +40,7 @@ func registerBenchmarkWriteRoutes(
             context: context,
             forwarder: forwarder,
             build: { (body: CreateWeatherForecastRequest) in
-                try buildCreateWeatherForecastCommit(request: body).request
-            },
-            successBody: { result in
-                [
-                    "success": result.isSuccess,
-                    "sortableUniqueId": result.sortableUniqueId ?? NSNull(),
-                ]
+                try await buildCreateWeatherForecastCommit(request: body, reader: reader).request
             },
             logger: logger)
     }
@@ -69,13 +51,7 @@ func registerBenchmarkWriteRoutes(
             context: context,
             forwarder: forwarder,
             build: { (body: CreateQuickReservationRequest) in
-                try buildCreateQuickReservationCommit(request: body).request
-            },
-            successBody: { result in
-                [
-                    "success": result.isSuccess,
-                    "sortableUniqueId": result.sortableUniqueId ?? NSNull(),
-                ]
+                try await buildCreateQuickReservationCommit(request: body, reader: reader).request
             },
             logger: logger)
     }
@@ -85,15 +61,11 @@ func registerBenchmarkWriteRoutes(
 // Dispatch helper
 // ---------------------------------------------------------------------------
 
-/// Read the request body, decode it into `B`, call `build` to produce a commit request,
-/// forward it to wasmserver, and render the forwarder result (HTTP pass-through for
-/// non-200 codes so the benchmark driver sees the real failure).
 private func handleCommit<B: Decodable>(
     request: Request,
     context: BasicRequestContext,
     forwarder: CommitRequestForwarder,
-    build: (B) throws -> SerializableCommitRequest,
-    successBody: (CommitForwardResult) -> [String: Any],
+    build: (B) async throws -> SerializableCommitRequest,
     logger: Logger
 ) async throws -> Response {
     let decoded: B
@@ -108,7 +80,7 @@ private func handleCommit<B: Decodable>(
 
     let commit: SerializableCommitRequest
     do {
-        commit = try build(decoded)
+        commit = try await build(decoded)
     } catch {
         return errorResponse(
             status: .internalServerError,
@@ -126,48 +98,43 @@ private func handleCommit<B: Decodable>(
     }
 
     if result.isSuccess {
-        let body = successBody(result)
-        return try jsonDictResponse(body, status: .ok)
+        do {
+            let sortableField: Any = result.sortableUniqueId.map { $0 as Any } ?? (NSNull() as Any)
+            let data = try JSONSerialization.data(
+                withJSONObject: [
+                    "success": true,
+                    "sortableUniqueId": sortableField,
+                ],
+                options: [])
+            var buffer = ByteBuffer()
+            buffer.writeBytes(data)
+            return Response(
+                status: .ok,
+                headers: [.contentType: "application/json"],
+                body: ResponseBody(byteBuffer: buffer))
+        } catch {
+            return errorResponse(
+                status: .internalServerError,
+                message: "failed to encode response: \(error)")
+        }
     }
 
-    // Non-2xx from wasmserver: pass the body through so the benchmark driver can see the
-    // error message. Map the status code 1-to-1.
     return passthrough(result)
 }
 
 private func passthrough(_ result: CommitForwardResult) -> Response {
     var buffer = ByteBuffer()
     buffer.writeBytes(result.body)
-    let status: HTTPResponse.Status = HTTPResponse.Status(code: result.statusCode)
     return Response(
-        status: status,
+        status: HTTPResponse.Status(code: result.statusCode),
         headers: [.contentType: "application/json"],
         body: ResponseBody(byteBuffer: buffer))
 }
 
 private func errorResponse(status: HTTPResponse.Status, message: String) -> Response {
-    do {
-        let data = try JSONSerialization.data(
-            withJSONObject: ["success": false, "error": message],
-            options: [])
-        var buffer = ByteBuffer()
-        buffer.writeBytes(data)
-        return Response(
-            status: status,
-            headers: [.contentType: "application/json"],
-            body: ResponseBody(byteBuffer: buffer))
-    } catch {
-        var buffer = ByteBuffer()
-        buffer.writeString(#"{"success":false,"error":"(failed to encode error)"}"#)
-        return Response(
-            status: status,
-            headers: [.contentType: "application/json"],
-            body: ResponseBody(byteBuffer: buffer))
-    }
-}
-
-private func jsonDictResponse(_ dict: [String: Any], status: HTTPResponse.Status) throws -> Response {
-    let data = try JSONSerialization.data(withJSONObject: dict, options: [])
+    let data = (try? JSONSerialization.data(
+        withJSONObject: ["success": false, "error": message],
+        options: [])) ?? Data(#"{"success":false,"error":"(failed to encode error)"}"#.utf8)
     var buffer = ByteBuffer()
     buffer.writeBytes(data)
     return Response(

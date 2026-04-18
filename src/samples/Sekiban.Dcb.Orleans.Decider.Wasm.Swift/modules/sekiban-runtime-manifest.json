@@ -9,7 +9,7 @@
     "RoomCreated",
     "WeatherForecastCreated",
     "ReservationDraftCreated",
-    "ReservationHeld",
+    "ReservationHoldCommitted",
     "ReservationConfirmed"
   ],
   "projectors": [

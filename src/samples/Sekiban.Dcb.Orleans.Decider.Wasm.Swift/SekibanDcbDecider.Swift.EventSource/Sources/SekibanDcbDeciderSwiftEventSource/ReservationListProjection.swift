@@ -12,6 +12,10 @@ public final class ReservationListProjection: MultiProjection {
     public init() {}
 
     public func applyEvent(eventType: String, payload: String, tags: [String]) {
+        // Rust fans out each reservation event on BOTH the Reservation:<id> tag and
+        // the RoomReservation:<roomId> tag. wasmserver calls `apply_event` for both
+        // tags, so we see the same event twice per commit. Ignoring the second hit is
+        // trivial because we key by reservationId and the payload is identical.
         _ = tags
         guard let data = payload.data(using: .utf8) else { return }
         switch eventType {
@@ -25,19 +29,19 @@ public final class ReservationListProjection: MultiProjection {
                     organizerName: evt.organizerName,
                     startTime: evt.startTime,
                     endTime: evt.endTime,
-                    attendeeCount: evt.attendeeCount,
+                    attendeeCount: 1,
                     purpose: evt.purpose,
                     status: "Draft",
-                    createdAt: evt.createdAt,
+                    createdAt: evt.startTime,
                     heldAt: nil,
                     confirmedAt: nil)
             }
-        case "ReservationHeld":
-            if let evt = try? JSONDecoder().decode(ReservationHeld.self, from: data) {
+        case "ReservationHoldCommitted":
+            if let evt = try? JSONDecoder().decode(ReservationHoldCommitted.self, from: data) {
                 let key = evt.reservationId.uuidString.lowercased()
                 if var item = reservations[key] {
                     item.status = "Held"
-                    item.heldAt = evt.heldAt
+                    item.heldAt = evt.startTime
                     reservations[key] = item
                 }
             }

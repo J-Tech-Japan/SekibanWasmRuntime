@@ -111,7 +111,7 @@ final class BenchmarkCommandsTests: XCTestCase {
         XCTAssertEqual(event.createdAt, "2026-04-18T12:00:00.500Z")
     }
 
-    func testBuildCreateQuickReservationCommit_ThreeEventsOnOneTag() throws {
+    func testBuildCreateQuickReservationCommit_ThreeEventsOnTwoTags() throws {
         let reservationId = makeUUID("reservation-001")
         let roomId = makeUUID("room-007")
         let organizerId = makeUUID("user-123")
@@ -123,22 +123,34 @@ final class BenchmarkCommandsTests: XCTestCase {
             startTime: "2026-05-03T09:00:00Z",
             endTime: "2026-05-03T10:00:00Z",
             attendeeCount: 4,
-            purpose: "Benchmark meeting")
+            purpose: "Benchmark meeting",
+            selectedEquipment: [])
 
+        // Synchronous fast-path builder — matches the Rust handler's event fan-out on
+        // `Reservation:<reservationId>` + `RoomReservation:<roomId>` without the
+        // round-trip I/O (exercised by the reader-backed builder in integration tests).
         let result = try buildCreateQuickReservationCommit(request: request, now: { self.fixedNow })
 
         XCTAssertEqual(result.reservationId, reservationId)
         XCTAssertEqual(result.request.eventCandidates.count, 3)
-        XCTAssertEqual(result.request.consistencyTags.count, 1)
-        let expectedTag = "RoomReservation:\(reservationId.lowercasedUUID)"
-        XCTAssertEqual(result.request.consistencyTags[0].tag, expectedTag)
+        XCTAssertEqual(result.request.consistencyTags.count, 2)
+        let reservationTag = "Reservation:\(reservationId.lowercasedUUID)"
+        let roomReservationTag = "RoomReservation:\(roomId.lowercasedUUID)"
+        XCTAssertEqual(
+            Set(result.request.consistencyTags.map(\.tag)),
+            Set([reservationTag, roomReservationTag]))
 
         let eventTypes = result.request.eventCandidates.map(\.eventPayloadName)
-        XCTAssertEqual(eventTypes, ["ReservationDraftCreated", "ReservationHeld", "ReservationConfirmed"])
+        XCTAssertEqual(eventTypes, [
+            "ReservationDraftCreated",
+            "ReservationHoldCommitted",
+            "ReservationConfirmed",
+        ])
 
-        // Every candidate should carry the same (single) reservation tag.
+        // Every candidate should carry BOTH reservation tags (the fan-out that matches
+        // Rust's `multi_event_output(..., [reservation_tag, room_reservation_tag], ...)`).
         for candidate in result.request.eventCandidates {
-            XCTAssertEqual(candidate.tags, [expectedTag])
+            XCTAssertEqual(Set(candidate.tags), Set([reservationTag, roomReservationTag]))
         }
 
         // Draft event round-trip check — the most field-heavy of the three.
@@ -148,9 +160,8 @@ final class BenchmarkCommandsTests: XCTestCase {
         XCTAssertEqual(draft.roomId, roomId)
         XCTAssertEqual(draft.organizerId, organizerId)
         XCTAssertEqual(draft.organizerName, "Benchmark User")
-        XCTAssertEqual(draft.attendeeCount, 4)
         XCTAssertEqual(draft.purpose, "Benchmark meeting")
-        XCTAssertEqual(draft.createdAt, "2026-04-18T12:00:00.500Z")
+        XCTAssertEqual(draft.selectedEquipment, [])
     }
 
     func testCommitRequestRoundTripsThroughJSON() throws {
