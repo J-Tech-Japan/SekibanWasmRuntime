@@ -62,12 +62,21 @@ func registerMvRoutes(_ router: Router<BasicRequestContext>, context: MvAppConte
 // Paging helpers
 // ---------------------------------------------------------------------------
 
+// Bound page size so a single request cannot pin the DB with an absurd LIMIT/OFFSET. 100 is
+// enough for MV introspection and matches the Rust/C# sample's de-facto usage pattern.
+private let defaultPageSize = 20
+private let maxPageSize = 100
+
 private func paging(from request: Request) -> (Int, Int) {
     let sizeRaw = request.uri.queryParameters["page_size"] ?? request.uri.queryParameters["pageSize"]
     let pageRaw = request.uri.queryParameters["page_number"] ?? request.uri.queryParameters["pageNumber"]
-    let size = sizeRaw.flatMap { Int($0) }.map { $0 > 0 ? $0 : 20 } ?? 20
-    let page = pageRaw.flatMap { Int($0) }.map { $0 > 0 ? $0 : 1 } ?? 1
-    return (size, (page - 1) * size)
+    let requestedSize = sizeRaw.flatMap { Int($0) } ?? defaultPageSize
+    let size = min(max(requestedSize, 1), maxPageSize)
+    let page = max(pageRaw.flatMap { Int($0) } ?? 1, 1)
+    // Clamp the offset if (page-1)*size would overflow Int — unreachable in practice given the
+    // page_size cap, but keeps the function total.
+    let (offset, overflow) = (page - 1).multipliedReportingOverflow(by: size)
+    return (size, overflow ? Int.max - (Int.max % size) : offset)
 }
 
 private func mvDisabled() -> Response {

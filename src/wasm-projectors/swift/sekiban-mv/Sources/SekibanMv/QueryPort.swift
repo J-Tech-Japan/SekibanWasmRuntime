@@ -44,20 +44,37 @@ public struct HostBackedMvQueryPort: MvQueryPort {
         // Temporarily hold the bytes in arrays so their pointers stay valid across the call.
         return sqlBytes.withUnsafeBufferPointer { sqlBuf in
             paramsJson.withUnsafeBufferPointer { paramsBuf in
-                let sqlPtr: Int32 = Int32(truncatingIfNeeded:
-                    UInt32(UInt(bitPattern: UnsafeRawPointer(sqlBuf.baseAddress ?? UnsafePointer<UInt8>(bitPattern: 0)!))))
-                let sqlLen = Int32(sqlBytes.count)
-                let paramsPtr: Int32 = paramsJson.isEmpty ? 0 : Int32(truncatingIfNeeded:
-                    UInt32(UInt(bitPattern: UnsafeRawPointer(paramsBuf.baseAddress ?? UnsafePointer<UInt8>(bitPattern: 0)!))))
-                let paramsLen = Int32(paramsJson.count)
+                let sqlPtr: Int32
+                let sqlLen: Int32
+                if let base = sqlBuf.baseAddress, !sqlBytes.isEmpty {
+                    sqlPtr = Int32(truncatingIfNeeded:
+                        UInt32(UInt(bitPattern: UnsafeRawPointer(base))))
+                    sqlLen = Int32(sqlBytes.count)
+                } else {
+                    sqlPtr = 0
+                    sqlLen = 0
+                }
+
+                let paramsPtr: Int32
+                let paramsLen: Int32
+                if let base = paramsBuf.baseAddress, !paramsJson.isEmpty {
+                    paramsPtr = Int32(truncatingIfNeeded:
+                        UInt32(UInt(bitPattern: UnsafeRawPointer(base))))
+                    paramsLen = Int32(paramsJson.count)
+                } else {
+                    paramsPtr = 0
+                    paramsLen = 0
+                }
 
                 let packed = host_mv_host_query_rows(sqlPtr, sqlLen, paramsPtr, paramsLen, rowLimit)
                 let (ptr, len) = unpackPtrLen(packed)
                 if ptr == 0 || len == 0 { return nil }
                 let text = readString(ptr: ptr, len: len)
-                // Host allocated the buffer via our `alloc` export, so free it now.
-                let raw = UnsafeMutableRawPointer(bitPattern: Int(UInt32(bitPattern: ptr)))
-                free(raw)
+                // Host allocated the buffer via our module's exported allocator (`alloc` →
+                // malloc), so release it via the matching exported deallocator instead of
+                // calling `free` directly. Keeps the allocator contract stable if the
+                // module ever swaps malloc/free for a custom pair.
+                sekibanDealloc(ptr, len)
                 if let errData = text.data(using: .utf8),
                    let obj = try? JSONSerialization.jsonObject(with: errData) as? [String: Any],
                    obj["error"] != nil {

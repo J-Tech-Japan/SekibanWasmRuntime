@@ -7,9 +7,9 @@ import PackageDescription
 // sample's axum+sqlx clientapi — the generic WasmRuntime.Host stays free of app-specific
 // read APIs.
 //
-// Also exposes a minimal /api/seed/* write path that POSTs SerializableCommitRequest payloads
-// through to the wasmserver so the sample can be smoke-tested end-to-end without shipping a
-// full Swift command API.
+// The smoke-test write path is intentionally NOT part of this service — see
+// `build/scripts/seed-swift-mv.sh`, which posts SerializableCommitRequest payloads directly
+// at the wasmserver's serialized commit endpoint. This scope is allowed by issue #89.
 
 let package = Package(
     name: "SekibanDcbDeciderSwiftClientApi",
