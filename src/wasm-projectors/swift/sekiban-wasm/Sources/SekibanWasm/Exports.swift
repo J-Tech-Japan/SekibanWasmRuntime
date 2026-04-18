@@ -22,15 +22,16 @@ public func sekibanDealloc(_ ptr: Int32, _ size: Int32) {
     free(raw)
 }
 
-// `apply_events_batch` is not used by the MultiProjectionGrain catch-up path today but the
-// host probes for it. A stub that returns 0 keeps `WasmtimePrimitiveProjectionInstance`
-// from surfacing "missing export" warnings when the runtime starts up.
+// `apply_events_batch` is the hot path for MultiProjection catch-up: when a host batch
+// contains more than one event, `WasmtimePrimitiveProjectionInstance.ApplyBatchChunkCore`
+// calls it and only falls back to per-event apply (through an expensive exception) if this
+// export is missing or throws. The dispatcher dispatches against an existing instance id
+// so it doesn't need the sample's projector-factory map — instances come from
+// `create_instance`, which the sample owns.
 @_cdecl("apply_events_batch")
 public func sekibanApplyEventsBatch(
     _ instanceId: Int32,
     _ jsonPtr: Int32, _ jsonLen: Int32
 ) -> Int32 {
-    _ = instanceId
-    _ = readString(ptr: jsonPtr, len: jsonLen)
-    return 0
+    PrimitiveHelpers.applyEventsBatch(instanceId: instanceId, jsonPtr: jsonPtr, jsonLen: jsonLen)
 }

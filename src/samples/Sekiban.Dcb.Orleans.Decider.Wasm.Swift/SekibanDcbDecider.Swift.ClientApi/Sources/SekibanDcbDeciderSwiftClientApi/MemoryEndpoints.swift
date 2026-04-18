@@ -76,9 +76,9 @@ private func fetchClassroomsFromMemory(
         wasmServerUrl: wasmServerUrl,
         logger: logger)
     let decoded = try JSONDecoder().decode(SerializedListQueryResponse.self, from: raw)
-    // The `itemsJson` field is already a JSON array (the Swift projector wrapped its results
-    // in {items:[…]} via ListQueryResult). Return it verbatim so the benchmark harness sees
-    // the raw projector shape, matching what the Rust sample does.
+    // `itemsJson` already contains the raw JSON array the projector returned on the wire.
+    // Forward it verbatim so the benchmark harness and UI see the projector's array shape,
+    // matching what the Rust sample does.
     return jsonRawResponse(decoded.itemsJson)
 }
 

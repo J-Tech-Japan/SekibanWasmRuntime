@@ -42,9 +42,50 @@ public enum PrimitiveHelpers {
     ) {
         let eventType = readString(ptr: eventTypePtr, len: eventTypeLen)
         let payload = readString(ptr: payloadPtr, len: payloadLen)
-        _ = readString(ptr: metaPtr, len: metaLen) // metadata unused by current projectors
+        let metaJson = readString(ptr: metaPtr, len: metaLen)
+        // Host serializes metadata as `{"tags": ["..."], "sortableUniqueId": "..."}`. Any
+        // projector that cares about tags needs them forwarded; decoding failures degrade
+        // to the no-tag path so a malformed metadata blob never drops the event itself.
+        let tags = decodeMetadataTags(metaJson)
         PrimitiveInstanceManager.shared.get(instanceId)?
-            .applyEvent(eventType: eventType, payload: payload, tags: [])
+            .applyEvent(eventType: eventType, payload: payload, tags: tags)
+    }
+
+    /// Parses the common metadata envelope the host attaches via `apply_event_with_metadata`.
+    /// Returns an empty array when the metadata blob is missing or unparseable.
+    private static func decodeMetadataTags(_ metaJson: String) -> [String] {
+        guard let data = metaJson.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return [] }
+        return (object["tags"] as? [String]) ?? []
+    }
+
+    /// Apply a JSON array of `{"eventType":"...","payloadJson":"..."}` items in order. The
+    /// host calls this (via the `apply_events_batch` export) whenever a batch of size > 1
+    /// is available during catch-up; without a working implementation the host otherwise
+    /// degrades to per-event apply through exception handling, tanking benchmark numbers.
+    /// Returns the number of events successfully dispatched.
+    public static func applyEventsBatch(
+        instanceId: Int32,
+        jsonPtr: Int32, jsonLen: Int32
+    ) -> Int32 {
+        let jsonText = readString(ptr: jsonPtr, len: jsonLen)
+        let trimmed = jsonText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return 0 }
+        guard let data = trimmed.data(using: .utf8),
+              let array = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+              let instance = PrimitiveInstanceManager.shared.get(instanceId)
+        else { return -1 }
+
+        var applied: Int32 = 0
+        for item in array {
+            guard let eventType = item["eventType"] as? String, !eventType.isEmpty,
+                  let payload = item["payloadJson"] as? String else { break }
+            let tags = (item["tags"] as? [String]) ?? []
+            instance.applyEvent(eventType: eventType, payload: payload, tags: tags)
+            applied &+= 1
+        }
+        return applied
     }
 
     public static func serializeState(instanceId: Int32) -> Int64 {
@@ -79,8 +120,11 @@ public enum PrimitiveHelpers {
     ) -> Int64 {
         let type = readString(ptr: typePtr, len: typeLen)
         let params = readString(ptr: paramsPtr, len: paramsLen)
+        // Projectors return plain JSON arrays for list queries so the host grain can wrap
+        // them into `SerializedListQueryResponse.itemsJson`. Fall back to `[]` to stay
+        // consistent with that contract even on the unknown-instance branch.
         let json = PrimitiveInstanceManager.shared.get(instanceId)?
-            .executeListQuery(type: type, params: params) ?? "{\"items\":[]}"
+            .executeListQuery(type: type, params: params) ?? "[]"
         return writeStringToMemory(json)
     }
 }

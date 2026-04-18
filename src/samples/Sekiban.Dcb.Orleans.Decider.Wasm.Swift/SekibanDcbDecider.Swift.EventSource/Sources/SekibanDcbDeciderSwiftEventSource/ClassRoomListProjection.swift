@@ -136,21 +136,3 @@ public struct CountResult: Codable, Sendable {
     public var count: Int
     public init(count: Int) { self.count = count }
 }
-
-/// Envelope matching the host-side `SerializableListQueryResult` shape so the generic query
-/// response path can ingest Swift's JSON unchanged.
-public struct ListQueryResult<Item: Codable & Sendable>: Codable, Sendable {
-    public var items: [Item]
-    public var totalCount: Int
-    public var totalPages: Int
-    public var currentPage: Int
-    public var pageSize: Int
-
-    public init(items: [Item], totalCount: Int, totalPages: Int, currentPage: Int, pageSize: Int) {
-        self.items = items
-        self.totalCount = totalCount
-        self.totalPages = totalPages
-        self.currentPage = currentPage
-        self.pageSize = pageSize
-    }
-}
