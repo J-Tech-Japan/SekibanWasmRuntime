@@ -1,0 +1,19 @@
+{
+  "defaultModulePath": "./sekiban-dcb-decider-swift.wasm",
+  "queryAssemblyVersion": "wasm",
+  "eventTypes": [
+    "ClassRoomCreated",
+    "StudentCreated",
+    "StudentEnrolledInClassRoom",
+    "StudentDroppedFromClassRoom"
+  ],
+  "projectors": [],
+  "queryProjectors": {},
+  "materializedViews": [
+    {
+      "viewName": "ClassRoomEnrollment",
+      "viewVersion": 1,
+      "logicalTables": ["classrooms", "students", "enrollments"]
+    }
+  ]
+}

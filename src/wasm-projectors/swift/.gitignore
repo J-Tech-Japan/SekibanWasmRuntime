@@ -1,0 +1,4 @@
+.build/
+**/.build/
+Package.resolved
+**/Package.resolved

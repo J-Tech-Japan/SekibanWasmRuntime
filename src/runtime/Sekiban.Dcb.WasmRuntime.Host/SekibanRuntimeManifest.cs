@@ -51,9 +51,10 @@ public sealed class SekibanRuntimeManifest
                 $"WASM module not found at '{DefaultModulePath}'.");
         }
 
-        if (Projectors.Count == 0)
+        if (Projectors.Count == 0 && MaterializedViews.Count == 0)
         {
-            throw new InvalidOperationException("At least one projector must be configured.");
+            throw new InvalidOperationException(
+                "At least one projector or materialized view must be configured.");
         }
 
         if (EventTypes.Count == 0)

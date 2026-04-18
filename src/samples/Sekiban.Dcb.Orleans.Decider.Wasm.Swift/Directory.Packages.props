@@ -1,0 +1,8 @@
+<Project>
+  <PropertyGroup>
+    <!-- Swift sample manages its own NuGet versions directly in csproj files, matching the
+         Rust sample's convention. Keeps the Aspire AppHost SDK 13.2.0 pinning local to this
+         sample without polluting the solution-wide CPM file. -->
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+</Project>
