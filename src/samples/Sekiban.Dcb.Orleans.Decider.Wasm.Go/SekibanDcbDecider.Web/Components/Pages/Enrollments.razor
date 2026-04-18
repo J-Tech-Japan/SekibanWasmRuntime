@@ -230,13 +230,15 @@
         });
     }
 
-    private async Task OnSourceChanged(ChangeEventArgs e)
+    private Task OnSourceChanged(ChangeEventArgs e)
     {
+        // Set() raises SourceState.Changed → OnExternalSourceChanged runs LoadEnrollments,
+        // so there is no direct LoadEnrollments call here — avoids a double reload race.
         if (Enum.TryParse<ProjectionSource>(e.Value?.ToString(), out var next))
         {
             SourceState.Set(next);
-            await LoadEnrollments(lastSortableUniqueId);
         }
+        return Task.CompletedTask;
     }
 
     private async Task LoadData(string? waitForSortableUniqueId = null)
@@ -319,9 +321,11 @@
                 return;
             }
 
-            // Memory-projection path: reconstruct the enrollment list by joining the student
-            // and classroom projections (there is no /api/enrollments endpoint on the
-            // clientapi). The MV branch above does this join inside Postgres.
+            // Memory-projection path: reconstruct the enrollment list client-side by joining
+            // the student and classroom projections, because there is no /api/enrollments
+            // endpoint on the clientapi. The MV path in LoadEnrollmentsFromMv does the same
+            // client-side join against the three MV read endpoints (we keep each endpoint
+            // strictly tabular on the Go side).
             var httpClient = HttpClientFactory.CreateClient("ApiService");
             var studentsUri = !string.IsNullOrEmpty(waitForSortableUniqueId)
                 ? $"api/students?waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}"

@@ -15,6 +15,11 @@ import (
 // Metadata returns JSON metadata describing `projectors`, packed into linear memory via
 // sekiban-go's WriteString. The return value is the packed (ptr,len) i64 the host consumes.
 func Metadata(projectors []Projector) int64 {
+	// Clear buffers tracked from the previous MV export call. The MV executor on the host
+	// side reads the previous return buffer before calling us again, so resetting at the
+	// start of each export is safe and prevents the fixed-size allocation registry from
+	// filling up over many MV apply calls.
+	wasm.ResetAllocations()
 	meta := make([]WasmMvMetadata, 0, len(projectors))
 	for _, p := range projectors {
 		meta = append(meta, WasmMvMetadata{
@@ -39,6 +44,7 @@ func Initialize(
 	viewVersion int32,
 	bindingsJSON string,
 ) int64 {
+	wasm.ResetAllocations()
 	projector := lookup(projectors, viewName, viewVersion)
 	if projector == nil {
 		return wasm.WriteString(errorEnvelope(fmt.Errorf("unknown view %s/%d", viewName, viewVersion)))
@@ -69,6 +75,7 @@ func ApplyEvent(
 	bindingsJSON string,
 	eventJSON string,
 ) int64 {
+	wasm.ResetAllocations()
 	projector := lookup(projectors, viewName, viewVersion)
 	if projector == nil {
 		return wasm.WriteString(errorEnvelope(fmt.Errorf("unknown view %s/%d", viewName, viewVersion)))

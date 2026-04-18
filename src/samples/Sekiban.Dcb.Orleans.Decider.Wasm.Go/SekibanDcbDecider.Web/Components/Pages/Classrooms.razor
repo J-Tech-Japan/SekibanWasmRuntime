@@ -209,14 +209,16 @@
         });
     }
 
-    private async Task OnSourceChanged(ChangeEventArgs e)
+    private Task OnSourceChanged(ChangeEventArgs e)
     {
+        // Set() raises SourceState.Changed → OnExternalSourceChanged runs LoadClassrooms,
+        // so there is no direct LoadClassrooms call here — avoids a double reload race.
         if (Enum.TryParse<ProjectionSource>(e.Value?.ToString(), out var next))
         {
-            SourceState.Set(next);
             currentPage = 1;
-            await LoadClassrooms(lastSortableUniqueId);
+            SourceState.Set(next);
         }
+        return Task.CompletedTask;
     }
 
     private async Task LoadClassrooms(string? waitForSortableUniqueId = null)

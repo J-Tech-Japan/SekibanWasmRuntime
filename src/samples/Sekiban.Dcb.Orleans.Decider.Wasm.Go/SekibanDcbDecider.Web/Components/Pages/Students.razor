@@ -203,14 +203,17 @@
         });
     }
 
-    private async Task OnSourceChanged(ChangeEventArgs e)
+    private Task OnSourceChanged(ChangeEventArgs e)
     {
+        // Set() raises SourceState.Changed → OnExternalSourceChanged runs LoadStudents.
+        // Resetting the page here (before the raise) keeps the subsequent reload on page 1
+        // without firing a second parallel load from this method.
         if (Enum.TryParse<ProjectionSource>(e.Value?.ToString(), out var next))
         {
-            SourceState.Set(next);
             currentPage = 1;
-            await LoadStudents(lastSortableUniqueId);
+            SourceState.Set(next);
         }
+        return Task.CompletedTask;
     }
 
     private async Task LoadStudents(string? waitForSortableUniqueId = null)

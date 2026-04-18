@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -328,20 +329,47 @@ func (s *appState) handleMvEnrollments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	limit, offset := pagingFromRequest(r)
-	studentID := firstQuery(r, "student_id", "studentId")
-	classRoomID := firstQuery(r, "class_room_id", "classRoomId")
+	studentIDRaw := firstQuery(r, "student_id", "studentId")
+	classRoomIDRaw := firstQuery(r, "class_room_id", "classRoomId")
+
+	// Validate UUID query parameters up-front so malformed input returns 400 instead of
+	// leaking a pgx-level "invalid input syntax for type uuid" 500 from Postgres.
+	var studentID, classRoomID uuid.UUID
+	var hasStudentID, hasClassRoomID bool
+	if studentIDRaw != "" {
+		parsed, err := uuid.Parse(studentIDRaw)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "invalid student_id (must be a UUID)",
+			})
+			return
+		}
+		studentID = parsed
+		hasStudentID = true
+	}
+	if classRoomIDRaw != "" {
+		parsed, err := uuid.Parse(classRoomIDRaw)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "invalid class_room_id (must be a UUID)",
+			})
+			return
+		}
+		classRoomID = parsed
+		hasClassRoomID = true
+	}
 
 	var args []any
 	where := ""
 	args = append(args, limit, offset)
 	placeholderIdx := 3
-	if studentID != "" {
-		where += fmt.Sprintf(" AND student_id = $%d::uuid", placeholderIdx)
+	if hasStudentID {
+		where += fmt.Sprintf(" AND student_id = $%d", placeholderIdx)
 		args = append(args, studentID)
 		placeholderIdx++
 	}
-	if classRoomID != "" {
-		where += fmt.Sprintf(" AND class_room_id = $%d::uuid", placeholderIdx)
+	if hasClassRoomID {
+		where += fmt.Sprintf(" AND class_room_id = $%d", placeholderIdx)
 		args = append(args, classRoomID)
 		placeholderIdx++
 	}
