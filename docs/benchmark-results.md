@@ -106,7 +106,7 @@ benchmark CLI for that runtime.
 - Driver: `scripts/run-benchmark-runtime.sh --mode <mode> <runtime> <events> <json> <rss>`
 - Orchestrator: `scripts/run-benchmark-matrix.sh` (runs all 7 runtimes × 2 modes and writes a manifest)
 - Target events: `100,000` (60% weather writes, 40% reservation lifecycle)
-- Query phase: enabled only in `memory-only` mode (500 queries). Skipped in `materialized-view-only` via `--skip-queries` because the MultiProjection endpoints return 503 and would spend the full window on timeouts.
+- Query phase: enabled only in `memory-only` mode (50 iterations × 5 queries = 250 total queries). Skipped in `materialized-view-only` via `--skip-queries` because the MultiProjection endpoints return 503 and would spend the full window on timeouts.
 - Concurrency: `8`
 - Peak RSS: sampled every 2s against the `wasmserver` / `apiservice` PID (not AppHost, not Postgres).
 - All WASM runtimes share the common tuning from the sections above; no strict profile is applied.
@@ -203,8 +203,9 @@ and the 14 XCTest cases in
 Notes:
 
 - Weather eps / Reservation eps come from the benchmark CLI's phase summaries
-  (total events in phase ÷ phase duration). Query ops/sec reflects the 250-iteration
-  query phase which runs only in `memory-only` mode.
+  (total events in phase ÷ phase duration). Query ops/sec reflects the query phase's
+  250 total queries (50 iterations × 5 queries per iteration), which run only in
+  `memory-only` mode.
 - Peak RSS is the maximum resident-set size of the runtime process (for WASM rows that
   is `wasmserver`, for native it is the Sekiban template's `apiservice`) sampled every
   2 s. The number excludes Aspire, Postgres, and Azurite containers — they each live in

@@ -25,29 +25,87 @@ modes=(
   "materialized-view-only"
 )
 
+# Container name prefixes Aspire gives the AppHost-spawned resources. Anything matching
+# one of these prefixes (plus the Aspire-appended random suffix) was started by this PR's
+# AppHosts; everything else on the Docker daemon is left alone.
+APPHOST_CONTAINER_PREFIXES=(
+  'dcbOrleansPostgres-'
+  'SekibanCSharpDb-'
+  'sekibanRustPostgres-'
+  'sekibanMoonBitPostgres-'
+  'sekibanGoPostgres-'
+  'sekibanTsPostgres-'
+  'sekibanSwiftPostgres-'
+  'azurestorage-'
+  'dbgate-'
+)
+# Ports our AppHosts hard-code for the wasmserver / clientapi / native apiservice. Kept
+# in sync with scripts/run-benchmark-runtime.sh.
+APPHOST_PORTS='5141,5198,5199,6198,6199,6298,6299,7198,7199,7208,7209'
+
 cleanup_background_state() {
-  # Kill any stragglers from a prior run: AppHost dotnet processes, their wasmserver /
-  # clientapi descendants, the sampler loop, and every Postgres / Azurite container Aspire
-  # might have spawned. Tolerate errors because "no match" is the happy path. Additionally,
-  # force-close every listener on the AppHost ports — language-specific clientapi executables
-  # (go-clientapi, ts-clientapi node, swift run, cargo run) don't all match one name pattern,
-  # and "Port already in use" is the #1 cause of cascade failures in the matrix.
+  # Stop the AppHost-spawned processes by name pattern first. Matched patterns cover the
+  # AppHost's child processes (wasmserver, apiservice) and the language-specific
+  # clientapi executables (go-clientapi, ts-clientapi, Hummingbird on Swift, cargo on Rust)
+  # — broad enough to catch leftovers from a failed cell.
   pkill -f 'SekibanDcbDecider|wasmserver|Sekiban.Dcb.WasmRuntime.Host|SekibanDcbDecider.AppHost' 2>/dev/null || true
   pkill -f 'run-benchmark-runtime.sh' 2>/dev/null || true
   pkill -f 'go-clientapi|ts-clientapi|Hummingbird|clientapi/src/server' 2>/dev/null || true
   sleep 2
-  local pids
-  pids="$(lsof -ti tcp:5141,5198,5199,6198,6199,6298,6299,7198,7199,7208,7209 -sTCP:LISTEN 2>/dev/null || true)"
-  if [[ -n "$pids" ]]; then
-    echo "  Killing leftover listeners: $pids"
-    echo "$pids" | xargs -I {} kill -9 {} 2>/dev/null || true
-    sleep 2
+
+  # Close listeners on the AppHost ports — only if the listener belongs to the current
+  # user AND its command line matches a known benchmark/AppHost pattern. This protects
+  # unrelated services that happen to use the same ports. Escalate to SIGKILL when the
+  # operator explicitly opts in via RUN_BENCHMARK_MATRIX_FORCE_KILL_LISTENERS=1 for
+  # stubborn leftovers; the default SIGTERM path is enough in practice.
+  local pids current_user signal
+  current_user="$(id -u)"
+  if [[ "${RUN_BENCHMARK_MATRIX_FORCE_KILL_LISTENERS:-0}" == "1" ]]; then
+    signal="-9"
+  else
+    signal="-TERM"
   fi
-  local containers
-  containers="$(docker ps --format '{{.Names}}' 2>/dev/null | grep -Ei 'postgres|azurite|sekiban' || true)"
-  if [[ -n "$containers" ]]; then
-    echo "  Stopping Docker containers: $containers"
-    echo "$containers" | xargs -I {} docker stop {} >/dev/null 2>&1 || true
+  pids="$(lsof -ti tcp:${APPHOST_PORTS} -sTCP:LISTEN 2>/dev/null || true)"
+  if [[ -n "$pids" ]]; then
+    local target_pids=()
+    local pid
+    for pid in $pids; do
+      [[ -z "$pid" ]] && continue
+      local uid cmd
+      uid="$(ps -o uid= -p "$pid" 2>/dev/null | awk '{print $1}')"
+      cmd="$(ps -o command= -p "$pid" 2>/dev/null || true)"
+      if [[ "$uid" == "$current_user" ]] \
+         && [[ "$cmd" =~ SekibanDcbDecider|wasmserver|Sekiban\.Dcb\.WasmRuntime\.Host|go-clientapi|ts-clientapi|Hummingbird|clientapi/src/server|cargo ]]; then
+        target_pids+=("$pid")
+      fi
+    done
+    if (( ${#target_pids[@]} > 0 )); then
+      echo "  Signaling ($signal) leftover AppHost listeners: ${target_pids[*]}"
+      kill "$signal" "${target_pids[@]}" 2>/dev/null || true
+      sleep 2
+    fi
+  fi
+
+  # Stop Aspire-spawned Docker containers matching the AppHost resource prefixes above.
+  # Containers not matching the prefix list are untouched so unrelated databases the
+  # developer / CI host is running don't get caught in the sweep.
+  local all_containers containers=()
+  all_containers="$(docker ps --format '{{.Names}}' 2>/dev/null || true)"
+  if [[ -n "$all_containers" ]]; then
+    while IFS= read -r name; do
+      [[ -z "$name" ]] && continue
+      local prefix
+      for prefix in "${APPHOST_CONTAINER_PREFIXES[@]}"; do
+        if [[ "$name" == "$prefix"* ]]; then
+          containers+=("$name")
+          break
+        fi
+      done
+    done <<<"$all_containers"
+  fi
+  if (( ${#containers[@]} > 0 )); then
+    echo "  Stopping Aspire-spawned containers: ${containers[*]}"
+    docker stop "${containers[@]}" >/dev/null 2>&1 || true
   fi
 }
 

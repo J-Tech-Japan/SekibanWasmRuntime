@@ -83,10 +83,21 @@ var enableProjectionStatusEndpoint = builder.Environment.IsDevelopment()
 // benchmark matrix: "dual" (default — MultiProjection in-memory grain AND materialized view
 // both wired), "memory-only" (skip MV registration), "materialized-view-only" (MV wired, but
 // MultiProjection endpoints return 503 so `MultiProjectionGrain` never activates and no
-// projection WASM is loaded). See docs/benchmark-results.md for the intent.
-var projectionMode = (Environment.GetEnvironmentVariable("SEKIBAN_PROJECTION_MODE") ?? "dual")
+// projection WASM is loaded). See docs/benchmark-results.md for the intent. Unrecognized
+// values log a loud warning and fall back to "dual" so a typo doesn't silently disable both
+// paths (which would look like "everything is broken" with no obvious cause).
+var rawProjectionMode = Environment.GetEnvironmentVariable("SEKIBAN_PROJECTION_MODE");
+var projectionMode = (rawProjectionMode ?? "dual")
     .Trim()
     .ToLowerInvariant();
+if (projectionMode is not ("dual" or "memory-only" or "materialized-view-only"))
+{
+    Console.WriteLine(
+        $"Warning: Unsupported SEKIBAN_PROJECTION_MODE='{rawProjectionMode}'. " +
+        "Supported values are: dual | memory-only | materialized-view-only. " +
+        "Falling back to 'dual'.");
+    projectionMode = "dual";
+}
 var projectionModeEnabled = projectionMode is "dual" or "memory-only";
 var materializedViewRequested = projectionMode is "dual" or "materialized-view-only";
 Console.WriteLine($"SEKIBAN_PROJECTION_MODE={projectionMode} (multiProjection={projectionModeEnabled}, materializedView={materializedViewRequested})");
@@ -478,8 +489,9 @@ app.MapPost("/api/sekiban/serialized/commit", async (
 
 // Serialized query endpoints are the only callers that activate the MultiProjectionGrain
 // (which, in turn, loads the projection WASM instance and holds its ~36 MB linear memory).
-// In materialized-view-only mode we leave them unmapped so activation never happens — the
-// benchmark driver treats missing endpoints as an expected signal for that mode.
+// In materialized-view-only mode these endpoints stay mapped but always return 503, so
+// `MultiProjectionGrain` still never activates — the benchmark driver treats that response
+// as the expected signal for that mode.
 if (projectionModeEnabled)
 {
     app.MapPost("/api/sekiban/serialized/query", async (

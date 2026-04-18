@@ -7,11 +7,22 @@ positional=()
 while (( $# > 0 )); do
   case "$1" in
     --mode)
+      # Guard against `set -u` crashes when --mode is the last argument or followed by
+      # another flag. Print a targeted usage error instead of an "unbound variable" abort.
+      if (( $# < 2 )) || [[ -z "${2:-}" ]] || [[ "$2" == --* ]]; then
+        echo "Error: --mode requires a value (dual | memory-only | materialized-view-only)." >&2
+        echo "Usage: scripts/run-benchmark-runtime.sh [--mode <mode>] <runtime> <total-events> <output-json> <rss-log> [benchmark-profile]" >&2
+        exit 1
+      fi
       projection_mode="$2"
       shift 2
       ;;
     --mode=*)
       projection_mode="${1#--mode=}"
+      if [[ -z "$projection_mode" ]]; then
+        echo "Error: --mode= requires a value (dual | memory-only | materialized-view-only)." >&2
+        exit 1
+      fi
       shift
       ;;
     *)
@@ -20,7 +31,9 @@ while (( $# > 0 )); do
       ;;
   esac
 done
-set -- "${positional[@]}"
+# `set -u` turns an empty-array expansion into an "unbound variable" error; guard with
+# the `${arr[@]+"..."}` idiom so `--help` / no-args invocations print usage cleanly.
+set -- ${positional[@]+"${positional[@]}"}
 
 case "$projection_mode" in
   dual|memory-only|materialized-view-only)

@@ -86,6 +86,9 @@ static void PrintUsage()
           --concurrency <n>       Parallel HTTP clients (default: 8)
           --output <path>         Output JSON file path
           --skip-setup            Skip room creation phase
+          --skip-queries          Skip the Query Performance phase (used in
+                                  SEKIBAN_PROJECTION_MODE=materialized-view-only runs
+                                  where the MultiProjection query endpoints return 503)
           --help, -h              Show this help
         """);
 }
