@@ -165,18 +165,20 @@ Timestamp: `2026-04-18T06:55:39Z` run (plus targeted retries for
 | Go WASM | materialized-view-only | 1,441 | 1,696 | skipped | 65.6 | **1,041.3** |
 | TypeScript WASM | memory-only | 1,280 | 1,757 | 194 | 71.6 | **966.3** |
 | TypeScript WASM | materialized-view-only | 1,320 | 1,527 | skipped | 72.1 | **990.6** |
-| Swift WASM | memory-only | 1,430 | 3,996 | 0* | 52.5 | **662.6** |
-| Swift WASM | materialized-view-only | 1,427 | 3,840 | skipped | 52.8 | **2,005.7** |
+| Swift WASM | memory-only | 1,334 | 3,751 | 111 | 58.4 | **1,785.3** |
+| Swift WASM | materialized-view-only | 1,257 | 3,917 | skipped | 58.3 | **2,132.6** |
 
-\* Swift WASM module currently declares only the `ClassRoomEnrollment` MV / `ClassRoomList`
-MultiProjection; the benchmark driver's query phase hits `GetRoomListQuery` /
-`GetReservationListQuery` / `GetWeatherForecastListQuery` which no Swift projector resolves,
-so the memory-only query phase returns 0 successful ops. Writes succeed because the
-`/api/rooms`, `/api/weatherforecast`, `/api/reservations/quick` ClientApi endpoints build
-their own `SerializableCommitRequest`s directly (no WASM invocation) — see
-`BenchmarkWriteEndpoints.swift` and the 10 XCTest cases in
-`SekibanDcbDeciderSwiftClientApiCoreTests/`. Extending the Swift WASM with Room /
-Reservation / Weather projectors is the remaining follow-up for full query-phase parity.
+Swift WASM now ships the full meeting-room projector set (`RoomListProjection`,
+`WeatherForecastListProjection`, `ReservationListProjection`) alongside the existing
+`ClassRoomListProjection`, so the benchmark driver's `GetRoomListQuery` /
+`GetReservationListQuery` / `GetReservationsByRoomQuery` / `GetWeatherForecastListQuery` /
+`GetWeatherForecastCountQuery` all resolve in-process and return the expected array /
+scalar shapes. Writes go through Swift-side `/api/rooms`, `/api/weatherforecast`,
+`/api/reservations/quick` endpoints (see `BenchmarkWriteEndpoints.swift`); reads go
+through Swift-side `/api/rooms` GET / `/api/reservations` GET / `/api/weatherforecast`
+GET / `/api/weatherforecast/count` / `/api/reservations/by-room/:roomId` (see
+`BenchmarkReadEndpoints.swift`). Zero-error end-to-end at 100K events in both modes —
+Swift is now a first-class runtime in the matrix.
 
 Notes:
 

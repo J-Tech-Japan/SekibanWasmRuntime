@@ -47,6 +47,10 @@ struct ClientApiMain {
             router,
             wasmServerUrl: context.wasmServerUrl,
             logger: logger)
+        registerBenchmarkReadRoutes(
+            router,
+            wasmServerUrl: context.wasmServerUrl,
+            logger: logger)
 
         let app = Application(
             router: router,
