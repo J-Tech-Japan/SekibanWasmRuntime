@@ -1,11 +1,11 @@
 import Foundation
 
-// Primitive ABI exports. These mirror the Rust sample's `export_domain!` set so the Swift
-// WASM module satisfies the host's export surface in
-// `WasmtimePrimitiveProjectionInstance`. The Swift sample currently ships zero primitive
-// projectors in its manifest (MV only), so these stubs exist purely to keep the host happy
-// and are never exercised at runtime. If a future Swift sample introduces primitive
-// projectors, replace these with a registry-driven dispatch similar to the MV exports.
+// Base C-ABI exports every Swift WASM module shipping through `Sekiban.Dcb.WasmRuntime.Host`
+// needs. The primitive-projection / multi-projection entry points
+// (`create_instance`/`apply_event`/`serialize_state`/`restore_state`/
+// `execute_query`/`execute_list_query`) live in the consuming module because the exports
+// must know which projector factories to use. See `PrimitiveHelpers.swift` for the thin
+// dispatch helpers the sample wraps in its own `@_cdecl` functions.
 
 @_cdecl("alloc")
 public func sekibanAlloc(_ size: Int32) -> Int32 {
@@ -22,81 +22,16 @@ public func sekibanDealloc(_ ptr: Int32, _ size: Int32) {
     free(raw)
 }
 
-@_cdecl("create_instance")
-public func sekibanCreateInstance(_ namePtr: Int32, _ nameLen: Int32) -> Int32 {
-    _ = readString(ptr: namePtr, len: nameLen)
-    return 0
-}
-
-@_cdecl("apply_event")
-public func sekibanApplyEvent(
-    _ instanceId: Int32,
-    _ typePtr: Int32, _ typeLen: Int32,
-    _ payloadPtr: Int32, _ payloadLen: Int32
-) {
-    _ = instanceId
-    _ = readString(ptr: typePtr, len: typeLen)
-    _ = readString(ptr: payloadPtr, len: payloadLen)
-}
-
-@_cdecl("apply_event_with_metadata")
-public func sekibanApplyEventWithMetadata(
-    _ instanceId: Int32,
-    _ typePtr: Int32, _ typeLen: Int32,
-    _ payloadPtr: Int32, _ payloadLen: Int32,
-    _ metaPtr: Int32, _ metaLen: Int32
-) {
-    _ = instanceId
-    _ = readString(ptr: typePtr, len: typeLen)
-    _ = readString(ptr: payloadPtr, len: payloadLen)
-    _ = readString(ptr: metaPtr, len: metaLen)
-}
-
+// `apply_events_batch` is the hot path for MultiProjection catch-up: when a host batch
+// contains more than one event, `WasmtimePrimitiveProjectionInstance.ApplyBatchChunkCore`
+// calls it and only falls back to per-event apply (through an expensive exception) if this
+// export is missing or throws. The dispatcher dispatches against an existing instance id
+// so it doesn't need the sample's projector-factory map — instances come from
+// `create_instance`, which the sample owns.
 @_cdecl("apply_events_batch")
 public func sekibanApplyEventsBatch(
     _ instanceId: Int32,
     _ jsonPtr: Int32, _ jsonLen: Int32
 ) -> Int32 {
-    _ = instanceId
-    _ = readString(ptr: jsonPtr, len: jsonLen)
-    return 0
-}
-
-@_cdecl("serialize_state")
-public func sekibanSerializeState(_ instanceId: Int32) -> Int64 {
-    _ = instanceId
-    return writeStringToMemory("{}")
-}
-
-@_cdecl("restore_state")
-public func sekibanRestoreState(
-    _ instanceId: Int32,
-    _ ptr: Int32, _ len: Int32
-) {
-    _ = instanceId
-    _ = readString(ptr: ptr, len: len)
-}
-
-@_cdecl("execute_query")
-public func sekibanExecuteQuery(
-    _ instanceId: Int32,
-    _ typePtr: Int32, _ typeLen: Int32,
-    _ paramsPtr: Int32, _ paramsLen: Int32
-) -> Int64 {
-    _ = instanceId
-    _ = readString(ptr: typePtr, len: typeLen)
-    _ = readString(ptr: paramsPtr, len: paramsLen)
-    return writeStringToMemory("{}")
-}
-
-@_cdecl("execute_list_query")
-public func sekibanExecuteListQuery(
-    _ instanceId: Int32,
-    _ typePtr: Int32, _ typeLen: Int32,
-    _ paramsPtr: Int32, _ paramsLen: Int32
-) -> Int64 {
-    _ = instanceId
-    _ = readString(ptr: typePtr, len: typeLen)
-    _ = readString(ptr: paramsPtr, len: paramsLen)
-    return writeStringToMemory("[]")
+    PrimitiveHelpers.applyEventsBatch(instanceId: instanceId, jsonPtr: jsonPtr, jsonLen: jsonLen)
 }

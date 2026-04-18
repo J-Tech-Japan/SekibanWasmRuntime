@@ -39,6 +39,10 @@ struct ClientApiMain {
         let router = Router()
         router.get("/health") { _, _ in "ok" }
         registerMvRoutes(router, context: context)
+        registerMemoryRoutes(
+            router,
+            wasmServerUrl: context.wasmServerUrl,
+            logger: logger)
 
         let app = Application(
             router: router,
