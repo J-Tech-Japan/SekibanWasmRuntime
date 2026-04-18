@@ -2,6 +2,7 @@ import { z } from "zod";
 import { router, publicProcedure } from "../api/trpc";
 
 const eventApiBaseUrl = process.env.CLIENT_API_BASE_URL ?? process.env.API_BASE_URL;
+const projectionModeSchema = z.enum(["memory", "materializedView"]).default("memory");
 
 const classroomSchema = z.object({
   classRoomId: z.string().uuid(),
@@ -24,6 +25,7 @@ export const classroomsRouter = router({
         pageNumber: z.number().default(1),
         pageSize: z.number().default(10),
         waitForSortableUniqueId: z.string().optional(),
+        projectionMode: projectionModeSchema,
       })
     )
     .query(async ({ input }) => {
@@ -34,9 +36,8 @@ export const classroomsRouter = router({
         params.set("waitForSortableUniqueId", input.waitForSortableUniqueId);
       }
 
-      const res = await fetch(
-        `${eventApiBaseUrl}/api/classrooms?${params.toString()}`
-      );
+      const path = input.projectionMode === "materializedView" ? "/api/mv/classrooms" : "/api/classrooms";
+      const res = await fetch(`${eventApiBaseUrl}${path}?${params.toString()}`);
       if (!res.ok) {
         throw new Error("Failed to fetch classrooms");
       }

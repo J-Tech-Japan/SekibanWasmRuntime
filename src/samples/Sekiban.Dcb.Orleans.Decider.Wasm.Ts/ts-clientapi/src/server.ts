@@ -15,6 +15,14 @@ import {
   NotFoundError,
   ValidationError,
 } from "@sekiban/ts";
+import {
+  createMaterializedViewState,
+  getStatus as getMaterializedViewStatus,
+  listClassrooms as listMaterializedViewClassrooms,
+  listEnrollments as listMaterializedViewEnrollments,
+  listStudents as listMaterializedViewStudents,
+  type MaterializedViewState,
+} from "./materializedView.js";
 
 // ---------------------------------------------------------------------------
 // Constants (matching Go constants.go)
@@ -1233,9 +1241,80 @@ console.log(`WasmServer URL: ${wasmServerURL}`);
 console.log(`Starting TS ClientAPI on port ${port}`);
 
 const runtime = new SekibanRuntimeClient(wasmServerURL, tagProjectorMap);
+let materializedView: MaterializedViewState;
+try {
+  materializedView = await createMaterializedViewState();
+} catch (error) {
+  console.warn(
+    "Materialized view initialization failed; /api/mv/* endpoints will return 503 while non-MV endpoints remain available.",
+    error,
+  );
+  materializedView = { pool: null };
+}
 
 const app = new Hono();
 app.use("*", logger());
+
+function parseOptionalInt(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+async function listMemoryEnrollments(
+  pageNumber?: number,
+  pageSize?: number,
+): Promise<string> {
+  const fetchAllPageSize = Number.MAX_SAFE_INTEGER;
+  const [studentsJson, classroomsJson] = await Promise.all([
+    runtime.executeListQuery(
+      "GetStudentListQuery",
+      JSON.stringify({ pageNumber: 1, pageSize: fetchAllPageSize }),
+      null,
+    ),
+    runtime.executeListQuery(
+      "GetClassRoomListQuery",
+      JSON.stringify({ pageNumber: 1, pageSize: fetchAllPageSize }),
+      null,
+    ),
+  ]);
+
+  const students = JSON.parse(studentsJson) as Array<{
+    studentId: string;
+    name: string;
+    maxClassCount: number;
+    enrolledClassRoomIds?: string[];
+  }>;
+  const classrooms = JSON.parse(classroomsJson) as Array<{
+    classRoomId: string;
+    name: string;
+  }>;
+  const classroomMap = new Map(classrooms.map((classroom) => [classroom.classRoomId, classroom]));
+
+  const enrollments = students.flatMap((student) =>
+    (student.enrolledClassRoomIds ?? [])
+      .map((classRoomId) => {
+        const classroom = classroomMap.get(classRoomId);
+        if (!classroom) {
+          return null;
+        }
+        return {
+          studentId: student.studentId,
+          studentName: student.name,
+          grade: student.maxClassCount,
+          classRoomId: classroom.classRoomId,
+          className: classroom.name,
+          enrollmentDate: new Date().toISOString(),
+        };
+      })
+      .filter((enrollment): enrollment is NonNullable<typeof enrollment> => enrollment !== null),
+  );
+
+  const resolvedPageSize = pageSize && pageSize > 0 ? pageSize : enrollments.length || 1;
+  const resolvedPageNumber = pageNumber && pageNumber > 0 ? pageNumber : 1;
+  const offset = (resolvedPageNumber - 1) * resolvedPageSize;
+  return JSON.stringify(enrollments.slice(offset, offset + resolvedPageSize));
+}
 
 // ---------------------------------------------------------------------------
 // Health
@@ -1321,7 +1400,14 @@ app.post("/api/weatherforecast/delete", async (c) => {
 
 app.get("/api/students", async (c) => {
   try {
-    const result = await runtime.executeListQuery("GetStudentListQuery", "{}", null);
+    const result = await runtime.executeListQuery(
+      "GetStudentListQuery",
+      JSON.stringify({
+        pageNumber: parseOptionalInt(c.req.query("pageNumber")) ?? 1,
+        pageSize: parseOptionalInt(c.req.query("pageSize")) ?? 20,
+      }),
+      null,
+    );
     return c.body(result, 200, { "Content-Type": "application/json" });
   } catch (err) {
     return c.json({ error: "RuntimeQueryFailed", message: err instanceof Error ? err.message : String(err) }, 502);
@@ -1346,7 +1432,14 @@ app.post("/api/students", async (c) => {
 
 app.get("/api/classrooms", async (c) => {
   try {
-    const result = await runtime.executeListQuery("GetClassRoomListQuery", "{}", null);
+    const result = await runtime.executeListQuery(
+      "GetClassRoomListQuery",
+      JSON.stringify({
+        pageNumber: parseOptionalInt(c.req.query("pageNumber")) ?? 1,
+        pageSize: parseOptionalInt(c.req.query("pageSize")) ?? 20,
+      }),
+      null,
+    );
     return c.body(result, 200, { "Content-Type": "application/json" });
   } catch (err) {
     return c.json({ error: "RuntimeQueryFailed", message: err instanceof Error ? err.message : String(err) }, 502);
@@ -1369,6 +1462,18 @@ app.post("/api/classrooms", async (c) => {
 // Enrollment handlers
 // ---------------------------------------------------------------------------
 
+app.get("/api/enrollments", async (c) => {
+  try {
+    const result = await listMemoryEnrollments(
+      parseOptionalInt(c.req.query("pageNumber")),
+      parseOptionalInt(c.req.query("pageSize")),
+    );
+    return c.body(result, 200, { "Content-Type": "application/json" });
+  } catch (err) {
+    return c.json({ error: "RuntimeQueryFailed", message: err instanceof Error ? err.message : String(err) }, 502);
+  }
+});
+
 app.post("/api/enrollments/add", async (c) => {
   try {
     const body = await c.req.json();
@@ -1378,6 +1483,75 @@ app.post("/api/enrollments/add", async (c) => {
   } catch (err) {
     const { status, body } = writeErrorFromCommand(err);
     return c.json(body, status as any);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Materialized view read handlers
+// ---------------------------------------------------------------------------
+
+app.get("/api/mv/status", async (c) => {
+  try {
+    return c.json(await getMaterializedViewStatus(materializedView));
+  } catch (err) {
+    const error = err as Error & { status?: number; code?: string };
+    return c.json(
+      { error: error.code ?? "MaterializedViewQueryFailed", message: error.message },
+      (error.status ?? 500) as any,
+    );
+  }
+});
+
+app.get("/api/mv/students", async (c) => {
+  try {
+    return c.json(
+      await listMaterializedViewStudents(materializedView, {
+        pageNumber: parseOptionalInt(c.req.query("pageNumber")),
+        pageSize: parseOptionalInt(c.req.query("pageSize")),
+      }),
+    );
+  } catch (err) {
+    const error = err as Error & { status?: number; code?: string };
+    return c.json(
+      { error: error.code ?? "MaterializedViewQueryFailed", message: error.message },
+      (error.status ?? 500) as any,
+    );
+  }
+});
+
+app.get("/api/mv/classrooms", async (c) => {
+  try {
+    return c.json(
+      await listMaterializedViewClassrooms(materializedView, {
+        pageNumber: parseOptionalInt(c.req.query("pageNumber")),
+        pageSize: parseOptionalInt(c.req.query("pageSize")),
+      }),
+    );
+  } catch (err) {
+    const error = err as Error & { status?: number; code?: string };
+    return c.json(
+      { error: error.code ?? "MaterializedViewQueryFailed", message: error.message },
+      (error.status ?? 500) as any,
+    );
+  }
+});
+
+app.get("/api/mv/enrollments", async (c) => {
+  try {
+    return c.json(
+      await listMaterializedViewEnrollments(materializedView, {
+        pageNumber: parseOptionalInt(c.req.query("pageNumber")),
+        pageSize: parseOptionalInt(c.req.query("pageSize")),
+        studentId: c.req.query("studentId"),
+        classRoomId: c.req.query("classRoomId"),
+      }),
+    );
+  } catch (err) {
+    const error = err as Error & { status?: number; code?: string };
+    return c.json(
+      { error: error.code ?? "MaterializedViewQueryFailed", message: error.message },
+      (error.status ?? 500) as any,
+    );
   }
 });
 

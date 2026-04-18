@@ -26,6 +26,7 @@ var postgresServer = builder
 var postgres = postgresServer.AddDatabase("SekibanTsDb");
 var dcbPostgres = postgresServer.AddDatabase("DcbPostgres");
 var identityPostgres = postgresServer.AddDatabase("IdentityPostgres");
+var dcbMaterializedViewPostgres = postgresServer.AddDatabase("DcbMaterializedViewPostgres");
 
 var apiOrleans = builder
     .AddOrleans("api-orleans")
@@ -59,7 +60,9 @@ var wasmServerBuilder = builder
     .WithEnvironment("SEKIBAN_WASMTIME_STATIC_MEMORY_MAX_MB", "192")
     .WithEnvironment("WASM_RUNTIME_ALLOWED_TAG_EVENT_TYPES__RoomProjector", "RoomCreated,RoomUpdated,RoomDeactivated,RoomReactivated")
     .WithReference(postgres, "SekibanDcb")
+    .WithReference(dcbMaterializedViewPostgres, "DcbMaterializedViewPostgres")
     .WaitFor(postgres)
+    .WaitFor(dcbMaterializedViewPostgres)
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
 
 if (isStrictBenchmarkProfile)
@@ -133,7 +136,9 @@ clientApiBuilder = clientApiBuilder.WithHttpEndpoint(
 
 var clientApi = clientApiBuilder
     .WithReference(wasmServer)
-    .WaitFor(wasmServer);
+    .WithReference(dcbMaterializedViewPostgres, "DcbMaterializedViewPostgres")
+    .WaitFor(wasmServer)
+    .WaitFor(dcbMaterializedViewPostgres);
 
 var webFrontend = builder
     .AddProject<SekibanDcbDecider_Web>("webfrontend")
@@ -154,6 +159,17 @@ webFrontend
     })
     .WithEnvironment("ASPNETCORE_URLS", "http://127.0.0.1:" + webPort);
 webFrontend.WithExternalHttpEndpoints();
+
+var webNextPort = AppHostInfrastructure.ResolveConfiguredPort(3000, "E2E_WEBNEXT_PORT", "WEBNEXT_PORT");
+builder
+    .AddJavaScriptApp("webnext", "../SekibanDcbDecider.WebNext")
+    .WithHttpEndpoint(port: webNextPort, env: "PORT")
+    .WithExternalHttpEndpoints()
+    .WithEnvironment("NODE_ENV", "development")
+    .WithEnvironment("API_BASE_URL", "http://127.0.0.1:" + apiServicePort)
+    .WithEnvironment("CLIENT_API_BASE_URL", "http://127.0.0.1:" + clientApiPort)
+    .WaitFor(apiService)
+    .WaitFor(clientApi);
 
 builder.Build().Run();
 

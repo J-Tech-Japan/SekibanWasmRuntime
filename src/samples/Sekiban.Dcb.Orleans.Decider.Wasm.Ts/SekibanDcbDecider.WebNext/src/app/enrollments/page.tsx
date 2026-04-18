@@ -24,6 +24,7 @@ import { Badge } from "@/components/ui/badge";
 
 export default function EnrollmentsPage() {
   const [lastSortableUniqueId, setLastSortableUniqueId] = useState<string | undefined>();
+  const [projectionMode, setProjectionMode] = useState<"memory" | "materializedView">("memory");
 
   // Selection state
   const [selectedStudentId, setSelectedStudentId] = useState("");
@@ -36,20 +37,23 @@ export default function EnrollmentsPage() {
   const [dropMessage, setDropMessage] = useState("");
   const [dropError, setDropError] = useState(false);
 
-  const { data: students } = trpc.students.list.useQuery({
+  const { data: students, refetch: refetchStudents } = trpc.students.list.useQuery({
     pageNumber: 1,
     pageSize: 100,
     waitForSortableUniqueId: lastSortableUniqueId,
+    projectionMode,
   });
 
   const { data: classrooms, refetch: refetchClassrooms } = trpc.classrooms.list.useQuery({
     pageNumber: 1,
     pageSize: 100,
     waitForSortableUniqueId: lastSortableUniqueId,
+    projectionMode,
   });
 
   const { data: enrollments, isLoading, refetch: refetchEnrollments } = trpc.enrollments.list.useQuery({
     waitForSortableUniqueId: lastSortableUniqueId,
+    projectionMode,
   });
 
   const enrollMutation = trpc.enrollments.enroll.useMutation({
@@ -59,6 +63,7 @@ export default function EnrollmentsPage() {
       setEnrollmentError(false);
       setSelectedStudentId("");
       setSelectedClassroomId("");
+      refetchStudents();
       refetchEnrollments();
       refetchClassrooms();
     },
@@ -74,6 +79,7 @@ export default function EnrollmentsPage() {
       setDropMessage("Student dropped successfully!");
       setDropError(false);
       setSelectedEnrollmentForDrop("");
+      refetchStudents();
       refetchEnrollments();
       refetchClassrooms();
     },
@@ -117,11 +123,24 @@ export default function EnrollmentsPage() {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground">Enrollment Management</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Manage student enrollments in classrooms
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground">Enrollment Management</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Manage student enrollments in classrooms
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-muted-foreground">Source</span>
+          <Select
+            value={projectionMode}
+            onChange={(e) => setProjectionMode(e.target.value as "memory" | "materializedView")}
+            className="w-full sm:w-44"
+          >
+            <option value="memory">Memory Projection</option>
+            <option value="materializedView">Materialized View</option>
+          </Select>
+        </div>
       </div>
 
       {/* Stats Cards */}

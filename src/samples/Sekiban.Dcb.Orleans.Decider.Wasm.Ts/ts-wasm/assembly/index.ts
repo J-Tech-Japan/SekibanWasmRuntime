@@ -1,5 +1,6 @@
 import { JSON } from "json-as/assembly";
 import * as C from "./domain/constants";
+export { mv_metadata, mv_initialize, mv_apply_event } from "./materialized_view";
 
 // ---------------------------------------------------------------------------
 // Memory management - keep allocated buffers alive
