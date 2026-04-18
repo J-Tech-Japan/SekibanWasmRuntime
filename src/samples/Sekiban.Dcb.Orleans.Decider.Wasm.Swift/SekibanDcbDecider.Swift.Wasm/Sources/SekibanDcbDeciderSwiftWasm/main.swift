@@ -19,6 +19,9 @@ private func projectors() -> [any WasmMvProjector] {
 private func primitiveFactories() -> [String: SekibanWasm.PrimitiveHelpers.Factory] {
     [
         ClassRoomListProjection.projectorName: { ClassRoomListProjection() },
+        RoomListProjection.projectorName: { RoomListProjection() },
+        WeatherForecastListProjection.projectorName: { WeatherForecastListProjection() },
+        ReservationListProjection.projectorName: { ReservationListProjection() },
     ]
 }
 

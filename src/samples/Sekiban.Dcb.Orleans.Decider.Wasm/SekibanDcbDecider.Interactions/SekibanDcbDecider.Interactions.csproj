@@ -7,7 +7,7 @@
     <IsPackable>true</IsPackable>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Sekiban.Dcb.WithoutResult" Version="10.2.0" />
+    <PackageReference Include="Sekiban.Dcb.WithoutResult" Version="10.2.2" />
     <ProjectReference Include="..\SekibanDcbDecider.EventSource\SekibanDcbDecider.EventSource.csproj" />
   </ItemGroup>
   <ItemGroup>

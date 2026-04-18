@@ -5,7 +5,7 @@ if (config is null) return 1;
 
 var runner = new BenchmarkRunner(
     config.BaseUrl, config.ModeLabel, config.TotalEvents,
-    config.Concurrency, config.Output, config.SkipSetup);
+    config.Concurrency, config.Output, config.SkipSetup, config.SkipQueries);
 await runner.RunAsync();
 return 0;
 
@@ -46,6 +46,9 @@ static BenchmarkConfig? ParseArgs(string[] args)
             case "--skip-setup":
                 config.SkipSetup = true;
                 break;
+            case "--skip-queries":
+                config.SkipQueries = true;
+                break;
             case "--help" or "-h":
                 PrintUsage();
                 return null;
@@ -83,6 +86,9 @@ static void PrintUsage()
           --concurrency <n>       Parallel HTTP clients (default: 8)
           --output <path>         Output JSON file path
           --skip-setup            Skip room creation phase
+          --skip-queries          Skip the Query Performance phase (used in
+                                  SEKIBAN_PROJECTION_MODE=materialized-view-only runs
+                                  where the MultiProjection query endpoints return 503)
           --help, -h              Show this help
         """);
 }
@@ -95,4 +101,5 @@ file sealed class BenchmarkConfig
     public int Concurrency { get; set; } = 8;
     public string? Output { get; set; }
     public bool SkipSetup { get; set; }
+    public bool SkipQueries { get; set; }
 }

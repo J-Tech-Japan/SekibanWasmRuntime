@@ -12,8 +12,9 @@ public sealed class BenchmarkRunner
     private readonly int _concurrency;
     private readonly string? _outputPath;
     private readonly bool _skipSetup;
+    private readonly bool _skipQueries;
 
-    public BenchmarkRunner(string baseUrl, string modeLabel, int totalEvents, int concurrency, string? outputPath, bool skipSetup)
+    public BenchmarkRunner(string baseUrl, string modeLabel, int totalEvents, int concurrency, string? outputPath, bool skipSetup, bool skipQueries = false)
     {
         _baseUrl = baseUrl;
         _modeLabel = modeLabel;
@@ -21,6 +22,7 @@ public sealed class BenchmarkRunner
         _concurrency = concurrency;
         _outputPath = outputPath;
         _skipSetup = skipSetup;
+        _skipQueries = skipQueries;
     }
 
     public async Task<BenchmarkResult> RunAsync()
@@ -97,10 +99,18 @@ public sealed class BenchmarkRunner
             client, roomIds, reservationEvents, _concurrency);
         result.Phases.Add(reservationResult);
 
-        // Phase 4/5: Query Performance
-        await client.EnsureAuthenticatedAsync();
-        var queryResult = await QueryPerformanceScenario.RunAsync(client, roomIds, 50);
-        result.Phases.Add(queryResult);
+        // Phase 4/5: Query Performance — skipped in materialized-view-only benchmark mode because
+        // MultiProjection-backed endpoints return 503 and timeouts would dominate the run.
+        if (_skipQueries)
+        {
+            Console.WriteLine("\n=== Phase 4/5: Query Performance — SKIPPED (--skip-queries) ===");
+        }
+        else
+        {
+            await client.EnsureAuthenticatedAsync();
+            var queryResult = await QueryPerformanceScenario.RunAsync(client, roomIds, 50);
+            result.Phases.Add(queryResult);
+        }
 
         return await FinalizeAsync();
 

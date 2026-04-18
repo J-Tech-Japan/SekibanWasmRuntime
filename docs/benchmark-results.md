@@ -26,6 +26,7 @@ The current `300,000` event matrix now has fresh reruns for:
 | MoonBit WASM | `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Mb` | Node proxy | `sekiban-dcb-decider-moonbit.wasm` | ~355 KB |
 | Go WASM | `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Go` | Go/net-http proxy | `go-weather.wasm` | ~1.3 MB |
 | TypeScript WASM | `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Ts` | Hono/Node proxy | `ts-weather.wasm` | ~239 KB |
+| Swift WASM | `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Swift` | Swift/Hummingbird proxy | `sekiban-dcb-decider-swift.wasm` | ~58 MB |
 
 There is currently no C-language WASM sample in this repository. No `C WASM` row is benchmarked below because there is no corresponding AppHost, module, or build pipeline under `src/samples/` or `src/wasm-projectors/`.
 
@@ -76,6 +77,170 @@ All WASM AppHosts now use the same WasmServer tuning:
 - `SEKIBAN_WASMTIME_STATIC_MEMORY_MAX_MB=192`
 
 Tag-state is now resolved via Orleans `TagStateGrain` instead of the in-process `SharedTagStateProcessor`. The grain provides persistent caching, delta replay, and distributed concurrency management.
+
+## 2026-04-17 Projection Mode Matrix (`SEKIBAN_PROJECTION_MODE`)
+
+Sekiban DCB runtimes now support two independent projection paths: the in-memory
+`MultiProjectionGrain` (drives `/api/sekiban/serialized/query`) and the Postgres-backed
+`MaterializedViewGrain` (drives each language's `/api/mv/*` read endpoints). The new
+`SEKIBAN_PROJECTION_MODE` environment variable selects which of those is wired into the
+WASM runtime host:
+
+| Mode | MultiProjection | MaterializedView | Use case |
+|---|---|---|---|
+| `dual` (default) | enabled | enabled (if connection string + registrations) | Production parity — both paths run |
+| `memory-only` | enabled | skipped entirely (no MV DB wired, no grain, no catch-up worker) | Measure MultiProjection peak RSS without MV overhead |
+| `materialized-view-only` | `/api/sekiban/serialized/{query,list-query}` return 503 so `MultiProjectionGrain` never activates and projector WASM is not loaded | enabled | Measure MV catch-up peak RSS without MultiProjection's per-projector linear memory |
+
+The mode is plumbed through every sample AppHost (C# / Rust / MoonBit / Go / TypeScript /
+Swift) so the corresponding Postgres MV database is only provisioned when
+`materializedViewEnabled`. The native template AppHost under `submodules/Sekiban` is
+deliberately **not** patched for this matrix (the submodule sits on the upstream
+`dcb-v10.2.2` tag); its two rows therefore reflect "both paths active, benchmark driver
+exercises reads vs. writes differently" — the mode only toggles `--skip-queries` in the
+benchmark CLI for that runtime.
+
+### Matrix Method
+
+- Tool: `benchmarks/Sekiban.Benchmark.Cli`
+- Driver: `scripts/run-benchmark-runtime.sh --mode <mode> <runtime> <events> <json> <rss>`
+- Orchestrator: `scripts/run-benchmark-matrix.sh` (runs all 7 runtimes × 2 modes and writes a manifest)
+- Target events: `100,000` (60% weather writes, 40% reservation lifecycle)
+- Query phase: enabled only in `memory-only` mode (50 iterations × 5 queries = 250 total queries). Skipped in `materialized-view-only` via `--skip-queries` because the MultiProjection endpoints return 503 and would spend the full window on timeouts.
+- Concurrency: `8`
+- Peak RSS: sampled every 2s against the `wasmserver` / `apiservice` PID (not AppHost, not Postgres).
+- All WASM runtimes share the common tuning from the sections above; no strict profile is applied.
+- Sekiban packages: `10.2.2` (submodule pointer + `Directory.Packages.props`).
+
+### Reproduction
+
+```bash
+# build every WASM module first (once)
+build/scripts/build-sample-csharp-wasm.sh
+build/scripts/build-rust-wasm.sh   # or equivalent cargo invocation
+(cd src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Mb/moonbit/runtime && moon build --target wasm --release)
+(cd src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Go/go-wasm && tinygo build -target=wasi -buildmode=c-shared -o ../modules/go-weather.wasm ./wasm)
+(cd src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Ts/ts-wasm && npm install && npm run build)
+build/scripts/build-swift-wasm.sh
+
+# run the full matrix
+TOTAL_EVENTS=100000 bash scripts/run-benchmark-matrix.sh
+
+# or a single cell
+bash scripts/run-benchmark-runtime.sh --mode memory-only swift-wasm 100000 \
+  benchmarks/results/matrix/swift-mem.json benchmarks/results/matrix/swift-mem.rss
+```
+
+The per-run output is:
+
+- `<prefix>.json` — structured scenario timings
+- `<prefix>.rss` — 2s RSS samples of the runtime process (peak is extracted by the script)
+- `<prefix>.apphost.log` / `<prefix>.benchmark.log` — raw logs for diagnosis
+
+### Results (`100,000` events, `2026-04-17` matrix)
+
+Results below capture peak RSS (MB) of the target process and total wall-clock seconds.
+Query throughput is intentionally absent from `materialized-view-only` rows because the
+MultiProjection endpoints return 503 in that mode by design.
+
+<!-- BEGIN projection-mode-matrix -->
+
+Timestamp: `2026-04-18T06:55:39Z` run (plus targeted retries for
+`mb-wasm × materialized-view-only`, `mb-wasm × memory-only`, and
+`go-wasm × materialized-view-only` that needed tighter port cleanup). Raw manifests:
+`benchmarks/results/matrix/matrix-20260418T065539Z.txt` +
+`matrix-20260418T065539Z-retry.txt`.
+
+| Runtime | Mode | Weather eps | Reservation eps | Query ops/sec | Wall-clock (s) | Peak RSS (MB) |
+|---|---|---:|---:|---:|---:|---:|
+| C# Native | memory-only | 1,612 | 519 | 1,520 | 55.7 | **4,161.1** |
+| C# Native | materialized-view-only | 1,700 | 434 | skipped | 57.3 | **4,112.0** |
+| C# WASM | memory-only | 1,375 | 1,506 | 510 | 71.3 | **2,113.0** |
+| C# WASM | materialized-view-only | 1,315 | 1,292 | skipped | 77.1 | **2,063.8** |
+| Rust WASM | memory-only | 1,459 | 2,185 | 955 | 60.2 | **1,053.6** |
+| Rust WASM | materialized-view-only | 1,495 | 2,187 | skipped | 58.8 | **1,022.6** |
+| MoonBit WASM | memory-only | 1,524 | 2,892 | 124 | 55.9 | **752.9** |
+| MoonBit WASM | materialized-view-only | 1,067 | 2,083 | skipped | 76.0 | **736.8** |
+| Go WASM | memory-only | 1,406 | 1,482 | 312 | 70.9 | **1,048.0** |
+| Go WASM | materialized-view-only | 1,441 | 1,696 | skipped | 65.6 | **1,041.3** |
+| TypeScript WASM | memory-only | 1,280 | 1,757 | 194 | 71.6 | **966.3** |
+| TypeScript WASM | materialized-view-only | 1,320 | 1,527 | skipped | 72.1 | **990.6** |
+| Swift WASM | memory-only | 1,100 | 2,348 | 122 | 74.1 | **1,947.3** |
+| Swift WASM | materialized-view-only | 1,072 | 2,271 | skipped | 74.0 | **2,019.9** |
+
+Swift WASM ships the full meeting-room projector set (`RoomListProjection`,
+`WeatherForecastListProjection`, `ReservationListProjection`) alongside the existing
+`ClassRoomListProjection`, so the benchmark driver's `GetRoomListQuery` /
+`GetReservationListQuery` / `GetReservationsByRoomQuery` / `GetWeatherForecastListQuery` /
+`GetWeatherForecastCountQuery` all resolve in-process. Zero-error end-to-end at 100K
+events in both modes.
+
+**Write-path parity with Rust.** The Swift ClientApi matches the Rust handler's
+I/O pattern so the numbers above are apples-to-apples with the other runtimes:
+
+- `CreateWeatherForecast` reads `weather:<forecastId>` via
+  `/api/sekiban/serialized/tag-latest-sortable` before commit and passes the returned
+  `lastSortableUniqueId` as the consistency marker. Same single state read the Rust
+  `CommandHandler for CreateWeatherForecast` does via `ctx.get_state(&tag)`.
+- `CreateQuickReservation` fires three reads in parallel — `Reservation:<reservationId>`
+  (existence check), `Room:<roomId>` (state), and `RoomReservation:<roomId>` (concurrency
+  marker) — before emitting Draft → HoldCommitted → Confirmed events. Each event is
+  fanned out on **both** `Reservation:` and `RoomReservation:` tags, the same tag set
+  Rust emits via `multi_event_output(events, [reservation_tag, room_reservation_tag], …)`.
+
+The Swift `Reservation eps` of ~2,270–2,350 now sits very close to Rust's ~2,185 —
+within noise once you factor in macOS URLSession vs. reqwest overhead and the fact that
+Swift's three reads run concurrently via `async let` while the Rust handler executes
+them sequentially. Earlier Swift numbers (~3,750 eps) that skipped the state-read
+round-trips have been removed; the reader-backed async builder is the only path used by
+the benchmark now.
+
+Full details: [`BenchmarkCommands.swift`](../src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Swift/SekibanDcbDecider.Swift.ClientApi/Sources/SekibanDcbDeciderSwiftClientApiCore/BenchmarkCommands.swift),
+[`TagLatestSortableReader.swift`](../src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Swift/SekibanDcbDecider.Swift.ClientApi/Sources/SekibanDcbDeciderSwiftClientApiCore/TagLatestSortableReader.swift),
+and the 14 XCTest cases in
+[`SekibanDcbDeciderSwiftClientApiCoreTests/`](../src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Swift/SekibanDcbDecider.Swift.ClientApi/Tests/SekibanDcbDeciderSwiftClientApiCoreTests).
+
+Notes:
+
+- Weather eps / Reservation eps come from the benchmark CLI's phase summaries
+  (total events in phase ÷ phase duration). Query ops/sec reflects the query phase's
+  250 total queries (50 iterations × 5 queries per iteration), which run only in
+  `memory-only` mode.
+- Peak RSS is the maximum resident-set size of the runtime process (for WASM rows that
+  is `wasmserver`, for native it is the Sekiban template's `apiservice`) sampled every
+  2 s. The number excludes Aspire, Postgres, and Azurite containers — they each live in
+  their own process tree. For the full host footprint add the container overhead back on
+  top.
+- Swift WASM now ships write-path ClientApi endpoints (`POST /api/rooms`,
+  `POST /api/weatherforecast`, `POST /api/reservations/quick`) implemented in
+  [`BenchmarkWriteEndpoints.swift`](../src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Swift/SekibanDcbDecider.Swift.ClientApi/Sources/SekibanDcbDeciderSwiftClientApi/BenchmarkWriteEndpoints.swift)
+  backed by a reusable
+  [`SekibanDcbDeciderSwiftClientApiCore`](../src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Swift/SekibanDcbDecider.Swift.ClientApi/Sources/SekibanDcbDeciderSwiftClientApiCore)
+  library (event builders, tag helpers, commit-request forwarder). Event JSON matches the
+  Rust sample's wire format byte-for-byte; 10-test XCTest suite verifies the shape. Swift
+  runs the write phases of the benchmark end-to-end; the query phase is still gated on
+  extending the Swift WASM module's projector set (Room / Reservation / Weather), which is
+  the remaining follow-up.
+- The `memory-only` vs `materialized-view-only` peak-RSS delta for the WASM runtimes is
+  tiny — single-digit percent in every case. The bulk of peak RSS is dominated by:
+  1. The `wasmserver` host itself (ASP.NET Core + Orleans silo + Wasmtime engine), which
+     is constant across modes.
+  2. The projection WASM linear memory when `MultiProjectionGrain` is active — but since
+     mode switching happens before either grain activates for the first time, the
+     `materialized-view-only` row was measured with zero MultiProjection WASM instances
+     resident. The small delta shows that `MaterializedViewGrain` + `PostgresMvExecutor`
+     + `MvCatchUpWorker` alone sit close to the noise floor in this benchmark.
+- The C# Native row is markedly heavier than the WASM rows (~4 GB vs ~1 GB). That is
+  expected: the Sekiban template's apiservice runs the full Orleans decider cluster
+  in-process plus a Dapper-backed MV reader. In the WASM topology, those responsibilities
+  are split across `wasmserver` (Orleans + Sekiban) and a per-language `clientapi`, and
+  only one of the two gets measured here.
+<!-- END projection-mode-matrix -->
+
+### Interpreting the Delta
+
+- **`memory-only` vs `dual`**: isolates the cost of the MaterializedViewGrain / PostgresMvExecutor / MvCatchUpWorker stack. If the delta is small, MV is essentially free for your workload. If the delta is large, it tells you the headroom you reclaim by turning MV off for pure event-sourced workloads.
+- **`materialized-view-only` vs `dual`**: isolates the cost of loading projection WASM instances into `MultiProjectionGrain`. Each projection holds a Wasmtime `Instance` with its own linear memory (~36 MB per projector for C#, much smaller for Rust / Go / MoonBit / TypeScript). If the MV-only row is close to the memory-only row, the two paths are competing for the same resources. If MV-only is materially lighter, that's the memory saving you get by dropping the in-memory projection path.
 
 ## 2026-04-08 Strict `tagstategrain-memory` Profile
 

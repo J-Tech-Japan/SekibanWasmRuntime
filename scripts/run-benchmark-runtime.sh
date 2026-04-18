@@ -1,18 +1,67 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+projection_mode="dual"
+# Detached --mode <value> flag; scan before positional parsing so it can sit anywhere.
+positional=()
+while (( $# > 0 )); do
+  case "$1" in
+    --mode)
+      # Guard against `set -u` crashes when --mode is the last argument or followed by
+      # another flag. Print a targeted usage error instead of an "unbound variable" abort.
+      if (( $# < 2 )) || [[ -z "${2:-}" ]] || [[ "$2" == --* ]]; then
+        echo "Error: --mode requires a value (dual | memory-only | materialized-view-only)." >&2
+        echo "Usage: scripts/run-benchmark-runtime.sh [--mode <mode>] <runtime> <total-events> <output-json> <rss-log> [benchmark-profile]" >&2
+        exit 1
+      fi
+      projection_mode="$2"
+      shift 2
+      ;;
+    --mode=*)
+      projection_mode="${1#--mode=}"
+      if [[ -z "$projection_mode" ]]; then
+        echo "Error: --mode= requires a value (dual | memory-only | materialized-view-only)." >&2
+        exit 1
+      fi
+      shift
+      ;;
+    *)
+      positional+=("$1")
+      shift
+      ;;
+  esac
+done
+# `set -u` turns an empty-array expansion into an "unbound variable" error; guard with
+# the `${arr[@]+"..."}` idiom so `--help` / no-args invocations print usage cleanly.
+set -- ${positional[@]+"${positional[@]}"}
+
+case "$projection_mode" in
+  dual|memory-only|materialized-view-only)
+    ;;
+  *)
+    echo "Unsupported --mode: $projection_mode (expected dual | memory-only | materialized-view-only)" >&2
+    exit 1
+    ;;
+esac
+
 if [[ $# -lt 4 ]]; then
   cat <<'EOF' >&2
 Usage:
-  scripts/run-benchmark-runtime.sh <runtime> <total-events> <output-json> <rss-log> [benchmark-profile]
+  scripts/run-benchmark-runtime.sh [--mode <mode>] <runtime> <total-events> <output-json> <rss-log> [benchmark-profile]
 
 Runtime:
-  native   - Sekiban template native C#
-  cs-wasm  - C# WASM sample
-  rs-wasm  - Rust WASM sample
-  mb-wasm  - MoonBit WASM sample
-  go-wasm  - Go WASM sample
-  ts-wasm  - TypeScript WASM sample
+  native     - Sekiban template native C#
+  cs-wasm    - C# WASM sample
+  rs-wasm    - Rust WASM sample
+  mb-wasm    - MoonBit WASM sample
+  go-wasm    - Go WASM sample
+  ts-wasm    - TypeScript WASM sample
+  swift-wasm - Swift WASM sample
+
+Modes (--mode, default=dual):
+  dual                     - MultiProjection + MaterializedView both enabled (baseline)
+  memory-only              - MaterializedView skipped; MultiProjection only
+  materialized-view-only   - MultiProjection endpoints disabled; MaterializedView only
 EOF
   exit 1
 fi
@@ -42,6 +91,12 @@ else
   profile_suffix="-$benchmark_profile"
 fi
 
+if [[ "$projection_mode" == "dual" ]]; then
+  mode_suffix=""
+else
+  mode_suffix="-$projection_mode"
+fi
+
 case "$runtime" in
   native)
     apphost_project="$repo_root/submodules/Sekiban/templates/Sekiban.Dcb.Templates/content/Sekiban.Dcb.Orleans.Decider/SekibanDcbDecider.AppHost/SekibanDcbDecider.AppHost.csproj"
@@ -49,7 +104,7 @@ case "$runtime" in
     ready_port="5141"
     rss_port="5141"
     runtime_process_pattern='SekibanDcbDecider\.ApiService'
-    mode_label="native-${events_label}${profile_suffix}-${run_timestamp}"
+    mode_label="native-${events_label}${profile_suffix}${mode_suffix}-${run_timestamp}"
     ;;
   cs-wasm)
     apphost_project="$repo_root/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/SekibanDcbDecider.AppHost/SekibanDcbDecider.AppHost.csproj"
@@ -57,7 +112,7 @@ case "$runtime" in
     ready_port="5198"
     rss_port="5199"
     runtime_process_pattern='Sekiban\.Dcb\.WasmRuntime\.Host|wasmserver'
-    mode_label="cs-wasm-${events_label}${profile_suffix}-${run_timestamp}"
+    mode_label="cs-wasm-${events_label}${profile_suffix}${mode_suffix}-${run_timestamp}"
     ;;
   rs-wasm)
     apphost_project="$repo_root/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/SekibanDcbDecider.AppHost/SekibanDcbDecider.AppHost.csproj"
@@ -65,7 +120,7 @@ case "$runtime" in
     ready_port="6198"
     rss_port="6199"
     runtime_process_pattern='Sekiban\.Dcb\.WasmRuntime\.Host|wasmserver'
-    mode_label="rs-wasm-${events_label}${profile_suffix}-${run_timestamp}"
+    mode_label="rs-wasm-${events_label}${profile_suffix}${mode_suffix}-${run_timestamp}"
     ;;
   mb-wasm)
     apphost_project="$repo_root/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Mb/SekibanDcbDecider.AppHost/SekibanDcbDecider.AppHost.csproj"
@@ -73,7 +128,7 @@ case "$runtime" in
     ready_port="6198"
     rss_port="6199"
     runtime_process_pattern='Sekiban\.Dcb\.WasmRuntime\.Host|wasmserver'
-    mode_label="mb-wasm-${events_label}${profile_suffix}-${run_timestamp}"
+    mode_label="mb-wasm-${events_label}${profile_suffix}${mode_suffix}-${run_timestamp}"
     ;;
   go-wasm)
     apphost_project="$repo_root/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Go/SekibanDcbDecider.AppHost/SekibanDcbDecider.AppHost.csproj"
@@ -81,7 +136,7 @@ case "$runtime" in
     ready_port="7198"
     rss_port="7199"
     runtime_process_pattern='Sekiban\.Dcb\.WasmRuntime\.Host|wasmserver'
-    mode_label="go-wasm-${events_label}${profile_suffix}-${run_timestamp}"
+    mode_label="go-wasm-${events_label}${profile_suffix}${mode_suffix}-${run_timestamp}"
     ;;
   ts-wasm)
     apphost_project="$repo_root/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Ts/SekibanDcbDecider.AppHost/SekibanDcbDecider.AppHost.csproj"
@@ -89,7 +144,15 @@ case "$runtime" in
     ready_port="7208"
     rss_port="7209"
     runtime_process_pattern='Sekiban\.Dcb\.WasmRuntime\.Host|wasmserver'
-    mode_label="ts-wasm-${events_label}${profile_suffix}-${run_timestamp}"
+    mode_label="ts-wasm-${events_label}${profile_suffix}${mode_suffix}-${run_timestamp}"
+    ;;
+  swift-wasm)
+    apphost_project="$repo_root/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Swift/SekibanDcbDecider.AppHost/SekibanDcbDecider.AppHost.csproj"
+    base_url="http://127.0.0.1:6298"
+    ready_port="6298"
+    rss_port="6299"
+    runtime_process_pattern='Sekiban\.Dcb\.WasmRuntime\.Host|wasmserver'
+    mode_label="swift-wasm-${events_label}${profile_suffix}${mode_suffix}-${run_timestamp}"
     ;;
   *)
     echo "Unknown runtime: $runtime" >&2
@@ -271,6 +334,37 @@ ensure_ts_wasm_sample_module() {
       echo "[ts-wasm] module is stale relative to $newest_source, rebuilding sample TypeScript WASM module"
     fi
     (cd "$module_dir" && npm run build >/dev/null)
+  fi
+}
+
+ensure_mb_wasm_clientapi_dependencies() {
+  local clientapi_dir="$repo_root/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Mb/SekibanDcbDecider.ClientApi"
+  local marker="$clientapi_dir/node_modules/.package-lock.json"
+
+  if [[ ! -f "$marker" ]]; then
+    echo "[mb-wasm] ClientApi dependencies missing, running npm install"
+    (cd "$clientapi_dir" && npm install --no-audit --no-fund >/dev/null)
+  fi
+}
+
+ensure_swift_wasm_sample_module() {
+  local sample_root="$repo_root/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Swift"
+  local module_path="$sample_root/modules/sekiban-dcb-decider-swift.wasm"
+  local build_script="$repo_root/build/scripts/build-swift-wasm.sh"
+
+  if [[ "${SKIP_SWIFT_WASM_MODULE_REBUILD:-0}" == "1" ]]; then
+    return 0
+  fi
+
+  if [[ ! -f "$module_path" ]]; then
+    if [[ -x "$build_script" ]]; then
+      echo "[swift-wasm] module missing, rebuilding Swift WASM module"
+      "$build_script"
+    else
+      echo "[swift-wasm] module missing and build/scripts/build-swift-wasm.sh not executable; \
+set SKIP_SWIFT_WASM_MODULE_REBUILD=1 and provide the .wasm manually." >&2
+      return 1
+    fi
   fi
 }
 
@@ -466,16 +560,19 @@ elif [[ "$runtime" == "rs-wasm" ]]; then
 elif [[ "$runtime" == "go-wasm" ]]; then
   ensure_go_wasm_sample_module
 elif [[ "$runtime" == "mb-wasm" ]]; then
-  :
+  ensure_mb_wasm_clientapi_dependencies
 elif [[ "$runtime" == "ts-wasm" ]]; then
   ensure_ts_wasm_clientapi_dependencies
   ensure_ts_wasm_sample_module
+elif [[ "$runtime" == "swift-wasm" ]]; then
+  ensure_swift_wasm_sample_module
 fi
 assert_port_free "$ready_port"
 if [[ "$rss_port" != "$ready_port" ]]; then
   assert_port_free "$rss_port"
 fi
 BENCHMARK_PROFILE="$benchmark_profile" \
+SEKIBAN_PROJECTION_MODE="$projection_mode" \
 dotnet run --project "$apphost_project" -c Release >"$apphost_log" 2>&1 &
 apphost_pid="$!"
 
@@ -509,13 +606,21 @@ echo "[$runtime] sampling RSS from pid $runtime_pid on port $rss_port -> $rss_lo
 ) >"$rss_log" &
 sampler_pid="$!"
 
-echo "[$runtime] running benchmark against $base_url"
+echo "[$runtime] running benchmark against $base_url (projection mode: $projection_mode)"
+benchmark_extra_args=()
+# In materialized-view-only mode MultiProjection-backed query endpoints return 503, so the query
+# phase would spend its entire budget on timeouts. Skip it — the write load still exercises the MV
+# catch-up path which is the point of this mode.
+if [[ "$projection_mode" == "materialized-view-only" ]]; then
+  benchmark_extra_args+=(--skip-queries)
+fi
 dotnet run --project "$repo_root/benchmarks/Sekiban.Benchmark.Cli/Sekiban.Benchmark.Cli.csproj" -c Release -- \
   --base-url "$base_url" \
   --mode-label "$mode_label" \
   --total-events "$total_events" \
   --concurrency 8 \
-  --output "$output_json" | tee "$benchmark_log"
+  --output "$output_json" \
+  ${benchmark_extra_args[@]+"${benchmark_extra_args[@]}"} | tee "$benchmark_log"
 
 if kill -0 "$sampler_pid" 2>/dev/null; then
   kill "$sampler_pid" 2>/dev/null || true
