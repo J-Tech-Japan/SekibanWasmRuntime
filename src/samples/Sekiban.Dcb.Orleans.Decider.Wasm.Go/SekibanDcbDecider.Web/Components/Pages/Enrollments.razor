@@ -8,7 +8,10 @@
 
 @inject IHttpClientFactory HttpClientFactory
 @inject EnrollmentApiClient EnrollmentApiClient
+@inject MaterializedViewApiClient MvApiClient
+@inject ProjectionSourceState SourceState
 @inject IJSRuntime JsRuntime
+@implements IDisposable
 
 <PageTitle>Enrollments</PageTitle>
 
@@ -107,6 +110,19 @@
 <div class="mt-4">
     <h3>Current Enrollments</h3>
 
+    <div class="row mb-3 align-items-center">
+        <div class="col-auto">
+            <label class="col-form-label">Data source:</label>
+        </div>
+        <div class="col-auto">
+            <select class="form-select" @onchange="OnSourceChanged">
+                <option value="Memory" selected="@(SourceState.Current == ProjectionSource.Memory)">Memory projection</option>
+                <option value="MaterializedView" selected="@(SourceState.Current == ProjectionSource.MaterializedView)">Materialized view</option>
+            </select>
+        </div>
+        <div class="col-auto text-muted">@SourceState.Label</div>
+    </div>
+
     @if (enrollments == null)
     {
         <p><em>Loading...</em></p>
@@ -196,7 +212,33 @@
 
     protected override async Task OnInitializedAsync()
     {
+        SourceState.Changed += OnExternalSourceChanged;
         await LoadData();
+    }
+
+    public void Dispose()
+    {
+        SourceState.Changed -= OnExternalSourceChanged;
+    }
+
+    private void OnExternalSourceChanged()
+    {
+        _ = InvokeAsync(async () =>
+        {
+            await LoadEnrollments(lastSortableUniqueId);
+            StateHasChanged();
+        });
+    }
+
+    private Task OnSourceChanged(ChangeEventArgs e)
+    {
+        // Set() raises SourceState.Changed → OnExternalSourceChanged runs LoadEnrollments,
+        // so there is no direct LoadEnrollments call here — avoids a double reload race.
+        if (Enum.TryParse<ProjectionSource>(e.Value?.ToString(), out var next))
+        {
+            SourceState.Set(next);
+        }
+        return Task.CompletedTask;
     }
 
     private async Task LoadData(string? waitForSortableUniqueId = null)
@@ -273,24 +315,29 @@
     {
         try
         {
-            // Since there's no /api/enrollments endpoint, we need to build enrollment data
-            // from students and classrooms data that we already have
+            if (SourceState.Current == ProjectionSource.MaterializedView)
+            {
+                enrollments = await LoadEnrollmentsFromMv();
+                return;
+            }
+
+            // Memory-projection path: reconstruct the enrollment list client-side by joining
+            // the student and classroom projections, because there is no /api/enrollments
+            // endpoint on the clientapi. The MV path in LoadEnrollmentsFromMv does the same
+            // client-side join against the three MV read endpoints (we keep each endpoint
+            // strictly tabular on the Go side).
             var httpClient = HttpClientFactory.CreateClient("ApiService");
-            
-            // Build query string with waitForSortableUniqueId if provided
             var studentsUri = !string.IsNullOrEmpty(waitForSortableUniqueId)
                 ? $"api/students?waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}"
                 : "api/students";
             var classroomsUri = !string.IsNullOrEmpty(waitForSortableUniqueId)
                 ? $"api/classrooms?waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}"
                 : "api/classrooms";
-            
-            // Get all students with their enrolled classrooms, waiting for the sortableUniqueId if provided
+
             var studentsResponse = await httpClient.GetFromJsonAsync<List<StudentState>>(studentsUri);
             var classroomsResponse = await httpClient.GetFromJsonAsync<List<ClassRoomItem>>(classroomsUri);
-            
+
             var enrollmentsList = new List<EnrollmentView>();
-            
             if (studentsResponse != null && classroomsResponse != null)
             {
                 foreach (var student in studentsResponse)
@@ -304,16 +351,15 @@
                             {
                                 StudentId = student.StudentId,
                                 StudentName = student.Name,
-                                Grade = student.MaxClassCount, // Using MaxClassCount as Grade
+                                Grade = student.MaxClassCount,
                                 ClassRoomId = classroom.ClassRoomId,
                                 ClassName = classroom.Name,
-                                EnrollmentDate = DateTime.Now // We don't have the actual enrollment date
+                                EnrollmentDate = DateTime.Now,
                             });
                         }
                     }
                 }
             }
-            
             enrollments = enrollmentsList;
         }
         catch (Exception ex)
@@ -321,6 +367,38 @@
             Console.Error.WriteLine($"Error loading enrollments: {ex.Message}");
             enrollments = new List<EnrollmentView>();
         }
+    }
+
+    private async Task<List<EnrollmentView>> LoadEnrollmentsFromMv()
+    {
+        // Read the three MV tables in parallel and build the join client-side. Pulling the
+        // rows together and hashing them in the browser keeps the Go ClientApi's read path
+        // purely tabular (each endpoint maps to a single SELECT) and lets the UI reuse the
+        // existing EnrollmentView shape without new server-side joins.
+        var studentsTask = MvApiClient.GetStudentsAsync(1, 100);
+        var classroomsTask = MvApiClient.GetClassroomsAsync(1, 100);
+        var enrollmentsTask = MvApiClient.GetEnrollmentsAsync(1, 100);
+        await Task.WhenAll(studentsTask, classroomsTask, enrollmentsTask);
+
+        var byStudent = studentsTask.Result.ToDictionary(s => s.student_id, StringComparer.OrdinalIgnoreCase);
+        var byClassroom = classroomsTask.Result.ToDictionary(c => c.class_room_id, StringComparer.OrdinalIgnoreCase);
+
+        var joined = new List<EnrollmentView>();
+        foreach (var row in enrollmentsTask.Result)
+        {
+            byStudent.TryGetValue(row.student_id, out var student);
+            byClassroom.TryGetValue(row.class_room_id, out var classroom);
+            joined.Add(new EnrollmentView
+            {
+                StudentId = Guid.TryParse(row.student_id, out var sid) ? sid : Guid.Empty,
+                StudentName = student?.name ?? row.student_id,
+                Grade = student?.max_class_count ?? 0,
+                ClassRoomId = Guid.TryParse(row.class_room_id, out var cid) ? cid : Guid.Empty,
+                ClassName = classroom?.name ?? row.class_room_id,
+                EnrollmentDate = row.enrolled_at.UtcDateTime,
+            });
+        }
+        return joined;
     }
 
     private async Task HandleEnrollStudent()

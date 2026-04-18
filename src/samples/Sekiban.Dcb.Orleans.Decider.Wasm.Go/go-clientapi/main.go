@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"sekiban-dcb-decider-go/domain"
 
@@ -27,6 +29,9 @@ import (
 
 type appState struct {
 	runtime *client.SekibanRuntimeClient
+	// mvPool is nil when the MV Postgres connection string is not configured (e.g. running
+	// the clientapi standalone). In that case /api/mv/* returns 503.
+	mvPool *pgxpool.Pool
 }
 
 // ---------------------------------------------------------------------------
@@ -40,8 +45,15 @@ func main() {
 	log.Printf("WasmServer URL: %s", wasmServerURL)
 	log.Printf("Starting Go ClientAPI on port %d", port)
 
+	ctx := context.Background()
+	mvPool, mvErr := connectMvPoolFromEnv(ctx)
+	if mvErr != nil {
+		log.Printf("MV: pool init failed, /api/mv/* disabled: %v", mvErr)
+	}
+
 	state := &appState{
 		runtime: client.NewSekibanRuntimeClient(wasmServerURL, domain.TagProjectorMap),
+		mvPool:  mvPool,
 	}
 
 	r := chi.NewRouter()
@@ -98,6 +110,14 @@ func main() {
 	r.Post("/api/test-data/generate", state.handleGenerateTestData)
 	r.Post("/api/test-data/generate-rooms", state.handleGenerateRooms)
 	r.Post("/api/test-data/generate-reservations", state.handleGenerateReservations)
+
+	// Materialized view (direct DB, read-only). Generic WasmRuntime.Host deliberately does not
+	// expose these — per the architecture rule in issue #92, language-specific MV reads live
+	// in the language-owned ClientApi and talk to DcbMaterializedViewPostgres directly.
+	r.Get("/api/mv/status", state.handleMvStatus)
+	r.Get("/api/mv/classrooms", state.handleMvClassrooms)
+	r.Get("/api/mv/students", state.handleMvStudents)
+	r.Get("/api/mv/enrollments", state.handleMvEnrollments)
 
 	addr := fmt.Sprintf(":%d", port)
 	log.Printf("Listening on %s", addr)
