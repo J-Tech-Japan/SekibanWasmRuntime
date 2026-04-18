@@ -60,7 +60,7 @@ fn table_name(bindings : WasmMvTableBindingsDto, logical : String) -> String {
       return binding.physical
     }
   }
-  logical
+  abort("Missing physical table binding for logical table: " + logical)
 }
 
 fn sql_param(name : String, kind : Int, value_json : String) -> WasmMvParam {
@@ -83,15 +83,28 @@ fn statement(sql : String, parameters : Array[WasmMvParam]) -> WasmMvSqlStatemen
   { sql, parameters }
 }
 
+fn build_index_name(physical_table : String, suffix : String) -> String {
+  let max_identifier_length = 63
+  let prefix = "idx_"
+  let tail = "_" + suffix
+  let available = max_identifier_length - prefix.length() - tail.length()
+  if physical_table.length() <= available {
+    return prefix + physical_table + tail
+  }
+  let head = physical_table[:available].to_string()
+  prefix + head + tail
+}
+
 fn initialize_statements(bindings : WasmMvTableBindingsDto) -> Array[WasmMvSqlStatementDto] {
   let classrooms = table_name(bindings, mv_classrooms_logical)
   let students = table_name(bindings, mv_students_logical)
   let enrollments = table_name(bindings, mv_enrollments_logical)
+  let class_room_index = build_index_name(enrollments, "class_room")
   let statements : Array[WasmMvSqlStatementDto] = []
   statements.push(statement("CREATE TABLE IF NOT EXISTS " + classrooms + " (class_room_id UUID PRIMARY KEY, name TEXT NOT NULL, max_students INT NOT NULL, enrolled_count INT NOT NULL DEFAULT 0, _last_sortable_unique_id TEXT NOT NULL, _last_applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW());", []))
   statements.push(statement("CREATE TABLE IF NOT EXISTS " + students + " (student_id UUID PRIMARY KEY, name TEXT NOT NULL, max_class_count INT NOT NULL, enrolled_count INT NOT NULL DEFAULT 0, _last_sortable_unique_id TEXT NOT NULL, _last_applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW());", []))
   statements.push(statement("CREATE TABLE IF NOT EXISTS " + enrollments + " (student_id UUID NOT NULL, class_room_id UUID NOT NULL, enrolled_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), _last_sortable_unique_id TEXT NOT NULL, PRIMARY KEY (student_id, class_room_id));", []))
-  statements.push(statement("CREATE INDEX IF NOT EXISTS mv_class_room_enrollment_class_room_idx ON " + enrollments + " (class_room_id);", []))
+  statements.push(statement("CREATE INDEX IF NOT EXISTS " + class_room_index + " ON " + enrollments + " (class_room_id);", []))
   statements
 }
 

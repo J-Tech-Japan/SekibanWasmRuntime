@@ -582,12 +582,14 @@ async function handleGetMaterializedViewClassRooms(url, res) {
 }
 
 async function handleGetMaterializedViewEnrollments(url, res) {
+  const pageNumber = parseOptionalInt(url.searchParams.get("pageNumber"));
+  const pageSize = parseOptionalInt(url.searchParams.get("pageSize"));
   sendJson(
     res,
     200,
     await listMaterializedViewEnrollments(appState.materializedView, {
-      pageNumber: parseOptionalInt(url.searchParams.get("pageNumber")),
-      pageSize: parseOptionalInt(url.searchParams.get("pageSize")),
+      pageNumber,
+      pageSize,
       studentId: url.searchParams.get("studentId"),
       classRoomId: url.searchParams.get("classRoomId"),
     }),

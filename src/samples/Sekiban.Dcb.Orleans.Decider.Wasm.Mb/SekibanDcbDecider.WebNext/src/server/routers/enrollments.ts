@@ -25,6 +25,8 @@ export const enrollmentsRouter = router({
   list: publicProcedure
     .input(
       z.object({
+        pageNumber: z.number().int().positive().optional(),
+        pageSize: z.number().int().positive().optional(),
         waitForSortableUniqueId: z.string().optional(),
         projectionMode: z.enum(["memory", "materializedView"]).default("memory"),
       })
@@ -32,6 +34,12 @@ export const enrollmentsRouter = router({
     .query(async ({ input }) => {
       const params = new URLSearchParams();
       params.set("projectionMode", input.projectionMode);
+      if (input.pageNumber) {
+        params.set("pageNumber", input.pageNumber.toString());
+      }
+      if (input.pageSize) {
+        params.set("pageSize", input.pageSize.toString());
+      }
       if (input.waitForSortableUniqueId) {
         params.set("waitForSortableUniqueId", input.waitForSortableUniqueId);
       }

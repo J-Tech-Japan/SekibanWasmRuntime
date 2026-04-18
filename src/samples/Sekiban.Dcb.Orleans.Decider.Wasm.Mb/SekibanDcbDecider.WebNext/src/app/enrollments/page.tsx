@@ -52,6 +52,8 @@ export default function EnrollmentsPage() {
   });
 
   const { data: enrollments, isLoading, refetch: refetchEnrollments } = trpc.enrollments.list.useQuery({
+    pageNumber: 1,
+    pageSize: 100,
     waitForSortableUniqueId: lastSortableUniqueId,
     projectionMode,
   });

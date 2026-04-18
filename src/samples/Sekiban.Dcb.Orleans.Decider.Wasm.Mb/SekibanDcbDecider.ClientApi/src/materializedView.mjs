@@ -22,8 +22,17 @@ export async function createMaterializedViewState(logger = console) {
     connectionTimeoutMillis: 5_000,
   });
 
-  await pool.query("select 1");
-  return { pool };
+  try {
+    await pool.query("select 1");
+    return { pool };
+  } catch (error) {
+    try {
+      await pool.end();
+    } catch {
+      // Preserve the original connection error.
+    }
+    throw error;
+  }
 }
 
 export function resolveProjectionMode(url) {
@@ -68,6 +77,7 @@ export async function listStudents(state, options = {}) {
   const studentsTable = await physicalTable(pool, STUDENTS_LOGICAL);
   const enrollmentsTable = await physicalTable(pool, ENROLLMENTS_LOGICAL);
   const { limit, offset } = resolvePaging(options);
+  const pagination = buildPaginationClause(limit, offset, 1);
   const sql = `
     select
       s.student_id,
@@ -82,8 +92,8 @@ export async function listStudents(state, options = {}) {
     left join ${quoteIdentifier(enrollmentsTable)} e on e.student_id = s.student_id
     group by s.student_id, s.name, s.max_class_count
     order by s.name
-    limit $1 offset $2`;
-  const { rows } = await pool.query(sql, [limit, offset]);
+    ${pagination.clause}`;
+  const { rows } = await pool.query(sql, pagination.parameters);
   return rows.map((row) => ({
     studentId: row.student_id,
     name: row.name,
@@ -96,12 +106,13 @@ export async function listClassrooms(state, options = {}) {
   const pool = requirePool(state);
   const classroomsTable = await physicalTable(pool, CLASSROOMS_LOGICAL);
   const { limit, offset } = resolvePaging(options);
+  const pagination = buildPaginationClause(limit, offset, 1);
   const sql = `
     select class_room_id, name, max_students, enrolled_count
       from ${quoteIdentifier(classroomsTable)}
      order by name
-     limit $1 offset $2`;
-  const { rows } = await pool.query(sql, [limit, offset]);
+     ${pagination.clause}`;
+  const { rows } = await pool.query(sql, pagination.parameters);
   return rows.map((row) => ({
     classRoomId: row.class_room_id,
     name: row.name,
@@ -130,10 +141,7 @@ export async function listEnrollments(state, options = {}) {
     predicates.push(`e.class_room_id = $${parameters.length}`);
   }
 
-  parameters.push(limit);
-  const limitIndex = parameters.length;
-  parameters.push(offset);
-  const offsetIndex = parameters.length;
+  const pagination = buildPaginationClause(limit, offset, parameters.length + 1);
 
   const whereClause = predicates.length > 0 ? `where ${predicates.join(" and ")}` : "";
   const sql = `
@@ -149,8 +157,8 @@ export async function listEnrollments(state, options = {}) {
     inner join ${quoteIdentifier(classroomsTable)} c on c.class_room_id = e.class_room_id
     ${whereClause}
     order by s.name, c.name
-    limit $${limitIndex} offset $${offsetIndex}`;
-  const { rows } = await pool.query(sql, parameters);
+    ${pagination.clause}`;
+  const { rows } = await pool.query(sql, [...parameters, ...pagination.parameters]);
   return rows.map((row) => ({
     studentId: row.student_id,
     studentName: row.student_name,
@@ -215,9 +223,26 @@ function resolveConnectionUrl() {
 }
 
 function resolvePaging(options) {
-  const limit = Number.isInteger(options.pageSize) && options.pageSize > 0 ? options.pageSize : 20;
-  const page = Number.isInteger(options.pageNumber) && options.pageNumber > 0 ? options.pageNumber : 1;
+  const hasPageSize = Number.isInteger(options.pageSize) && options.pageSize > 0;
+  const hasPageNumber = Number.isInteger(options.pageNumber) && options.pageNumber > 0;
+  if (!hasPageSize && !hasPageNumber) {
+    return { limit: null, offset: 0 };
+  }
+
+  const limit = hasPageSize ? options.pageSize : 20;
+  const page = hasPageNumber ? options.pageNumber : 1;
   return { limit, offset: (page - 1) * limit };
+}
+
+function buildPaginationClause(limit, offset, startIndex) {
+  if (limit === null) {
+    return { clause: "", parameters: [] };
+  }
+
+  return {
+    clause: `limit $${startIndex} offset $${startIndex + 1}`,
+    parameters: [limit, offset],
+  };
 }
 
 function requirePool(state) {
