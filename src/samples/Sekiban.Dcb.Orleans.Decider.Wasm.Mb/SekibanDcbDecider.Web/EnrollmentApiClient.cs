@@ -31,12 +31,15 @@ public class EnrollmentApiClient(HttpClient httpClient)
 
     public async Task<EnrollmentView[]> GetEnrollmentsAsync(
         string? waitForSortableUniqueId = null,
+        ProjectionMode projectionMode = ProjectionMode.MemoryProjection,
         CancellationToken cancellationToken = default)
     {
         var queryParams = new List<string>();
 
         if (!string.IsNullOrEmpty(waitForSortableUniqueId))
             queryParams.Add($"waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}");
+
+        queryParams.Add($"projectionMode={projectionMode.ToQueryValue()}");
 
         var requestUri = queryParams.Count > 0
             ? $"/api/enrollments?{string.Join("&", queryParams)}"

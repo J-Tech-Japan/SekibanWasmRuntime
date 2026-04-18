@@ -6,13 +6,26 @@
 @attribute [StreamRendering]
 @rendermode InteractiveServer
 
-@inject IHttpClientFactory HttpClientFactory
 @inject EnrollmentApiClient EnrollmentApiClient
+@inject StudentApiClient StudentApiClient
+@inject ClassRoomApiClient ClassRoomApiClient
 @inject IJSRuntime JsRuntime
 
 <PageTitle>Enrollments</PageTitle>
 
 <h1>Enrollment Management</h1>
+
+<div class="row mb-3">
+    <div class="col-auto">
+        <label class="col-form-label">Source:</label>
+    </div>
+    <div class="col-auto">
+        <select class="form-select" @onchange="OnProjectionModeChanged">
+            <option value="@ProjectionMode.MemoryProjection" selected="@(projectionMode == ProjectionMode.MemoryProjection)">Memory Projection</option>
+            <option value="@ProjectionMode.MaterializedView" selected="@(projectionMode == ProjectionMode.MaterializedView)">Materialized View</option>
+        </select>
+    </div>
+</div>
 
 <div class="row">
     <div class="col-md-6">
@@ -162,6 +175,7 @@
     private bool dropError;
 
     private string? lastSortableUniqueId;
+    private ProjectionMode projectionMode = ProjectionMode.MemoryProjection;
 
     public class StudentView
     {
@@ -211,12 +225,12 @@
     {
         try
         {
-            var httpClient = HttpClientFactory.CreateClient("ApiService");
-            var requestUri = !string.IsNullOrEmpty(waitForSortableUniqueId)
-                ? $"api/students?waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}"
-                : "api/students";
-            var response = await httpClient.GetFromJsonAsync<List<StudentState>>(requestUri);
-            if (response != null)
+            var response = await StudentApiClient.GetStudentsAsync(
+                1,
+                100,
+                waitForSortableUniqueId,
+                projectionMode);
+            if (response.Length > 0)
             {
                 students = response.Select(s => new StudentView
                 {
@@ -241,12 +255,12 @@
     {
         try
         {
-            var httpClient = HttpClientFactory.CreateClient("ApiService");
-            var requestUri = !string.IsNullOrEmpty(waitForSortableUniqueId)
-                ? $"api/classrooms?waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}"
-                : "api/classrooms";
-            var response = await httpClient.GetFromJsonAsync<List<ClassRoomItem>>(requestUri);
-            if (response != null)
+            var response = await ClassRoomApiClient.GetClassRoomsAsync(
+                1,
+                100,
+                waitForSortableUniqueId,
+                projectionMode);
+            if (response.Length > 0)
             {
                 classrooms = response.Select(c => new ClassroomView
                 {
@@ -273,53 +287,30 @@
     {
         try
         {
-            // Since there's no /api/enrollments endpoint, we need to build enrollment data
-            // from students and classrooms data that we already have
-            var httpClient = HttpClientFactory.CreateClient("ApiService");
-            
-            // Build query string with waitForSortableUniqueId if provided
-            var studentsUri = !string.IsNullOrEmpty(waitForSortableUniqueId)
-                ? $"api/students?waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}"
-                : "api/students";
-            var classroomsUri = !string.IsNullOrEmpty(waitForSortableUniqueId)
-                ? $"api/classrooms?waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}"
-                : "api/classrooms";
-            
-            // Get all students with their enrolled classrooms, waiting for the sortableUniqueId if provided
-            var studentsResponse = await httpClient.GetFromJsonAsync<List<StudentState>>(studentsUri);
-            var classroomsResponse = await httpClient.GetFromJsonAsync<List<ClassRoomItem>>(classroomsUri);
-            
-            var enrollmentsList = new List<EnrollmentView>();
-            
-            if (studentsResponse != null && classroomsResponse != null)
+            var result = await EnrollmentApiClient.GetEnrollmentsAsync(waitForSortableUniqueId, projectionMode);
+            enrollments = result.Select(e => new EnrollmentView
             {
-                foreach (var student in studentsResponse)
-                {
-                    foreach (var classroomId in student.EnrolledClassRoomIds)
-                    {
-                        var classroom = classroomsResponse.FirstOrDefault(c => c.ClassRoomId == classroomId);
-                        if (classroom != null)
-                        {
-                            enrollmentsList.Add(new EnrollmentView
-                            {
-                                StudentId = student.StudentId,
-                                StudentName = student.Name,
-                                Grade = student.MaxClassCount, // Using MaxClassCount as Grade
-                                ClassRoomId = classroom.ClassRoomId,
-                                ClassName = classroom.Name,
-                                EnrollmentDate = DateTime.Now // We don't have the actual enrollment date
-                            });
-                        }
-                    }
-                }
-            }
-            
-            enrollments = enrollmentsList;
+                StudentId = e.StudentId,
+                StudentName = e.StudentName,
+                Grade = e.Grade,
+                ClassRoomId = e.ClassRoomId,
+                ClassName = e.ClassName,
+                EnrollmentDate = e.EnrollmentDate
+            }).ToList();
         }
         catch (Exception ex)
         {
             Console.Error.WriteLine($"Error loading enrollments: {ex.Message}");
             enrollments = new List<EnrollmentView>();
+        }
+    }
+
+    private async Task OnProjectionModeChanged(ChangeEventArgs e)
+    {
+        if (Enum.TryParse<ProjectionMode>(e.Value?.ToString(), out var selectedMode))
+        {
+            projectionMode = selectedMode;
+            await LoadData(lastSortableUniqueId);
         }
     }
 

@@ -24,12 +24,14 @@ export const classroomsRouter = router({
         pageNumber: z.number().default(1),
         pageSize: z.number().default(10),
         waitForSortableUniqueId: z.string().optional(),
+        projectionMode: z.enum(["memory", "materializedView"]).default("memory"),
       })
     )
     .query(async ({ input }) => {
       const params = new URLSearchParams();
       params.set("pageNumber", input.pageNumber.toString());
       params.set("pageSize", input.pageSize.toString());
+      params.set("projectionMode", input.projectionMode);
       if (input.waitForSortableUniqueId) {
         params.set("waitForSortableUniqueId", input.waitForSortableUniqueId);
       }

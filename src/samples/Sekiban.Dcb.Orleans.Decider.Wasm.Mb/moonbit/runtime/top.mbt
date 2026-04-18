@@ -43,3 +43,37 @@ pub fn serialize_state(id : UInt) -> Int64 {
 pub fn restore_state(id : UInt, s_ptr : UInt, s_len : UInt) -> Unit {
   @projector.restore_state(id, s_ptr, s_len)
 }
+
+pub fn mv_metadata() -> Int64 {
+  materialized_view_metadata()
+}
+
+pub fn mv_initialize(
+  view_name_ptr : UInt,
+  view_name_len : UInt,
+  view_version : Int,
+  bindings_ptr : UInt,
+  bindings_len : UInt
+) -> Int64 {
+  materialized_view_initialize(view_name_ptr, view_name_len, view_version, bindings_ptr, bindings_len)
+}
+
+pub fn mv_apply_event(
+  view_name_ptr : UInt,
+  view_name_len : UInt,
+  view_version : Int,
+  bindings_ptr : UInt,
+  bindings_len : UInt,
+  event_ptr : UInt,
+  event_len : UInt
+) -> Int64 {
+  materialized_view_apply_event(
+    view_name_ptr,
+    view_name_len,
+    view_version,
+    bindings_ptr,
+    bindings_len,
+    event_ptr,
+    event_len,
+  )
+}

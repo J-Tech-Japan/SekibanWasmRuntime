@@ -21,6 +21,7 @@ public class ClassRoomApiClient(HttpClient httpClient)
         int? pageNumber = null,
         int? pageSize = null,
         string? waitForSortableUniqueId = null,
+        ProjectionMode projectionMode = ProjectionMode.MemoryProjection,
         CancellationToken cancellationToken = default)
     {
         var queryParams = new List<string>();
@@ -33,6 +34,8 @@ public class ClassRoomApiClient(HttpClient httpClient)
 
         if (pageSize.HasValue)
             queryParams.Add($"pageSize={pageSize.Value}");
+
+        queryParams.Add($"projectionMode={projectionMode.ToQueryValue()}");
 
         var requestUri = queryParams.Count > 0
             ? $"/api/classrooms?{string.Join("&", queryParams)}"

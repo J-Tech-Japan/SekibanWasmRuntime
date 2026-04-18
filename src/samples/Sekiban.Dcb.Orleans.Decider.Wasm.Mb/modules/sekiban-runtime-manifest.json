@@ -52,5 +52,12 @@
     "GetApprovalInboxQuery": "ApprovalRequestListProjection",
     "GetUserDirectoryListQuery": "UserDirectoryListProjection",
     "GetUserAccessListQuery": "UserAccessListProjection"
+  },
+  "materializedViews": [
+    {
+      "viewName": "ClassRoomEnrollment",
+      "viewVersion": 1,
+      "logicalTables": ["classrooms", "students", "enrollments"]
+    }
   }
 }

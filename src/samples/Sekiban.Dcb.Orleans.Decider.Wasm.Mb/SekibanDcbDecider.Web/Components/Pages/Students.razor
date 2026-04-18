@@ -21,6 +21,15 @@
 
 <div class="row mb-3">
     <div class="col-auto">
+        <label class="col-form-label">Source:</label>
+    </div>
+    <div class="col-auto">
+        <select class="form-select" @onchange="OnProjectionModeChanged">
+            <option value="@ProjectionMode.MemoryProjection" selected="@(projectionMode == ProjectionMode.MemoryProjection)">Memory Projection</option>
+            <option value="@ProjectionMode.MaterializedView" selected="@(projectionMode == ProjectionMode.MaterializedView)">Materialized View</option>
+        </select>
+    </div>
+    <div class="col-auto">
         <label class="col-form-label">Page Size:</label>
     </div>
     <div class="col-auto">
@@ -148,6 +157,7 @@
     private List<StudentState>? students;
     private StudentModel studentModel = new();
     private string? lastSortableUniqueId;
+    private ProjectionMode projectionMode = ProjectionMode.MemoryProjection;
 
     // Pagination fields
     private int currentPage = 1;
@@ -175,7 +185,11 @@
     {
         try
         {
-            var result = await StudentApiClient.GetStudentsAsync(currentPage, pageSize, waitForSortableUniqueId);
+            var result = await StudentApiClient.GetStudentsAsync(
+                currentPage,
+                pageSize,
+                waitForSortableUniqueId,
+                projectionMode);
 
             students = result?.ToList() ?? new List<StudentState>();
 
@@ -201,6 +215,16 @@
             students = new List<StudentState>();
             totalPages = 1;
             totalItems = 0;
+        }
+    }
+
+    private async Task OnProjectionModeChanged(ChangeEventArgs e)
+    {
+        if (Enum.TryParse<ProjectionMode>(e.Value?.ToString(), out var selectedMode))
+        {
+            projectionMode = selectedMode;
+            currentPage = 1;
+            await LoadStudents(lastSortableUniqueId);
         }
     }
 

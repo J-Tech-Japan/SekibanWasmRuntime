@@ -4,6 +4,14 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 
+import {
+  createMaterializedViewState,
+  getStatus as getMaterializedViewStatus,
+  listClassrooms as listMaterializedViewClassrooms,
+  listEnrollments as listMaterializedViewEnrollments,
+  listStudents as listMaterializedViewStudents,
+  resolveProjectionMode,
+} from "./materializedView.mjs";
 import { MoonBitClientApiWasm } from "./wasmBridge.mjs";
 import { HttpError, SekibanRuntimeClient } from "./runtimeClient.mjs";
 
@@ -22,9 +30,17 @@ const tagGroups = {
   approvalRequest: "ApprovalRequest",
 };
 
+let materializedViewState = { pool: null };
+try {
+  materializedViewState = await createMaterializedViewState(console);
+} catch (error) {
+  console.error("failed to connect to DcbMaterializedViewPostgres", error);
+}
+
 const appState = {
   runtime: new SekibanRuntimeClient(resolveWasmServerBase()),
   wasm: new MoonBitClientApiWasm(resolveMoonBitWasmPath()),
+  materializedView: materializedViewState,
 };
 
 const server = http.createServer(async (req, res) => {
@@ -85,6 +101,16 @@ async function handleRequest(req, res) {
     return;
   }
 
+  if (method === "GET" && pathname === "/api/mv/status") {
+    await handleGetMaterializedViewStatus(res);
+    return;
+  }
+
+  if (method === "GET" && pathname === "/api/mv/students") {
+    await handleGetMaterializedViewStudents(url, res);
+    return;
+  }
+
   if (method === "POST" && pathname === "/api/students") {
     await handleCreateStudent(req, res);
     return;
@@ -101,6 +127,11 @@ async function handleRequest(req, res) {
     return;
   }
 
+  if (method === "GET" && pathname === "/api/mv/classrooms") {
+    await handleGetMaterializedViewClassRooms(url, res);
+    return;
+  }
+
   if (method === "POST" && pathname === "/api/classrooms") {
     await handleCreateClassRoom(req, res);
     return;
@@ -114,6 +145,11 @@ async function handleRequest(req, res) {
 
   if (method === "GET" && pathname === "/api/enrollments") {
     await handleGetEnrollments(url, res);
+    return;
+  }
+
+  if (method === "GET" && pathname === "/api/mv/enrollments") {
+    await handleGetMaterializedViewEnrollments(url, res);
     return;
   }
 
@@ -364,6 +400,11 @@ async function handleDeleteWeatherForecast(req, res) {
 }
 
 async function handleGetStudents(url, res) {
+  if (resolveProjectionMode(url) === "materializedView") {
+    await handleGetMaterializedViewStudents(url, res);
+    return;
+  }
+
   const waitForSortableUniqueId = url.searchParams.get("waitForSortableUniqueId");
   const result = await appState.runtime.executeListQuery(
     "GetStudentListQuery",
@@ -417,6 +458,11 @@ async function handleCreateStudent(req, res) {
 }
 
 async function handleGetClassRooms(url, res) {
+  if (resolveProjectionMode(url) === "materializedView") {
+    await handleGetMaterializedViewClassRooms(url, res);
+    return;
+  }
+
   const waitForSortableUniqueId = url.searchParams.get("waitForSortableUniqueId");
   const result = await appState.runtime.executeListQuery(
     "GetClassRoomListQuery",
@@ -470,6 +516,11 @@ async function handleCreateClassRoom(req, res) {
 }
 
 async function handleGetEnrollments(url, res) {
+  if (resolveProjectionMode(url) === "materializedView") {
+    await handleGetMaterializedViewEnrollments(url, res);
+    return;
+  }
+
   const waitForSortableUniqueId = url.searchParams.get("waitForSortableUniqueId");
   const [students, classRooms] = await Promise.all([
     appState.runtime.executeListQuery(
@@ -502,6 +553,45 @@ async function handleGetEnrollments(url, res) {
   }
 
   sendJson(res, 200, enrollments);
+}
+
+async function handleGetMaterializedViewStatus(res) {
+  sendJson(res, 200, await getMaterializedViewStatus(appState.materializedView));
+}
+
+async function handleGetMaterializedViewStudents(url, res) {
+  sendJson(
+    res,
+    200,
+    await listMaterializedViewStudents(appState.materializedView, {
+      pageNumber: parseOptionalInt(url.searchParams.get("pageNumber")),
+      pageSize: parseOptionalInt(url.searchParams.get("pageSize")),
+    }),
+  );
+}
+
+async function handleGetMaterializedViewClassRooms(url, res) {
+  sendJson(
+    res,
+    200,
+    await listMaterializedViewClassrooms(appState.materializedView, {
+      pageNumber: parseOptionalInt(url.searchParams.get("pageNumber")),
+      pageSize: parseOptionalInt(url.searchParams.get("pageSize")),
+    }),
+  );
+}
+
+async function handleGetMaterializedViewEnrollments(url, res) {
+  sendJson(
+    res,
+    200,
+    await listMaterializedViewEnrollments(appState.materializedView, {
+      pageNumber: parseOptionalInt(url.searchParams.get("pageNumber")),
+      pageSize: parseOptionalInt(url.searchParams.get("pageSize")),
+      studentId: url.searchParams.get("studentId"),
+      classRoomId: url.searchParams.get("classRoomId"),
+    }),
+  );
 }
 
 async function handleEnrollStudent(req, res) {
@@ -1496,6 +1586,14 @@ function sendError(res, error) {
     sendJson(res, error.status || 502, {
       error: normalizeError(error),
       details: error.body ?? null,
+    });
+    return;
+  }
+
+  if (error instanceof Error && Number.isInteger(error.status)) {
+    sendJson(res, error.status, {
+      error: error.code ?? "ClientApiError",
+      message: error.message,
     });
     return;
   }

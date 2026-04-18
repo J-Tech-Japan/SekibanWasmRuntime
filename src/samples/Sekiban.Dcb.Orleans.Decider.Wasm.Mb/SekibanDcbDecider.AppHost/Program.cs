@@ -27,6 +27,7 @@ var postgresServer = builder
 var postgres = postgresServer.AddDatabase("SekibanMoonBitDb");
 var dcbPostgres = postgresServer.AddDatabase("DcbPostgres");
 var identityPostgres = postgresServer.AddDatabase("IdentityPostgres");
+var dcbMaterializedViewPostgres = postgresServer.AddDatabase("DcbMaterializedViewPostgres");
 
 var apiOrleans = builder
     .AddOrleans("api-orleans")
@@ -59,7 +60,9 @@ var wasmServerBuilder = builder
     .WithEnvironment("SEKIBAN_WASM_FORCE_COMPACTING_GC_AFTER_COMPACTION", "true")
     .WithEnvironment("SEKIBAN_WASMTIME_STATIC_MEMORY_MAX_MB", "192")
     .WithReference(postgres, "SekibanDcb")
+    .WithReference(dcbMaterializedViewPostgres, "DcbMaterializedViewPostgres")
     .WaitFor(postgres)
+    .WaitFor(dcbMaterializedViewPostgres)
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
 
 if (isStrictBenchmarkProfile)
@@ -133,7 +136,9 @@ clientApiBuilder = clientApiBuilder.WithHttpEndpoint(
 
 var clientApi = clientApiBuilder
     .WithReference(wasmServer)
-    .WaitFor(wasmServer);
+    .WithReference(dcbMaterializedViewPostgres, "DcbMaterializedViewPostgres")
+    .WaitFor(wasmServer)
+    .WaitFor(dcbMaterializedViewPostgres);
 
 var webFrontend = builder
     .AddProject<SekibanDcbDecider_Web>("webfrontend")
