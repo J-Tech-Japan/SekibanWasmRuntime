@@ -45,6 +45,27 @@ public struct RoomCreated: Codable, Sendable {
     public var createdAt: String
 }
 
+public struct RoomUpdated: Codable, Sendable {
+    public var roomId: UUID
+    public var name: String
+    public var capacity: Int32
+    public var location: String
+    public var equipment: [String]
+    public var requiresApproval: Bool
+    public var updatedAt: String
+}
+
+public struct RoomDeactivated: Codable, Sendable {
+    public var roomId: UUID
+    public var reason: String?
+    public var deactivatedAt: String
+}
+
+public struct RoomReactivated: Codable, Sendable {
+    public var roomId: UUID
+    public var reactivatedAt: String
+}
+
 public struct WeatherForecastCreated: Codable, Sendable {
     public var forecastId: UUID
     public var location: String
@@ -96,16 +117,35 @@ public struct ReservationHoldCommitted: Codable, Sendable {
 }
 
 public struct ReservationConfirmed: Codable, Sendable {
+    // All contextual fields are optional so both shapes decode: the rich quick-
+    // reservation commit carries the full payload, the lifecycle transition from the
+    // confirm/cancel/reject endpoints carries only { reservationId, roomId,
+    // confirmedAt }. Projectors that already have the earlier Draft/Hold state only
+    // need the ids + confirmedAt to transition — everything else is context.
     public var reservationId: UUID
     public var roomId: UUID
-    public var organizerId: UUID
-    public var organizerName: String
-    public var startTime: String
-    public var endTime: String
-    public var purpose: String
+    public var organizerId: UUID?
+    public var organizerName: String?
+    public var startTime: String?
+    public var endTime: String?
+    public var purpose: String?
     public var selectedEquipment: [String]?
     public var confirmedAt: String
     public var approvalRequestId: UUID?
     public var approvalRequestComment: String?
     public var approvalDecisionComment: String?
+}
+
+public struct ReservationCancelled: Codable, Sendable {
+    public var reservationId: UUID
+    public var roomId: UUID
+    public var reason: String?
+    public var cancelledAt: String
+}
+
+public struct ReservationRejected: Codable, Sendable {
+    public var reservationId: UUID
+    public var roomId: UUID
+    public var reason: String?
+    public var rejectedAt: String
 }
