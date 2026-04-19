@@ -54,6 +54,17 @@ public struct WeatherForecastCreated: Codable, Sendable {
     public var createdAt: String
 }
 
+public struct WeatherForecastLocationUpdated: Codable, Sendable {
+    public var forecastId: UUID
+    public var newLocation: String
+    public var updatedAt: String
+}
+
+public struct WeatherForecastDeleted: Codable, Sendable {
+    public var forecastId: UUID
+    public var deletedAt: String
+}
+
 // Reservation events mirror the Rust sample's payload shape so the same JSON flows
 // through the generic WasmRuntime.Host regardless of which language produced it. Fields
 // absent from the benchmark payload (`approvalRequestId`, `selectedEquipment`, etc.) are

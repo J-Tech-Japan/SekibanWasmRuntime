@@ -26,6 +26,18 @@ public final class WeatherForecastListProjection: MultiProjection {
                     summary: created.summary,
                     createdAt: created.createdAt)
             }
+        case "WeatherForecastLocationUpdated":
+            if let updated = try? JSONDecoder().decode(WeatherForecastLocationUpdated.self, from: data) {
+                let key = updated.forecastId.uuidString.lowercased()
+                if var item = forecasts[key] {
+                    item.location = updated.newLocation
+                    forecasts[key] = item
+                }
+            }
+        case "WeatherForecastDeleted":
+            if let deleted = try? JSONDecoder().decode(WeatherForecastDeleted.self, from: data) {
+                forecasts.removeValue(forKey: deleted.forecastId.uuidString.lowercased())
+            }
         default:
             break
         }

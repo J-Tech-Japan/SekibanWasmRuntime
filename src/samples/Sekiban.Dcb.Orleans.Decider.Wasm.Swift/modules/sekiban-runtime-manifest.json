@@ -8,12 +8,16 @@
     "StudentDroppedFromClassRoom",
     "RoomCreated",
     "WeatherForecastCreated",
+    "WeatherForecastLocationUpdated",
+    "WeatherForecastDeleted",
     "ReservationDraftCreated",
     "ReservationHoldCommitted",
     "ReservationConfirmed"
   ],
   "projectors": [
     { "projectorName": "ClassRoomListProjection", "modulePath": "./sekiban-dcb-decider-swift.wasm", "projectorVersion": "1.0.0" },
+    { "projectorName": "StudentListProjection", "modulePath": "./sekiban-dcb-decider-swift.wasm", "projectorVersion": "1.0.0" },
+    { "projectorName": "EnrollmentListProjection", "modulePath": "./sekiban-dcb-decider-swift.wasm", "projectorVersion": "1.0.0" },
     { "projectorName": "RoomListProjection", "modulePath": "./sekiban-dcb-decider-swift.wasm", "projectorVersion": "1.0.0" },
     { "projectorName": "WeatherForecastListProjection", "modulePath": "./sekiban-dcb-decider-swift.wasm", "projectorVersion": "1.0.0" },
     { "projectorName": "ReservationListProjection", "modulePath": "./sekiban-dcb-decider-swift.wasm", "projectorVersion": "1.0.0" }
@@ -21,6 +25,10 @@
   "queryProjectors": {
     "GetClassRoomListQuery": "ClassRoomListProjection",
     "GetClassRoomCountQuery": "ClassRoomListProjection",
+    "GetStudentListQuery": "StudentListProjection",
+    "GetStudentCountQuery": "StudentListProjection",
+    "GetEnrollmentListQuery": "EnrollmentListProjection",
+    "GetEnrollmentCountQuery": "EnrollmentListProjection",
     "GetRoomListQuery": "RoomListProjection",
     "GetRoomCountQuery": "RoomListProjection",
     "GetWeatherForecastListQuery": "WeatherForecastListProjection",
