@@ -54,7 +54,7 @@ public func buildCreateReservationDraftCommit(
     let roomReservationTag = SekibanTag.roomReservation(request.roomId)
     async let reservationState = reader.read(tag: reservationTag)
     async let roomReservationState = reader.read(tag: roomReservationTag)
-    let (_, roomRes) = try await (reservationState, roomReservationState)
+    let (res, roomRes) = try await (reservationState, roomReservationState)
 
     let draft = ReservationDraftCreated(
         reservationId: reservationId,
@@ -76,7 +76,12 @@ public func buildCreateReservationDraftCommit(
                 tags: fanOut),
         ],
         consistencyTags: [
-            SerializableConsistencyTag(tag: reservationTag, lastSortableUniqueId: ""),
+            // Carry the reservation tag's actual last-sortable-id — for a fresh id this
+            // is empty, for a caller-supplied id it's the real prior value, and in
+            // either case wasmserver gets to enforce optimistic concurrency.
+            SerializableConsistencyTag(
+                tag: reservationTag,
+                lastSortableUniqueId: res.lastSortableUniqueId),
             SerializableConsistencyTag(
                 tag: roomReservationTag,
                 lastSortableUniqueId: roomRes.lastSortableUniqueId),
@@ -96,6 +101,19 @@ public struct ReservationLifecycleRequest: Codable, Sendable {
     }
 }
 
+/// Minimal `ReservationConfirmed` payload emitted by the confirm/cancel/reject
+/// lifecycle commands — reservation id + room id + confirmed-at timestamp. The richer
+/// `ReservationConfirmed` struct (with organizer / time window / equipment) is used by
+/// `buildCreateQuickReservationCommit` where those fields are known at commit-time;
+/// the lifecycle transitions here only know the ids. The Swift
+/// `ReservationListProjection` uses `Codable` with optional fields, so it decodes both
+/// the rich and the minimal shape equivalently.
+public struct ReservationConfirmedLifecycle: Codable, Sendable, Equatable {
+    public var reservationId: UUID
+    public var roomId: UUID
+    public var confirmedAt: String
+}
+
 /// Emit ReservationConfirmed on Reservation + RoomReservation tags. Caller promises the
 /// reservation is currently Held — the Swift projector is idempotent so repeated
 /// Confirmed events for the same id don't corrupt state.
@@ -107,15 +125,10 @@ public func buildConfirmReservationCommit(
     try await buildReservationLifecycleCommit(
         request: request,
         eventTypeName: "ReservationConfirmed",
-        body: ReservationConfirmed(
+        body: ReservationConfirmedLifecycle(
             reservationId: request.reservationId,
             roomId: request.roomId,
-            organizerId: UUID(), organizerName: "",
-            startTime: "", endTime: "", purpose: "",
-            selectedEquipment: [],
-            confirmedAt: SekibanTime.iso8601(from: now()),
-            approvalRequestId: nil, approvalRequestComment: nil,
-            approvalDecisionComment: nil),
+            confirmedAt: SekibanTime.iso8601(from: now())),
         reader: reader)
 }
 

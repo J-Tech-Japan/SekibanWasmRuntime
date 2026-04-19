@@ -226,13 +226,13 @@
     private async Task CloseAddModal()
     {
         studentModel = new StudentModel();
-        await JsRuntime.InvokeVoidAsync("eval", "bootstrap.Modal.getInstance(document.getElementById('addStudentModal'))?.hide()");
+        await JsRuntime.InvokeVoidAsync("sekibanInterop.hideModal", "#addStudentModal");
     }
 
     private async Task OpenAddStudentModal()
     {
         studentModel = new StudentModel { MaxClassCount = 5 };
-        await JsRuntime.InvokeVoidAsync("eval", "new bootstrap.Modal(document.getElementById('addStudentModal')).show()");
+        await JsRuntime.InvokeVoidAsync("sekibanInterop.showModal", "#addStudentModal");
     }
 
     private async Task HandleAddStudentSubmit()

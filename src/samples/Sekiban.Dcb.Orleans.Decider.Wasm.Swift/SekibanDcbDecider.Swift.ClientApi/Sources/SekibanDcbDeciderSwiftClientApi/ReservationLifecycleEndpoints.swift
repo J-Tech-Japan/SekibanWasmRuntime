@@ -79,11 +79,15 @@ func registerReservationLifecycleRoutes(
     // --- Rooms -----------------------------------------------------------
 
     router.put("/api/rooms/:id") { request, context in
-        try await lifecycleCommit(
+        // Resolve the target room id from the route parameter first, falling back to
+        // the body. Don't silently mint a fresh UUID — we'd rather 400 than update a
+        // random room.
+        guard let roomId = parseUUID(context.parameters.get("id", as: String.self) ?? "") else {
+            return genericError(.badRequest, "invalid room id in path")
+        }
+        return try await lifecycleCommit(
             request: request, forwarder: forwarder, logger: logger,
             build: { (body: UpdateRoomRequestWire) in
-                let roomId = parseUUID(context.parameters.get("id", as: String.self) ?? "")
-                    ?? body.roomId ?? UUID()
                 let commit = try await buildUpdateRoomCommit(
                     request: UpdateRoomRequest(
                         roomId: roomId,

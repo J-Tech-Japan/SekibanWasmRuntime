@@ -38,9 +38,18 @@ public class ClassRoomApiClient(HttpClient httpClient)
             ? $"/api/classrooms?{string.Join("&", queryParams)}"
             : "/api/classrooms";
 
-        var classrooms = await httpClient.GetFromJsonAsync<List<ClassRoomItem>>(requestUri, cancellationToken);
+        // Swift's `ClassRoomListProjection` emits `{ classRoomId, name, maxStudents,
+        // enrolledCount }` only. Template's `ClassRoomItem` also exposes `IsFull` +
+        // `RemainingCapacity`, which we derive from MaxStudents - EnrolledCount so the
+        // Classrooms.razor table shows the right values instead of defaulting to zero.
+        var classrooms = await httpClient.GetFromJsonAsync<List<ClassRoomItem>>(requestUri, cancellationToken)
+            ?? new List<ClassRoomItem>();
 
-        return classrooms?.ToArray() ?? [];
+        return classrooms.Select(c => c with
+        {
+            IsFull = c.MaxStudents > 0 && c.EnrolledCount >= c.MaxStudents,
+            RemainingCapacity = Math.Max(0, c.MaxStudents - c.EnrolledCount),
+        }).ToArray();
     }
 
     public async Task<dynamic?> GetClassRoomAsync(

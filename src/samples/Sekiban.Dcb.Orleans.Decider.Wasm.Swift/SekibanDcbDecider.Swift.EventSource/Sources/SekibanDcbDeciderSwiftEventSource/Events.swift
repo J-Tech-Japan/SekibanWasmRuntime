@@ -117,13 +117,18 @@ public struct ReservationHoldCommitted: Codable, Sendable {
 }
 
 public struct ReservationConfirmed: Codable, Sendable {
+    // All contextual fields are optional so both shapes decode: the rich quick-
+    // reservation commit carries the full payload, the lifecycle transition from the
+    // confirm/cancel/reject endpoints carries only { reservationId, roomId,
+    // confirmedAt }. Projectors that already have the earlier Draft/Hold state only
+    // need the ids + confirmedAt to transition — everything else is context.
     public var reservationId: UUID
     public var roomId: UUID
-    public var organizerId: UUID
-    public var organizerName: String
-    public var startTime: String
-    public var endTime: String
-    public var purpose: String
+    public var organizerId: UUID?
+    public var organizerName: String?
+    public var startTime: String?
+    public var endTime: String?
+    public var purpose: String?
     public var selectedEquipment: [String]?
     public var confirmedAt: String
     public var approvalRequestId: UUID?

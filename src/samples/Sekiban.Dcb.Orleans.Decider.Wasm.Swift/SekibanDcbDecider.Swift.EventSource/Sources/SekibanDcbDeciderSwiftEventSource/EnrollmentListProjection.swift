@@ -27,10 +27,16 @@ public final class EnrollmentListProjection: MultiProjection {
                 let studentKey = enrolled.studentId.uuidString.lowercased()
                 let classKey = enrolled.classRoomId.uuidString.lowercased()
                 let key = Self.key(studentId: studentKey, classRoomId: classKey)
+                // `StudentEnrolledInClassRoom` does not carry a timestamp in its payload
+                // (matching the Rust event shape). Using `Date()` here would make the
+                // projection non-deterministic — replay/snapshot rebuilds would produce
+                // a different `enrolledAt` depending on when catch-up ran. Leave the
+                // field empty; the MV read path already exposes the event's sortable
+                // unique id via `/api/mv/enrollments` for callers that need a timestamp.
                 enrollments[key] = EnrollmentListItem(
                     studentId: studentKey,
                     classRoomId: classKey,
-                    enrolledAt: ISO8601DateFormatter().string(from: Date()))
+                    enrolledAt: "")
             }
         case "StudentDroppedFromClassRoom":
             if let dropped = try? JSONDecoder().decode(StudentDroppedFromClassRoom.self, from: data) {
@@ -89,7 +95,13 @@ public final class EnrollmentListProjection: MultiProjection {
         if let classRoomFilter {
             items.removeAll { $0.classRoomId != classRoomFilter }
         }
-        items.sort { $0.enrolledAt > $1.enrolledAt }
+        // `enrolledAt` is empty (see applyEvent) so sort by the composite id for a
+        // deterministic, replay-stable order.
+        items.sort { lhs, rhs in
+            let l = "\(lhs.studentId)|\(lhs.classRoomId)"
+            let r = "\(rhs.studentId)|\(rhs.classRoomId)"
+            return l < r
+        }
         return encodeArrayOrDefault(items)
     }
 

@@ -211,7 +211,7 @@
     {
         try
         {
-            var httpClient = HttpClientFactory.CreateClient("ApiService");
+            var httpClient = HttpClientFactory.CreateClient("SwiftClientApi");
             var requestUri = !string.IsNullOrEmpty(waitForSortableUniqueId)
                 ? $"api/students?waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}"
                 : "api/students";
@@ -241,7 +241,7 @@
     {
         try
         {
-            var httpClient = HttpClientFactory.CreateClient("ApiService");
+            var httpClient = HttpClientFactory.CreateClient("SwiftClientApi");
             var requestUri = !string.IsNullOrEmpty(waitForSortableUniqueId)
                 ? $"api/classrooms?waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}"
                 : "api/classrooms";
@@ -273,9 +273,11 @@
     {
         try
         {
-            // Since there's no /api/enrollments endpoint, we need to build enrollment data
-            // from students and classrooms data that we already have
-            var httpClient = HttpClientFactory.CreateClient("ApiService");
+            // The Swift ClientApi does expose `/api/enrollments`, but the richer view the
+            // template expects (student / classroom names, grade, enrollment date) isn't in
+            // that payload. Stitch from /api/students + /api/classrooms so this page can
+            // render names without waiting on the enrollments MV to join them.
+            var httpClient = HttpClientFactory.CreateClient("SwiftClientApi");
             
             // Build query string with waitForSortableUniqueId if provided
             var studentsUri = !string.IsNullOrEmpty(waitForSortableUniqueId)

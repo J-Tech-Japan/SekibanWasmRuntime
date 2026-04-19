@@ -52,12 +52,15 @@ func registerDomainRoutes(
     }
 
     router.get("/api/classrooms/:id") { request, context in
+        // The in-memory ClassRoomListProjection encodes its fields via Swift's default
+        // JSONEncoder which emits camelCase keys (e.g. `classRoomId`), not snake_case
+        // like the MV `_mv/classrooms` row does. Filter by the projector's actual key.
         try await queryForwarder.listQueryFilteredByIdField(
             request: request,
             context: context,
             queryType: "GetClassRoomListQuery",
             idParam: "id",
-            jsonIdField: "class_room_id")
+            jsonIdField: "classRoomId")
     }
 
     // --- Students -----------------------------------------------------------
@@ -86,7 +89,7 @@ func registerDomainRoutes(
             context: context,
             queryType: "GetStudentListQuery",
             idParam: "id",
-            jsonIdField: "student_id")
+            jsonIdField: "studentId")
     }
 
     // --- Enrollments --------------------------------------------------------

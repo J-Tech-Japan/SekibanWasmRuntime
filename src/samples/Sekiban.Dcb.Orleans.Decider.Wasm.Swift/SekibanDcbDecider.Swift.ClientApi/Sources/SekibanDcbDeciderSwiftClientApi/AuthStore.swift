@@ -47,21 +47,26 @@ public struct AuthStore: Sendable {
 
     public func register(email: String, password: String, displayName: String?) async throws -> AuthUser {
         try await ensureSchema()
-        // Check for dup by email first (SELECT then INSERT keeps error messaging clean).
-        let existing: PostgresQuery = """
-            SELECT id, email, display_name FROM sekiban_swift_users WHERE email = \(email)
-            """
-        for try await _ in try await postgres.query(existing, logger: logger) {
-            throw AuthStoreError.emailAlreadyRegistered
-        }
+        // The email column has a UNIQUE constraint, so rely on that instead of a
+        // SELECT-then-INSERT (which races under concurrent registration). Postgres
+        // raises SQLSTATE `23505` (unique_violation); surface that as a domain error
+        // so the HTTP handler returns 409 instead of a generic 500.
         let id = UUID().uuidString.lowercased()
         let passwordHash = hasher.hash(password: password)
         let name = displayName?.isEmpty == false ? displayName! : email
         let insert: PostgresQuery = """
             INSERT INTO sekiban_swift_users (id, email, password_hash, display_name)
             VALUES (\(id), \(email), \(passwordHash), \(name))
+            ON CONFLICT (email) DO NOTHING
+            RETURNING id
             """
-        _ = try await postgres.query(insert, logger: logger)
+        var insertedId: String? = nil
+        for try await row in try await postgres.query(insert, logger: logger) {
+            insertedId = try row.decode(String.self)
+        }
+        if insertedId == nil {
+            throw AuthStoreError.emailAlreadyRegistered
+        }
         return AuthUser(id: id, email: email, displayName: name)
     }
 

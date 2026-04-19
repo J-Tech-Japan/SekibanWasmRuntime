@@ -42,10 +42,33 @@ public class EnrollmentApiClient(HttpClient httpClient)
             ? $"/api/enrollments?{string.Join("&", queryParams)}"
             : "/api/enrollments";
 
-        var enrollments = await httpClient.GetFromJsonAsync<List<EnrollmentView>>(requestUri, cancellationToken);
+        // Swift's EnrollmentListProjection emits `{ studentId, classRoomId, enrolledAt }`
+        // (camelCase). The template's EnrollmentView wants richer fields (StudentName,
+        // ClassName, Grade) which aren't available in that projection. Decode the actual
+        // DTO and project into EnrollmentView with the fields we have; callers that need
+        // names stitch via /api/students + /api/classrooms (see Enrollments.razor).
+        var enrollments = await httpClient.GetFromJsonAsync<List<EnrollmentDtoItem>>(
+            requestUri,
+            cancellationToken)
+            ?? new List<EnrollmentDtoItem>();
 
-        return enrollments?.ToArray() ?? [];
+        return enrollments.Select(e => new EnrollmentView
+        {
+            StudentId = e.StudentId,
+            ClassRoomId = e.ClassRoomId,
+            StudentName = string.Empty,
+            ClassName = string.Empty,
+            Grade = 0,
+            EnrollmentDate = string.IsNullOrEmpty(e.EnrolledAt)
+                ? DateTime.MinValue
+                : (DateTime.TryParse(e.EnrolledAt, out var parsed) ? parsed : DateTime.MinValue),
+        }).ToArray();
     }
+
+    private sealed record EnrollmentDtoItem(
+        Guid StudentId,
+        Guid ClassRoomId,
+        string? EnrolledAt);
 
     public async Task<CommandResponse> EnrollStudentAsync(
         EnrollStudentInClassRoom command,

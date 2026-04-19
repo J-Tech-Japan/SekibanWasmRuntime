@@ -230,7 +230,7 @@
     {
         classroomModel = new ClassroomModel();
         errorMessage = string.Empty;
-        await JsRuntime.InvokeVoidAsync("eval", "bootstrap.Modal.getInstance(document.getElementById('addClassroomModal'))?.hide()");
+        await JsRuntime.InvokeVoidAsync("sekibanInterop.hideModal", "#addClassroomModal");
     }
 
 
@@ -238,7 +238,7 @@
     {
         classroomModel = new ClassroomModel { MaxCapacity = 20 };
         errorMessage = string.Empty;
-        await JsRuntime.InvokeVoidAsync("eval", "new bootstrap.Modal(document.getElementById('addClassroomModal')).show()");
+        await JsRuntime.InvokeVoidAsync("sekibanInterop.showModal", "#addClassroomModal");
     }
 
 

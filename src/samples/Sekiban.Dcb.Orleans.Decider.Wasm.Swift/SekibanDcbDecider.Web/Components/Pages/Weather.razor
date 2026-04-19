@@ -327,19 +327,19 @@
     private async Task CloseAddModal()
     {
         forecastModel = new WeatherForecastModel();
-        await JsRuntime.InvokeVoidAsync("eval", "bootstrap.Modal.getInstance(document.getElementById('addForecastModal'))?.hide()");
+        await JsRuntime.InvokeVoidAsync("sekibanInterop.hideModal", "#addForecastModal");
     }
 
     private async Task CloseEditLocationModal()
     {
         editLocationModel = new EditLocationModel();
-        await JsRuntime.InvokeVoidAsync("eval", "bootstrap.Modal.getInstance(document.getElementById('editLocationModal'))?.hide()");
+        await JsRuntime.InvokeVoidAsync("sekibanInterop.hideModal", "#editLocationModal");
     }
 
     private async Task OpenAddForecastModal()
     {
         forecastModel = new WeatherForecastModel { Date = DateTime.Today };
-        await JsRuntime.InvokeVoidAsync("eval", "new bootstrap.Modal(document.getElementById('addForecastModal')).show()");
+        await JsRuntime.InvokeVoidAsync("sekibanInterop.showModal", "#addForecastModal");
     }
 
     private async Task OpenEditLocationModal(WeatherForecastItem forecast)
@@ -349,7 +349,7 @@
             ForecastId = forecast.ForecastId,
             NewLocationName = forecast.Location
         };
-        await JsRuntime.InvokeVoidAsync("eval", "new bootstrap.Modal(document.getElementById('editLocationModal')).show()");
+        await JsRuntime.InvokeVoidAsync("sekibanInterop.showModal", "#editLocationModal");
     }
 
     private async Task HandleEditLocationSubmit()

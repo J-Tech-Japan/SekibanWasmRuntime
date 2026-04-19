@@ -47,8 +47,14 @@ public struct AuthTokenCodec: Sendable {
     }
 
     public init(secretString: String) {
-        let bytes = Array(secretString.utf8)
-        // Pad/truncate to at least 32 bytes so short env values don't cripple HMAC keyspace.
+        // Empty or whitespace-only secrets are rejected instead of silently accepted —
+        // padding an empty array would loop forever, and any HMAC key derived from it
+        // would be trivially predictable anyway. Caller must pass at least one byte of
+        // real key material; production deployments should pass ≥32 bytes via
+        // SEKIBAN_AUTH_SIGNING_KEY.
+        let trimmed = secretString.trimmingCharacters(in: .whitespacesAndNewlines)
+        precondition(!trimmed.isEmpty, "AuthTokenCodec secret must be non-empty")
+        let bytes = Array(trimmed.utf8)
         var material = bytes
         while material.count < 32 {
             material.append(contentsOf: bytes)
@@ -80,11 +86,14 @@ public struct AuthTokenCodec: Sendable {
         guard let sigData = AuthTokenCodec.base64urlDecode(String(segments[2])) else {
             throw AuthTokenError.signatureMismatch
         }
-        let expected = HMAC<SHA256>.authenticationCode(
-            for: Data(signingInput.utf8),
+        // `isValidAuthenticationCode` is the constant-time compare baked into
+        // CryptoKit. Do NOT compare `expected == sigData` as a fallback — that would
+        // be a non-constant-time `Data==` and any difference between the two paths
+        // undermines the point of using the constant-time primitive.
+        guard HMAC<SHA256>.isValidAuthenticationCode(
+            sigData,
+            authenticating: Data(signingInput.utf8),
             using: secret)
-        guard HMAC<SHA256>.isValidAuthenticationCode(sigData, authenticating: Data(signingInput.utf8), using: secret)
-              || Data(expected) == sigData
         else {
             throw AuthTokenError.signatureMismatch
         }
@@ -130,9 +139,13 @@ public struct PasswordHasher: Sendable {
     /// Stores hash as `pbkdf2$<iterations>$<salt-base64>$<hash-base64>`. Matches the
     /// C# ASP.NET Identity `Version3` hash conceptually but with Swift-native primitives.
     public func hash(password: String) -> String {
+        // Use SystemRandomNumberGenerator so this compiles on Linux too. Apple's
+        // `SecRandomCopyBytes` lives in the `Security` framework which isn't available
+        // on linux-amd64 / linux-aarch64 swift-corelibs deployments.
+        var rng = SystemRandomNumberGenerator()
         var salt = Data(count: 16)
-        _ = salt.withUnsafeMutableBytes { raw in
-            SecRandomCopyBytes(kSecRandomDefault, raw.count, raw.baseAddress!)
+        for i in 0..<salt.count {
+            salt[i] = UInt8.random(in: 0...UInt8.max, using: &rng)
         }
         let derived = derive(password: password, salt: salt)
         return "pbkdf2$\(iterations)$\(salt.base64EncodedString())$\(derived.base64EncodedString())"
@@ -146,7 +159,19 @@ public struct PasswordHasher: Sendable {
               let expected = Data(base64Encoded: String(parts[3]))
         else { return false }
         let actual = derive(password: password, salt: salt, iterations: iters)
-        return actual == expected
+        return constantTimeEquals(actual, expected)
+    }
+
+    /// Length-safe constant-time byte comparison. Does not short-circuit on length
+    /// mismatch past the initial check, so an attacker can't learn byte positions by
+    /// timing the comparison.
+    private func constantTimeEquals(_ lhs: Data, _ rhs: Data) -> Bool {
+        guard lhs.count == rhs.count else { return false }
+        var diff: UInt8 = 0
+        for i in 0..<lhs.count {
+            diff |= lhs[i] ^ rhs[i]
+        }
+        return diff == 0
     }
 
     private func derive(password: String, salt: Data, iterations: Int? = nil) -> Data {

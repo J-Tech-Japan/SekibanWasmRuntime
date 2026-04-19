@@ -48,15 +48,33 @@ public class StudentApiClient(HttpClient httpClient)
         Guid studentId,
         CancellationToken cancellationToken = default)
     {
-        var response = await httpClient.GetFromJsonAsync<dynamic>($"/api/students/{studentId}", cancellationToken);
-        // The API returns an object with payload property
-        if (response?.payload != null)
+        // The Swift ClientApi's `/api/students/{id}` returns the matched projector item
+        // directly (camelCase JSON) or 404 when it doesn't exist. No `payload` envelope.
+        // Map the projector shape (`studentId`, `name`, `maxClassCount`,
+        // `enrolledClassRoomIds`) into the template's `StudentState` record.
+        var response = await httpClient.GetAsync(
+            $"/api/students/{studentId}",
+            cancellationToken);
+        if (!response.IsSuccessStatusCode)
         {
-            var json = response.payload.ToString();
-            return System.Text.Json.JsonSerializer.Deserialize<StudentState>(json);
+            return null;
         }
-        return null;
+        var dto = await response.Content.ReadFromJsonAsync<StudentListItemDto>(cancellationToken);
+        if (dto is null) return null;
+        return new StudentState(
+            dto.StudentId,
+            dto.Name,
+            dto.MaxClassCount,
+            dto.EnrolledClassRoomIds?.ToList() ?? []);
     }
+
+    /// JSON shape emitted by the Swift `StudentListProjection.executeListQuery`.
+    /// Lowercase UUID strings in classroom list — `Guid.Parse` handles both.
+    private sealed record StudentListItemDto(
+        Guid StudentId,
+        string Name,
+        int MaxClassCount,
+        List<Guid>? EnrolledClassRoomIds);
 
     public async Task<CommandResponse> CreateStudentAsync(
         CreateStudent command,
