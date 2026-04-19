@@ -17,10 +17,14 @@ let package = Package(
         .package(url: "https://github.com/hummingbird-project/hummingbird.git", from: "2.10.0"),
         .package(url: "https://github.com/vapor/postgres-nio.git", from: "1.27.0"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.5.0"),
+        .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
     ],
     targets: [
         .target(
             name: "SekibanDcbDeciderSwiftClientApiCore",
+            dependencies: [
+                .product(name: "Crypto", package: "swift-crypto"),
+            ],
             path: "Sources/SekibanDcbDeciderSwiftClientApiCore"),
         .executableTarget(
             name: "SekibanDcbDeciderSwiftClientApi",

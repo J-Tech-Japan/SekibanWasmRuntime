@@ -80,16 +80,26 @@ public struct AuthTokenCodec: Sendable {
         _ token: String,
         now: Date = Date()
     ) throws -> AuthTokenClaims {
+        let claims = try verifySignatureAndDecode(token)
+        if Int64(now.timeIntervalSince1970) >= claims.exp {
+            throw AuthTokenError.expired
+        }
+        return claims
+    }
+
+    /// Verify signature only, skipping the expiry check. Used by the /auth/refresh flow
+    /// so a just-expired token can still be swapped for a fresh one.
+    public func verifyAllowingExpired(_ token: String) throws -> AuthTokenClaims {
+        try verifySignatureAndDecode(token)
+    }
+
+    private func verifySignatureAndDecode(_ token: String) throws -> AuthTokenClaims {
         let segments = token.split(separator: ".", omittingEmptySubsequences: false)
         guard segments.count == 3 else { throw AuthTokenError.malformedToken }
         let signingInput = "\(segments[0]).\(segments[1])"
         guard let sigData = AuthTokenCodec.base64urlDecode(String(segments[2])) else {
             throw AuthTokenError.signatureMismatch
         }
-        // `isValidAuthenticationCode` is the constant-time compare baked into
-        // CryptoKit. Do NOT compare `expected == sigData` as a fallback — that would
-        // be a non-constant-time `Data==` and any difference between the two paths
-        // undermines the point of using the constant-time primitive.
         guard HMAC<SHA256>.isValidAuthenticationCode(
             sigData,
             authenticating: Data(signingInput.utf8),
@@ -100,11 +110,7 @@ public struct AuthTokenCodec: Sendable {
         guard let payloadData = AuthTokenCodec.base64urlDecode(String(segments[1])) else {
             throw AuthTokenError.malformedToken
         }
-        let claims = try JSONDecoder().decode(AuthTokenClaims.self, from: payloadData)
-        if Int64(now.timeIntervalSince1970) >= claims.exp {
-            throw AuthTokenError.expired
-        }
-        return claims
+        return try JSONDecoder().decode(AuthTokenClaims.self, from: payloadData)
     }
 
     // ---------------- base64url helpers ----------------

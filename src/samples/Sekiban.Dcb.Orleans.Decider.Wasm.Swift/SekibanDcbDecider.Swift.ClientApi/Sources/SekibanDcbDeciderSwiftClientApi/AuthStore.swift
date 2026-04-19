@@ -86,6 +86,29 @@ public struct AuthStore: Sendable {
         return nil
     }
 
+    /// Seeds the four sample accounts used by the Login pages' Quick Login buttons.
+    /// Idempotent: skips any account whose email is already present.
+    public func seedSampleAccountsIfMissing() async throws {
+        try await ensureSchema()
+        let samples: [(email: String, displayName: String)] = [
+            ("user1@example.com", "User 1"),
+            ("user2@example.com", "User 2"),
+            ("user3@example.com", "User 3"),
+            ("admin@example.com", "Admin")
+        ]
+        let password = "Sekiban1234%"
+        for sample in samples {
+            let id = UUID().uuidString.lowercased()
+            let passwordHash = hasher.hash(password: password)
+            let insert: PostgresQuery = """
+                INSERT INTO sekiban_swift_users (id, email, password_hash, display_name)
+                VALUES (\(id), \(sample.email), \(passwordHash), \(sample.displayName))
+                ON CONFLICT (email) DO NOTHING
+                """
+            _ = try await postgres.query(insert, logger: logger)
+        }
+    }
+
     public func findById(_ id: String) async throws -> AuthUser? {
         let q: PostgresQuery = """
             SELECT id, email, display_name FROM sekiban_swift_users WHERE id = \(id)
