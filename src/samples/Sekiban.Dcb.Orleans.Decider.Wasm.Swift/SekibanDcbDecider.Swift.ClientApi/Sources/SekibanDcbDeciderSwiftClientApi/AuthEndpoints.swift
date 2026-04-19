@@ -18,6 +18,12 @@ import SekibanDcbDeciderSwiftClientApiCore
 public let SekibanSessionCookieName = "sekiban_session"
 private let DefaultSessionTTLSeconds: Int64 = 60 * 60 * 24 * 7  // 7 days
 
+/// Upper bound on how stale an access token's `iat` can be before /auth/refresh refuses
+/// to re-issue. Signature-only verification alone would let a leaked token be refreshed
+/// forever until the signing key rotates; capping by age bounds that window. Set to 2×
+/// the access-token TTL so a legitimate but just-expired token always rotates cleanly.
+private let RefreshMaxAgeSeconds: Int64 = DefaultSessionTTLSeconds * 2
+
 func registerAuthRoutes(
     _ router: Router<BasicRequestContext>,
     store: AuthStore,
@@ -102,6 +108,12 @@ func registerAuthRoutes(
         }
         do {
             let claims = try codec.verifyAllowingExpired(token)
+            // Cap how long a signature-valid-but-expired token can be refreshed so a
+            // leaked token can't be rotated indefinitely until the signing key changes.
+            let ageSeconds = Int64(Date().timeIntervalSince1970) - claims.iat
+            if ageSeconds > RefreshMaxAgeSeconds {
+                return authErrorResponse(.unauthorized, "refresh token too old")
+            }
             let user = AuthStore.AuthUser(
                 id: claims.sub, email: claims.email, displayName: claims.name ?? claims.email)
             return try await issueSessionResponse(

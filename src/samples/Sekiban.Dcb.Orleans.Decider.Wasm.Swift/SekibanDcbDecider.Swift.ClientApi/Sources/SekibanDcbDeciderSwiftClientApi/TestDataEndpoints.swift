@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 import HTTPTypes
 import Hummingbird
 import Logging
@@ -206,9 +209,9 @@ private func generateTestDataResponse(
 // Returns (midnight-local-today-as-UTC-instant, secondsEastOfUtc) so callers can
 // compose local hours and then convert back to UTC by subtracting the offset.
 private func resolveLocalBaseDate(timeZoneOffsetMinutes: Int?) -> (Date, Double) {
-    // JS `Date.getTimezoneOffset()` returns UTC-minus-local in minutes, so a JST caller
-    // sends +540 for offset 0 (UTC) but -540 for offset +09:00. Invert the sign to get
-    // seconds east of UTC, matching the C# template's convention.
+    // JS `Date.getTimezoneOffset()` returns UTC-minus-local in minutes — so a UTC caller
+    // sends 0, and a JST (UTC+9) caller sends -540. Invert the sign to get seconds east
+    // of UTC, matching the C# template's convention.
     let offsetSeconds: Double
     if let m = timeZoneOffsetMinutes {
         offsetSeconds = Double(-m) * 60.0
@@ -225,16 +228,14 @@ private func resolveLocalBaseDate(timeZoneOffsetMinutes: Int?) -> (Date, Double)
 /// ignores the body. This is how we force the wasmserver's projection manager to apply
 /// the given event before returning from /api/test-data/generate — without it, the
 /// Next.js UI refetches before the projector catches up and shows an empty list.
+/// Uses the same `URLSession.shared.data(for:)` path as `QueryForwarder.post` so
+/// behavior is identical on macOS and Linux (`FoundationNetworking`).
 private func waitForProjectionCatchUp(
     wasmServerUrl: String,
     queryType: String,
     sortableUniqueId: String,
     logger: Logger
 ) async {
-    #if canImport(FoundationNetworking)
-    // URLSession on linux-foundation doesn't support async request/data; skip there.
-    return
-    #else
     guard let url = URL(string: wasmServerUrl.trimmingSlash() + "/api/sekiban/serialized/list-query") else {
         return
     }
@@ -249,11 +250,17 @@ private func waitForProjectionCatchUp(
     urlRequest.httpBody = (try? JSONSerialization.data(withJSONObject: payload))
         ?? Data(#"{"queryType":"\#(queryType)","queryParamsJson":"{}","waitForSortableUniqueId":"\#(sortableUniqueId)"}"#.utf8)
     do {
-        _ = try await URLSession.shared.data(for: urlRequest)
+        // URLSession does not throw on non-2xx — inspect the response explicitly so a
+        // 4xx/5xx from wasmserver doesn't silently masquerade as a successful catch-up.
+        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+        if let http = response as? HTTPURLResponse, http.statusCode >= 400 {
+            let text = String(data: data, encoding: .utf8) ?? "<non-utf8>"
+            logger.warning(
+                "waitForProjectionCatchUp(\(queryType)) → \(http.statusCode) \(text)")
+        }
     } catch {
         logger.warning("waitForProjectionCatchUp(\(queryType)) failed: \(error)")
     }
-    #endif
 }
 
 private func queryInt(_ request: Request, key: String) -> Int? {
