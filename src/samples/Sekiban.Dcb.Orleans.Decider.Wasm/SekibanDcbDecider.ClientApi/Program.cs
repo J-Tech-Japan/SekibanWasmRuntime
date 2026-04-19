@@ -10,6 +10,7 @@ using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MaterializedView;
 using Sekiban.Dcb.MaterializedView.Postgres;
 using Sekiban.Dcb.WasmRuntime.Remote;
+using SekibanDcbDecider.ClientApi.Auth;
 using SekibanDcbDecider.ClientApi.Endpoints;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -17,6 +18,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddServiceDefaults();
 builder.Services.AddOpenApi();
 
+builder.Services.AddSampleAuth(builder.Configuration);
 builder.Services
     .AddAuthentication("Sample")
     .AddScheme<AuthenticationSchemeOptions, SampleAuthenticationHandler>("Sample", _ => { });
@@ -66,6 +68,10 @@ app.UseAuthorization();
 
 app.MapDefaultEndpoints();
 app.MapOpenApi();
+
+// /auth/* endpoints (self-contained JWT + cookie auth for this sample's Blazor + Next.js UIs).
+// Separate from the benchmark X-Debug-* header auth handler registered above.
+app.MapAuthEndpoints();
 
 var apiRoute = app.MapGroup("/api");
 apiRoute.MapStudentEndpoints();

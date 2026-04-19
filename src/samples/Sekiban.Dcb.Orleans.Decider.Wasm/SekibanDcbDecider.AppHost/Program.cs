@@ -108,6 +108,39 @@ clientApiBuilder = clientApiBuilder
 
 var clientApi = clientApiBuilder;
 
+// Web + WebNext frontends — the Sekiban-dcb template's Blazor + Next.js UI. The C# WASM
+// sample does not ship an ApiService (Orleans Identity) project, so AUTH_API_URL points
+// at the same ClientApi; the auth endpoints don't exist yet, meaning the Login pages are
+// aspirational until /auth/* is added here or an ApiService gets wired in. The rest of
+// the pages (meeting rooms, reservations, weather, classrooms, students, enrollments,
+// test-data) exercise routes ClientApi already exposes.
+var webPort = ResolveConfiguredPort(5180, "E2E_WEB_PORT");
+var webFrontend = builder
+    .AddProject<SekibanDcbDecider_Web>("webfrontend")
+    .WithReference(clientApi.GetEndpoint("http"))
+    .WithEnvironment("CLIENT_API_URL", "http://127.0.0.1:" + clientApiPort)
+    .WithEnvironment("AUTH_API_URL", "http://127.0.0.1:" + clientApiPort)
+    .WaitFor(clientApi)
+    .WithEndpoint("http", endpoint =>
+    {
+        endpoint.Port = webPort;
+        endpoint.TargetPort = webPort;
+        endpoint.UriScheme = "http";
+        endpoint.IsProxied = false;
+    })
+    .WithEnvironment("ASPNETCORE_URLS", "http://127.0.0.1:" + webPort);
+webFrontend.WithExternalHttpEndpoints();
+
+var webNextPort = ResolveConfiguredPort(3000, "E2E_WEBNEXT_PORT", "WEBNEXT_PORT");
+builder
+    .AddJavaScriptApp("webnext", "../SekibanDcbDecider.WebNext")
+    .WithHttpEndpoint(port: webNextPort, env: "PORT")
+    .WithExternalHttpEndpoints()
+    .WithEnvironment("NODE_ENV", "development")
+    .WithEnvironment("API_BASE_URL", "http://127.0.0.1:" + clientApiPort)
+    .WithEnvironment("CLIENT_API_BASE_URL", "http://127.0.0.1:" + clientApiPort)
+    .WaitFor(clientApi);
+
 builder.Build().Run();
 
 static int ResolveConfiguredPort(int defaultPort, params string[] envNames)

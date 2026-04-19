@@ -181,6 +181,17 @@ webFrontend
     .WithEnvironment("ASPNETCORE_URLS", "http://127.0.0.1:" + webPort);
 webFrontend.WithExternalHttpEndpoints();
 
+var webNextPort = AppHostInfrastructure.ResolveConfiguredPort(3000, "E2E_WEBNEXT_PORT", "WEBNEXT_PORT");
+builder
+    .AddJavaScriptApp("webnext", "../SekibanDcbDecider.WebNext")
+    .WithHttpEndpoint(port: webNextPort, env: "PORT")
+    .WithExternalHttpEndpoints()
+    .WithEnvironment("NODE_ENV", "development")
+    .WithEnvironment("API_BASE_URL", "http://127.0.0.1:" + apiServicePort)
+    .WithEnvironment("CLIENT_API_BASE_URL", "http://127.0.0.1:" + clientApiPort)
+    .WaitFor(apiService)
+    .WaitFor(clientApi);
+
 builder.Build().Run();
 
 static string ResolveGoWasmModulePath()

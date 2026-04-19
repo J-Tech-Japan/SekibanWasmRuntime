@@ -128,6 +128,15 @@ var moonBitClientApiDir = Path.GetFullPath(Path.Combine(
     "..",
     "SekibanDcbDecider.ClientApi"));
 
+// The MoonBit ClientApi is a Node.js server with a `pg` dependency. Install node_modules
+// before the server starts so a fresh clone / CI run doesn't fail with ERR_MODULE_NOT_FOUND.
+var clientApiInstaller = builder
+    .AddExecutable(
+        "clientapi-installer",
+        "sh",
+        moonBitClientApiDir,
+        new[] { "-c", "if [ -d node_modules ]; then exit 0; fi; npm ci" });
+
 var clientApiBuilder = builder
     .AddExecutable(
         "clientapi",
@@ -135,7 +144,8 @@ var clientApiBuilder = builder
         moonBitClientApiDir,
         new[] { "src/server.mjs" })
     .WithEnvironment("WASM_SERVER_URL", "http://127.0.0.1:" + wasmApiPort)
-    .WithEnvironment("MOONBIT_WASM_PATH", moonBitWasmModulePath);
+    .WithEnvironment("MOONBIT_WASM_PATH", moonBitWasmModulePath)
+    .WaitForCompletion(clientApiInstaller);
 
 var clientApiPort = AppHostInfrastructure.ResolveConfiguredPort(6198, "E2E_CLIENT_API_PORT");
 clientApiBuilder = clientApiBuilder.WithHttpEndpoint(
