@@ -1,0 +1,49 @@
+@page "/memory"
+@using System.Net.Http.Json
+@inject IHttpClientFactory ClientFactory
+@inject SwiftClientApiEndpoint Endpoint
+
+<PageTitle>Memory projection — Swift sample</PageTitle>
+
+<h1>In-memory projection (MultiProjectionGrain)</h1>
+
+<p>
+    Reads <code>@Endpoint.BaseUrl/api/memory/classrooms</code>. The request is forwarded
+    by the Swift ClientApi to the wasmserver's
+    <code>/api/sekiban/serialized/list-query</code> endpoint, which activates the
+    <code>MultiProjectionGrain</code> for <code>ClassRoomListProjection</code> and reads
+    its current state from the Swift WASM module. Reservations / Weather / Rooms share
+    the same pipeline via their own projectors.
+</p>
+
+@if (errorMessage is not null)
+{
+    <div class="alert alert-warning">@errorMessage</div>
+}
+
+@if (rawJson is null)
+{
+    <p><em>Loading…</em></p>
+}
+else
+{
+    <pre class="bg-light p-3 small">@rawJson</pre>
+}
+
+@code {
+    private string? rawJson;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var http = ClientFactory.CreateClient("SwiftClientApi");
+        try
+        {
+            rawJson = await http.GetStringAsync("/api/memory/classrooms");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to reach the Swift ClientApi: {ex.Message}";
+        }
+    }
+}

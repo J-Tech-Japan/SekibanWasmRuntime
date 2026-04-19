@@ -128,6 +128,28 @@ if (!string.IsNullOrEmpty(parentPath))
     clientApiBuilder = clientApiBuilder.WithEnvironment("PATH", parentPath);
 }
 
+var clientApi = clientApiBuilder;
+
+// Blazor frontend — talks only to the Swift ClientApi (no auth/apiservice sidecar, unlike
+// the Rust/Go/TS samples that carry a parallel meeting-room auth flow). Pin the HTTP port
+// to E2E_WEB_PORT so the benchmark / e2e scripts hit the same address the other samples
+// use. WithExternalHttpEndpoints() makes the URL show up as an Aspire dashboard link.
+var webFrontendPort = AppHostInfrastructure.ResolveConfiguredPort(6298 + 82, "E2E_WEB_PORT");
+var webFrontend = builder
+    .AddProject<SekibanDcbDecider_Web>("webfrontend")
+    .WithReference(clientApi.GetEndpoint("http"))
+    .WithEnvironment("CLIENT_API_URL", "http://127.0.0.1:" + clientApiPort)
+    .WaitFor(clientApi)
+    .WithEndpoint("http", endpoint =>
+    {
+        endpoint.Port = webFrontendPort;
+        endpoint.TargetPort = webFrontendPort;
+        endpoint.UriScheme = "http";
+        endpoint.IsProxied = false;
+    })
+    .WithEnvironment("ASPNETCORE_URLS", "http://127.0.0.1:" + webFrontendPort)
+    .WithExternalHttpEndpoints();
+
 builder.Build().Run();
 
 // ---------------------------------------------------------------------------

@@ -1,0 +1,30 @@
+@inject SwiftClientApiEndpoint Endpoint
+
+<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="">Sekiban Swift Sample</a>
+    </div>
+</div>
+
+<div class="nav-scrollable">
+    <nav class="flex-column">
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="mv">
+                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Materialized View
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="memory">
+                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> In-Memory Projection
+            </NavLink>
+        </div>
+        <div class="nav-item px-3 mt-3 text-secondary small">
+            ClientApi: <code>@Endpoint.BaseUrl</code>
+        </div>
+    </nav>
+</div>
