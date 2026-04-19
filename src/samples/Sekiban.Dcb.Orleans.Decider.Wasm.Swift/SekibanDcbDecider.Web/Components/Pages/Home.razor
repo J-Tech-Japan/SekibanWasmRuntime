@@ -5,38 +5,39 @@
 
 <h1>Sekiban DCB Swift Sample</h1>
 
-<p>
-    This Blazor frontend talks to the Swift Hummingbird ClientApi running at
-    <code>@Endpoint.BaseUrl</code>. The ClientApi in turn forwards reads + writes to the
-    generic <code>Sekiban.Dcb.WasmRuntime.Host</code> (<code>wasmserver</code>) which
-    loads the Swift-authored <code>sekiban-dcb-decider-swift.wasm</code> module for both
-    MultiProjection and MaterializedView paths.
+<p class="lead">
+    Blazor frontend for the Swift port of the Sekiban DCB Orleans Decider template. Every
+    page below talks to the Swift Hummingbird ClientApi at
+    <code>@Endpoint.BaseUrl</code>, which in turn forwards commits / queries to the generic
+    <code>Sekiban.Dcb.WasmRuntime.Host</code> loading
+    <code>sekiban-dcb-decider-swift.wasm</code>.
 </p>
 
-<h2>Available pages</h2>
-<ul>
-    <li><a href="mv">Materialized view status + classrooms/students/enrollments</a> — direct
-        Postgres reads through the Swift <code>/api/mv/*</code> endpoints.</li>
-    <li><a href="memory">In-memory projection</a> — MultiProjection reads through
-        <code>/api/memory/classrooms</code>, resolved by wasmserver's
-        <code>MultiProjectionGrain</code> using the Swift WASM projector.</li>
-</ul>
+<div class="row">
+    <div class="col-md-6">
+        <h3>Domain pages</h3>
+        <ul>
+            <li><a href="classrooms">Classrooms</a> — list / create via Swift
+                <code>POST /api/classrooms</code> + MultiProjection readback.</li>
+            <li><a href="students">Students</a> — list / create.</li>
+            <li><a href="enrollments">Enrollments</a> — enroll / drop students across
+                classrooms (Swift WASM multi-tag fan-out).</li>
+            <li><a href="weather">Weather</a> — create / update location / delete.</li>
+        </ul>
+    </div>
+    <div class="col-md-6">
+        <h3>Read-path diagnostics</h3>
+        <ul>
+            <li><a href="mv">Materialized view status</a> — Postgres-direct MV registry +
+                classrooms MV table.</li>
+            <li><a href="memory">In-memory projection</a> — raw
+                <code>GetClassRoomListQuery</code> output through MultiProjectionGrain.</li>
+        </ul>
+    </div>
+</div>
 
-<h2>Benchmark endpoints exposed by the Swift ClientApi</h2>
-<p>
-    The Rust/Go/TS/C# samples drive their benchmarks through the same shape, and Swift
-    now exposes equivalent routes so this sample is a first-class matrix row:
-</p>
-<ul>
-    <li><code>POST /api/rooms</code>, <code>POST /api/weatherforecast</code>,
-        <code>POST /api/reservations/quick</code> — write path (constructs
-        <code>SerializableCommitRequest</code> with tag-latest-sortable round-trips +
-        multi-tag commit, matching the Rust handler).</li>
-    <li><code>GET /api/rooms</code>, <code>GET /api/reservations</code>,
-        <code>GET /api/reservations/by-room/{roomId}</code>,
-        <code>GET /api/weatherforecast</code>,
-        <code>GET /api/weatherforecast/count</code> — read path through the Swift WASM
-        projectors (<code>RoomListProjection</code>,
-        <code>WeatherForecastListProjection</code>,
-        <code>ReservationListProjection</code>).</li>
-</ul>
+<div class="alert alert-warning mt-4">
+    <strong>Heads-up:</strong> Auth (<code>/auth/*</code>) is stubbed until Phase 3 of the
+    Swift parity work lands. The Login page will render but calls to the Swift ClientApi's
+    auth routes return 404; AuthApiClient swallows that silently so every other page works.
+</div>
