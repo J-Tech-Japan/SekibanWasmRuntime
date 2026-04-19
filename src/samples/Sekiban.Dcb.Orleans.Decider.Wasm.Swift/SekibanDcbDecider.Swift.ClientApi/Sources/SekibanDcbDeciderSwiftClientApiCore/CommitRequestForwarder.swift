@@ -106,12 +106,13 @@ private func extractSortableUniqueId(from body: Data) -> String? {
     if let direct = json["sortableUniqueId"] as? String {
         return direct
     }
-    // Orleans returns `{ success, writtenEvents: [{sortableUniqueId, ...}, ...] }`. Take
-    // the last event's sortable id, matching what the benchmark driver looks for.
-    if let events = json["writtenEvents"] as? [[String: Any]], !events.isEmpty,
-       let id = events.last?["sortableUniqueId"] as? String
-    {
-        return id
+    // Orleans returns `{ success, writtenEvents: [{sortableUniqueIdValue, ...}, ...] }`.
+    // Sekiban renamed the field to `sortableUniqueIdValue` in 10.2.x but kept the
+    // top-level `sortableUniqueId` short-cut on some code paths — accept both so this
+    // works across runtime-host versions.
+    if let events = json["writtenEvents"] as? [[String: Any]], !events.isEmpty {
+        if let id = events.last?["sortableUniqueIdValue"] as? String { return id }
+        if let id = events.last?["sortableUniqueId"] as? String { return id }
     }
     return nil
 }

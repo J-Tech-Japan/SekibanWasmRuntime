@@ -51,6 +51,10 @@ struct ClientApiMain {
             router,
             wasmServerUrl: context.wasmServerUrl,
             logger: logger)
+        registerDomainRoutes(
+            router,
+            wasmServerUrl: context.wasmServerUrl,
+            logger: logger)
 
         let app = Application(
             router: router,
