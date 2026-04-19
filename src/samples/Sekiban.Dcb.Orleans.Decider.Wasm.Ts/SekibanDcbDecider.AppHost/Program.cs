@@ -129,13 +129,23 @@ var tsClientApiDir = Path.GetFullPath(Path.Combine(
     "..",
     "ts-clientapi"));
 
+// The TS ClientApi pulls in pg, @sekiban/ts etc. via npm. Install them before the
+// server starts so a fresh checkout / CI run doesn't fail with ERR_MODULE_NOT_FOUND.
+var clientApiInstaller = builder
+    .AddExecutable(
+        "clientapi-installer",
+        "npm",
+        tsClientApiDir,
+        new[] { "install" });
+
 var clientApiBuilder = builder
     .AddExecutable(
         "clientapi",
         "npx",
         tsClientApiDir,
         new[] { "tsx", "src/server.ts" })
-    .WithEnvironment("WASM_SERVER_URL", "http://127.0.0.1:" + wasmApiPort);
+    .WithEnvironment("WASM_SERVER_URL", "http://127.0.0.1:" + wasmApiPort)
+    .WaitForCompletion(clientApiInstaller);
 
 var clientApiPort = AppHostInfrastructure.ResolveConfiguredPort(7208, "E2E_CLIENT_API_PORT");
 clientApiBuilder = clientApiBuilder.WithHttpEndpoint(
