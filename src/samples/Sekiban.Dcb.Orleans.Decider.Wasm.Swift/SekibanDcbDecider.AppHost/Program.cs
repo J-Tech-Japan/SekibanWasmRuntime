@@ -150,6 +150,21 @@ var webFrontend = builder
     .WithEnvironment("ASPNETCORE_URLS", "http://127.0.0.1:" + webFrontendPort)
     .WithExternalHttpEndpoints();
 
+// Next.js frontend (WebNext). tRPC routers under src/server fan out to the Swift
+// ClientApi using process.env.API_BASE_URL, so pointing it there makes the whole
+// Next.js surface (classrooms / students / enrollments / weather / reservations /
+// rooms) work without any per-sample code change in the tRPC routers.
+var webNextPort = AppHostInfrastructure.ResolveConfiguredPort(6381, "E2E_WEBNEXT_PORT", "WEBNEXT_PORT");
+var webNextDir = Path.GetFullPath(Path.Combine(builder.AppHostDirectory, "..", "SekibanDcbDecider.WebNext"));
+builder
+    .AddJavaScriptApp("webnext", webNextDir)
+    .WithHttpEndpoint(port: webNextPort, env: "PORT", isProxied: false)
+    .WithExternalHttpEndpoints()
+    .WithEnvironment("NODE_ENV", "development")
+    .WithEnvironment("API_BASE_URL", "http://127.0.0.1:" + clientApiPort)
+    .WithEnvironment("CLIENT_API_BASE_URL", "http://127.0.0.1:" + clientApiPort)
+    .WaitFor(clientApi);
+
 builder.Build().Run();
 
 // ---------------------------------------------------------------------------
