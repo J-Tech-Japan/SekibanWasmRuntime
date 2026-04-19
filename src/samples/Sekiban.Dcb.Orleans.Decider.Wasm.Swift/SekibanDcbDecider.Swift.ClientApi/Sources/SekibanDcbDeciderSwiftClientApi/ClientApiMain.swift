@@ -60,6 +60,10 @@ struct ClientApiMain {
             router,
             wasmServerUrl: context.wasmServerUrl,
             logger: logger)
+        registerTestDataRoutes(
+            router,
+            wasmServerUrl: context.wasmServerUrl,
+            logger: logger)
 
         // Auth is wired only when the MV Postgres client is available — we share that
         // database for the `sekiban_swift_users` table. `SEKIBAN_AUTH_SIGNING_KEY` lets
@@ -78,6 +82,8 @@ struct ClientApiMain {
                 do {
                     try await store.ensureSchema()
                     logger.info("sekiban_swift_users schema ready")
+                    try await store.seedSampleAccountsIfMissing()
+                    logger.info("sekiban_swift_users sample accounts ensured")
                 } catch {
                     logger.warning("failed to ensure users schema: \(error)")
                 }

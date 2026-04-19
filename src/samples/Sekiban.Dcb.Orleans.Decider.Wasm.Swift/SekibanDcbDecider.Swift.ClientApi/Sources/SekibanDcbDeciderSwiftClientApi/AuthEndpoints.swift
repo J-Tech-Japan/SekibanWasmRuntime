@@ -66,13 +66,48 @@ func registerAuthRoutes(
             else {
                 return authErrorResponse(.unauthorized, "invalid email or password")
             }
+            let useCookies = body.useCookies ?? true
             return try await issueSessionResponse(
                 for: user,
                 codec: codec,
-                setCookie: body.useCookies ?? true)
+                setCookie: useCookies,
+                returnTokens: !useCookies)
         } catch {
             logger.error("login failed: \(error)")
             return authErrorResponse(.internalServerError, "login failed: \(error)")
+        }
+    }
+
+    router.post("/auth/refresh") { request, _ in
+        // The Next.js BFF calls this when an access token is expired. We don't implement
+        // a separate refresh-token rotation scheme — we simply re-verify the supplied
+        // access token (which may already be expired, but retains its claims when the
+        // signature is intact) and re-issue. Good enough for sample parity.
+        struct RefreshBody: Decodable {
+            let accessToken: String?
+            let refreshToken: String?
+        }
+        let body: RefreshBody
+        do {
+            let collected = try await request.body.collect(upTo: 16 * 1024)
+            body = try JSONDecoder().decode(RefreshBody.self, from: Data(buffer: collected))
+        } catch {
+            return authErrorResponse(.badRequest, "invalid refresh body: \(error)")
+        }
+        // Prefer the refresh token since an expired access token verify would throw.
+        let token = body.refreshToken?.isEmpty == false ? body.refreshToken! :
+            (body.accessToken ?? "")
+        guard !token.isEmpty else {
+            return authErrorResponse(.badRequest, "token required")
+        }
+        do {
+            let claims = try codec.verifyAllowingExpired(token)
+            let user = AuthStore.AuthUser(
+                id: claims.sub, email: claims.email, displayName: claims.name ?? claims.email)
+            return try await issueSessionResponse(
+                for: user, codec: codec, setCookie: false, returnTokens: true)
+        } catch {
+            return authErrorResponse(.unauthorized, "invalid refresh token")
         }
     }
 
@@ -152,28 +187,53 @@ struct UserInfoResponse: Codable {
 private func issueSessionResponse(
     for user: AuthStore.AuthUser,
     codec: AuthTokenCodec,
-    setCookie: Bool
+    setCookie: Bool,
+    returnTokens: Bool = false
 ) async throws -> Response {
     let now = Int64(Date().timeIntervalSince1970)
+    let expiresAt = now + DefaultSessionTTLSeconds
     let claims = AuthTokenClaims(
         sub: user.id,
         email: user.email,
         name: user.displayName,
         iat: now,
-        exp: now + DefaultSessionTTLSeconds)
+        exp: expiresAt)
     let token = try codec.issue(claims)
-    let info = UserInfoResponse(
-        id: user.id,
-        email: user.email,
-        displayName: user.displayName,
-        roles: [],
-        isAuthenticated: true)
-    var response = try jsonAuthResponse(info, status: .ok)
+
+    // ISO-8601 timestamps for the Next.js BFF's tokenResponseSchema.
+    let isoFormatter = ISO8601DateFormatter()
+    isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    let expiresIso = isoFormatter.string(from: Date(timeIntervalSince1970: TimeInterval(expiresAt)))
+
+    var response: Response
+    if returnTokens {
+        let tokens = TokenResponse(
+            accessToken: token,
+            refreshToken: token,
+            accessTokenExpires: expiresIso,
+            refreshTokenExpires: expiresIso)
+        response = try jsonAuthResponse(tokens, status: .ok)
+    } else {
+        let info = UserInfoResponse(
+            id: user.id,
+            email: user.email,
+            displayName: user.displayName,
+            roles: [],
+            isAuthenticated: true)
+        response = try jsonAuthResponse(info, status: .ok)
+    }
     if setCookie {
         response.headers[values: .setCookie].append(
             "\(SekibanSessionCookieName)=\(token); Max-Age=\(DefaultSessionTTLSeconds); Path=/; HttpOnly; SameSite=Lax")
     }
     return response
+}
+
+private struct TokenResponse: Codable {
+    let accessToken: String
+    let refreshToken: String
+    let accessTokenExpires: String
+    let refreshTokenExpires: String
 }
 
 private func claimsFromRequest(_ request: Request, codec: AuthTokenCodec) throws -> AuthTokenClaims {
