@@ -54,6 +54,22 @@ public final class ReservationListProjection: MultiProjection {
                     reservations[key] = item
                 }
             }
+        case "ReservationCancelled":
+            if let evt = try? JSONDecoder().decode(ReservationCancelled.self, from: data) {
+                let key = evt.reservationId.uuidString.lowercased()
+                if var item = reservations[key] {
+                    item.status = "Cancelled"
+                    reservations[key] = item
+                }
+            }
+        case "ReservationRejected":
+            if let evt = try? JSONDecoder().decode(ReservationRejected.self, from: data) {
+                let key = evt.reservationId.uuidString.lowercased()
+                if var item = reservations[key] {
+                    item.status = "Rejected"
+                    reservations[key] = item
+                }
+            }
         default:
             break
         }

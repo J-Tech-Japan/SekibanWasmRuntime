@@ -56,6 +56,10 @@ struct ClientApiMain {
             router,
             wasmServerUrl: context.wasmServerUrl,
             logger: logger)
+        registerReservationLifecycleRoutes(
+            router,
+            wasmServerUrl: context.wasmServerUrl,
+            logger: logger)
 
         // Auth is wired only when the MV Postgres client is available — we share that
         // database for the `sekiban_swift_users` table. `SEKIBAN_AUTH_SIGNING_KEY` lets

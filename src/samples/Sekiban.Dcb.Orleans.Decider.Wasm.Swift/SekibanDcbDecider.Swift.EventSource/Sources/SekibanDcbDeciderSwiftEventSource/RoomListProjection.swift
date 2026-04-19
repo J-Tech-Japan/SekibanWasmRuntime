@@ -25,7 +25,36 @@ public final class RoomListProjection: MultiProjection {
                     location: created.location,
                     equipment: created.equipment,
                     requiresApproval: created.requiresApproval,
+                    isActive: true,
                     createdAt: created.createdAt)
+            }
+        case "RoomUpdated":
+            if let updated = try? JSONDecoder().decode(RoomUpdated.self, from: data) {
+                let key = updated.roomId.uuidString.lowercased()
+                if var item = rooms[key] {
+                    item.name = updated.name
+                    item.capacity = updated.capacity
+                    item.location = updated.location
+                    item.equipment = updated.equipment
+                    item.requiresApproval = updated.requiresApproval
+                    rooms[key] = item
+                }
+            }
+        case "RoomDeactivated":
+            if let evt = try? JSONDecoder().decode(RoomDeactivated.self, from: data) {
+                let key = evt.roomId.uuidString.lowercased()
+                if var item = rooms[key] {
+                    item.isActive = false
+                    rooms[key] = item
+                }
+            }
+        case "RoomReactivated":
+            if let evt = try? JSONDecoder().decode(RoomReactivated.self, from: data) {
+                let key = evt.roomId.uuidString.lowercased()
+                if var item = rooms[key] {
+                    item.isActive = true
+                    rooms[key] = item
+                }
             }
         default:
             break
@@ -85,6 +114,7 @@ public struct RoomListItem: Codable, Sendable {
     public var location: String
     public var equipment: [String]
     public var requiresApproval: Bool
+    public var isActive: Bool
     public var createdAt: String
 
     public init(
@@ -94,6 +124,7 @@ public struct RoomListItem: Codable, Sendable {
         location: String,
         equipment: [String],
         requiresApproval: Bool,
+        isActive: Bool = true,
         createdAt: String
     ) {
         self.roomId = roomId
@@ -102,6 +133,7 @@ public struct RoomListItem: Codable, Sendable {
         self.location = location
         self.equipment = equipment
         self.requiresApproval = requiresApproval
+        self.isActive = isActive
         self.createdAt = createdAt
     }
 }

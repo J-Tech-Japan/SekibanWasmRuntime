@@ -45,6 +45,27 @@ public struct RoomCreated: Codable, Sendable {
     public var createdAt: String
 }
 
+public struct RoomUpdated: Codable, Sendable {
+    public var roomId: UUID
+    public var name: String
+    public var capacity: Int32
+    public var location: String
+    public var equipment: [String]
+    public var requiresApproval: Bool
+    public var updatedAt: String
+}
+
+public struct RoomDeactivated: Codable, Sendable {
+    public var roomId: UUID
+    public var reason: String?
+    public var deactivatedAt: String
+}
+
+public struct RoomReactivated: Codable, Sendable {
+    public var roomId: UUID
+    public var reactivatedAt: String
+}
+
 public struct WeatherForecastCreated: Codable, Sendable {
     public var forecastId: UUID
     public var location: String
@@ -108,4 +129,18 @@ public struct ReservationConfirmed: Codable, Sendable {
     public var approvalRequestId: UUID?
     public var approvalRequestComment: String?
     public var approvalDecisionComment: String?
+}
+
+public struct ReservationCancelled: Codable, Sendable {
+    public var reservationId: UUID
+    public var roomId: UUID
+    public var reason: String?
+    public var cancelledAt: String
+}
+
+public struct ReservationRejected: Codable, Sendable {
+    public var reservationId: UUID
+    public var roomId: UUID
+    public var reason: String?
+    public var rejectedAt: String
 }
