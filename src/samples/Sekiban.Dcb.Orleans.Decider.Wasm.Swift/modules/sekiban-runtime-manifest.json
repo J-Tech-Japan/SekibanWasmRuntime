@@ -7,12 +7,17 @@
     "StudentEnrolledInClassRoom",
     "StudentDroppedFromClassRoom",
     "RoomCreated",
+    "RoomUpdated",
+    "RoomDeactivated",
+    "RoomReactivated",
     "WeatherForecastCreated",
     "WeatherForecastLocationUpdated",
     "WeatherForecastDeleted",
     "ReservationDraftCreated",
     "ReservationHoldCommitted",
-    "ReservationConfirmed"
+    "ReservationConfirmed",
+    "ReservationCancelled",
+    "ReservationRejected"
   ],
   "projectors": [
     { "projectorName": "ClassRoomListProjection", "modulePath": "./sekiban-dcb-decider-swift.wasm", "projectorVersion": "1.0.0" },

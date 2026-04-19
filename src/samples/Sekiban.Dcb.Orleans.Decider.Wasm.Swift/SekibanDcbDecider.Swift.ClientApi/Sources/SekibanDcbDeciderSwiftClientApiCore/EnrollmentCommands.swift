@@ -52,18 +52,27 @@ public func buildCreateClassRoomCommit(
 ) async throws -> CreateClassRoomResult {
     let classRoomId = request.classRoomId ?? UUID()
     let tag = SekibanTag.classRoom(classRoomId)
-    // Mirror Rust's `tag_exists` check: fetch the tag's current sortable id; for a fresh
-    // ID this returns exists=false / empty. The round-trip is kept so write-side numbers
-    // remain apples-to-apples with the other language samples.
-    _ = try await reader.read(tag: tag)
+    // Mirror Rust's `tag_exists` + optimistic-concurrency pattern: fetch the tag's
+    // current sortable id and carry it into the consistency tag. For a fresh classroom
+    // id the reader returns exists=false / empty, which matches the "no prior events"
+    // case. For reuse, the returned sortable id lets wasmserver reject the commit if
+    // somebody else wrote to this tag between the read and the commit.
+    let state = try await reader.read(tag: tag)
     let event = ClassRoomCreated(
         classRoomId: classRoomId,
         name: request.name,
         maxStudents: request.maxStudents)
-    let commit = try buildSingleEventCommit(
-        eventPayload: event,
-        eventTypeName: "ClassRoomCreated",
-        tag: tag)
+    let payload = try makeDefaultCommitJSONEncoder().encode(event)
+    let commit = SerializableCommitRequest(
+        eventCandidates: [
+            SerializableCommitEventCandidate(
+                payload: payload.base64EncodedString(),
+                eventPayloadName: "ClassRoomCreated",
+                tags: [tag]),
+        ],
+        consistencyTags: [
+            SerializableConsistencyTag(tag: tag, lastSortableUniqueId: state.lastSortableUniqueId),
+        ])
     return CreateClassRoomResult(request: commit, classRoomId: classRoomId)
 }
 
@@ -116,15 +125,24 @@ public func buildCreateStudentCommit(
 ) async throws -> CreateStudentResult {
     let studentId = request.studentId ?? UUID()
     let tag = SekibanTag.student(studentId)
-    _ = try await reader.read(tag: tag)
+    // Same pattern as CreateClassRoom: round-trip the tag state so the commit carries
+    // the real lastSortableUniqueId instead of an empty placeholder.
+    let state = try await reader.read(tag: tag)
     let event = StudentCreated(
         studentId: studentId,
         name: request.name,
         maxClassCount: request.maxClassCount)
-    let commit = try buildSingleEventCommit(
-        eventPayload: event,
-        eventTypeName: "StudentCreated",
-        tag: tag)
+    let payload = try makeDefaultCommitJSONEncoder().encode(event)
+    let commit = SerializableCommitRequest(
+        eventCandidates: [
+            SerializableCommitEventCandidate(
+                payload: payload.base64EncodedString(),
+                eventPayloadName: "StudentCreated",
+                tags: [tag]),
+        ],
+        consistencyTags: [
+            SerializableConsistencyTag(tag: tag, lastSortableUniqueId: state.lastSortableUniqueId),
+        ])
     return CreateStudentResult(request: commit, studentId: studentId)
 }
 

@@ -1,10 +1,10 @@
+using SekibanDcbDecider.Web;
 using SekibanDcbDecider.Web.Components;
 
-// Swift sample's minimal Blazor frontend. Hits the Swift ClientApi (Hummingbird) directly
-// and does NOT depend on a parallel auth/apiservice — the other language samples' Web
-// projects carry that baggage because they share a full meeting-room domain with the
-// native template, but the Swift sample is scoped to ClassRoomEnrollment MV + benchmark
-// write paths so a single HttpClient aimed at ClientApi is enough.
+// Swift sample's Blazor frontend. Every API call goes to the Swift ClientApi
+// (Hummingbird server listening on CLIENT_API_URL). Until the Phase 3 auth work lands,
+// AuthApiClient still points at the Swift ClientApi — the auth endpoints return 404 and
+// AuthApiClient's try/catch swallows the error so the non-auth pages work anyway.
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,29 +15,40 @@ var clientApiBase = ResolveBaseUrl(
     envKey: "CLIENT_API_URL",
     serviceKey: "clientapi",
     fallback: "http://127.0.0.1:6298");
+var authApiBase = ResolveBaseUrl(
+    builder.Configuration,
+    envKey: "AUTH_API_URL",
+    serviceKey: "apiservice",
+    fallback: clientApiBase);
 
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 
-// Named client so Razor components can inject an `HttpClient` via the factory.
+// Named client so razor components can inject a plain HttpClient pointed at the Swift
+// ClientApi.
 builder.Services.AddHttpClient(
     "SwiftClientApi",
     client => client.BaseAddress = new Uri(clientApiBase));
 
-// Expose the resolved base URL so pages that need to render absolute links can read it
-// without hard-coding the port here.
+// Typed clients for every domain Page (ClassRooms / Students / Enrollments / Weather).
+builder.Services.AddHttpClient<ClassRoomApiClient>(client => client.BaseAddress = new Uri(clientApiBase));
+builder.Services.AddHttpClient<StudentApiClient>(client => client.BaseAddress = new Uri(clientApiBase));
+builder.Services.AddHttpClient<EnrollmentApiClient>(client => client.BaseAddress = new Uri(clientApiBase));
+builder.Services.AddHttpClient<WeatherApiClient>(client => client.BaseAddress = new Uri(clientApiBase));
+builder.Services.AddHttpClient<AuthApiClient>(client => client.BaseAddress = new Uri(authApiBase));
+
 builder.Services.AddSingleton(new SwiftClientApiEndpoint(clientApiBase));
 
 var app = builder.Build();
 
 app.MapDefaultEndpoints();
 
-// No HTTPS redirect — the Aspire AppHost wires a single non-proxied HTTP endpoint for this
-// Swift sample on ASPNETCORE_URLS. Enabling UseHttpsRedirection would issue a 307 to an
-// HTTPS port that was never configured, leaving curl/Playwright hanging.
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
 }
+
+// No UseHttpsRedirection — Aspire AppHost wires a single HTTP endpoint for this
+// sample. Redirecting to HTTPS would hang on a phantom port.
 
 app.UseAntiforgery();
 app.MapStaticAssets();
@@ -55,8 +66,6 @@ static string ResolveBaseUrl(
     var fromEnv = configuration[envKey];
     if (!string.IsNullOrWhiteSpace(fromEnv)) return fromEnv;
 
-    // Aspire injects service URLs into `services:<name>:http:0` keys when a service
-    // reference is added. Pick that up so the frontend works without any manual env var.
     var fromAspire = configuration[$"services:{serviceKey}:http:0"];
     if (!string.IsNullOrWhiteSpace(fromAspire)) return fromAspire;
 
