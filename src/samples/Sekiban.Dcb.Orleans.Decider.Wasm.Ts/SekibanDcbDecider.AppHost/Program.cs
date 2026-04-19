@@ -134,9 +134,9 @@ var tsClientApiDir = Path.GetFullPath(Path.Combine(
 var clientApiInstaller = builder
     .AddExecutable(
         "clientapi-installer",
-        "npm",
+        "sh",
         tsClientApiDir,
-        new[] { "install" });
+        new[] { "-c", "if [ -d node_modules ]; then exit 0; fi; npm ci" });
 
 var clientApiBuilder = builder
     .AddExecutable(
