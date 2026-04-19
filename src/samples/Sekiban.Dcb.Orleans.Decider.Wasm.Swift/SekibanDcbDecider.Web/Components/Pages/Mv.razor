@@ -1,0 +1,115 @@
+@page "/mv"
+@using System.Net.Http.Json
+@inject IHttpClientFactory ClientFactory
+@inject SwiftClientApiEndpoint Endpoint
+
+<PageTitle>MV — Swift sample</PageTitle>
+
+<h1>Materialized view (Postgres direct)</h1>
+
+<p>
+    Reads <code>@Endpoint.BaseUrl/api/mv/{status|classrooms|students|enrollments}</code>
+    on the Swift ClientApi, which in turn <code>SELECT</code>s from
+    <code>DcbMaterializedViewPostgres</code> via <code>PostgresNIO</code>. The MV
+    catch-up worker lives inside <code>wasmserver</code> and invokes
+    <code>ClassRoomEnrollmentMvV1</code> in the Swift WASM module to translate events into
+    SQL.
+</p>
+
+@if (errorMessage is not null)
+{
+    <div class="alert alert-warning">@errorMessage</div>
+}
+
+<h2>Status</h2>
+@if (statusEntries is null)
+{
+    <p><em>Loading…</em></p>
+}
+else if (statusEntries.Length == 0)
+{
+    <p><em>No MV catch-up status yet (no rows in <code>sekiban_mv_registry</code>).</em></p>
+}
+else
+{
+    <table class="table table-sm">
+        <thead>
+            <tr>
+                <th>Logical table</th><th>Physical table</th><th>Applied version</th>
+                <th>Status</th><th>Last updated</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var entry in statusEntries)
+            {
+                <tr>
+                    <td><code>@entry.LogicalTable</code></td>
+                    <td><code>@entry.PhysicalTable</code></td>
+                    <td>@entry.AppliedEventVersion</td>
+                    <td>@entry.Status</td>
+                    <td><small>@entry.LastUpdated</small></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+<h2>Classrooms</h2>
+@if (classrooms is null)
+{
+    <p><em>Loading…</em></p>
+}
+else
+{
+    <pre class="bg-light p-3 small">@ClassroomsJson</pre>
+}
+
+@code {
+    private StatusEntry[]? statusEntries;
+    private object[]? classrooms;
+    private string? errorMessage;
+    private string ClassroomsJson => classrooms is null
+        ? string.Empty
+        : System.Text.Json.JsonSerializer.Serialize(classrooms,
+            new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var http = ClientFactory.CreateClient("SwiftClientApi");
+        try
+        {
+            var status = await http.GetFromJsonAsync<StatusResponse>("/api/mv/status");
+            statusEntries = status?.Entries ?? Array.Empty<StatusEntry>();
+            classrooms = await http.GetFromJsonAsync<object[]>("/api/mv/classrooms") ?? Array.Empty<object>();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to reach the Swift ClientApi: {ex.Message}";
+        }
+    }
+
+    // Swift ClientApi emits snake_case JSON (per its Codable CodingKeys); annotate each
+    // property so System.Text.Json's web defaults map correctly instead of silently leaving
+    // every field at its default.
+    private sealed class StatusResponse
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("entries")]
+        public StatusEntry[]? Entries { get; set; }
+    }
+
+    private sealed class StatusEntry
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("logical_table")]
+        public string LogicalTable { get; set; } = "";
+        [System.Text.Json.Serialization.JsonPropertyName("physical_table")]
+        public string PhysicalTable { get; set; } = "";
+        [System.Text.Json.Serialization.JsonPropertyName("applied_event_version")]
+        public long AppliedEventVersion { get; set; }
+        // Sekiban's `sekiban_mv_registry.status` is a text column (e.g. "catchingup" /
+        // "caught_up"), not an integer.
+        [System.Text.Json.Serialization.JsonPropertyName("status")]
+        public string Status { get; set; } = "";
+        [System.Text.Json.Serialization.JsonPropertyName("last_updated")]
+        public string? LastUpdated { get; set; }
+    }
+}

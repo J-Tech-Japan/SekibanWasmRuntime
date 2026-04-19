@@ -133,7 +133,10 @@ struct StatusEntry: Codable {
     let viewVersion: Int32
     let logicalTable: String
     let physicalTable: String
-    let status: Int32
+    // Sekiban's `sekiban_mv_registry.status` column is a text enum
+    // (e.g. "catchingup", "caught_up") — not an integer. Keep it as String to match the
+    // actual Postgres schema.
+    let status: String
     let appliedEventVersion: Int64
     let currentPosition: String?
     let lastCatchUpSortableUniqueId: String?
@@ -182,7 +185,7 @@ private func fetchStatus(client: PostgresClient, logger: Logger) async throws ->
     let rows = try await client.query(sql, logger: logger)
     for try await row in rows {
         let decoded = try row.decode(
-            (String, String, Int32, String, String, Int32, Int64, String?, String?, Date?).self)
+            (String, String, Int32, String, String, String, Int64, String?, String?, Date?).self)
         let dateFmt = ISO8601DateFormatter()
         entries.append(StatusEntry(
             serviceId: decoded.0,
