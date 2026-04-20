@@ -2,6 +2,8 @@
 
 Runtime for WASM on Sekiban. Enables language-agnostic event projections by running projector logic inside a Wasmtime sandbox, supporting both C# and Rust WASM modules.
 
+Source available under the [Elastic License 2.0](LICENSE). See [NOTICE](NOTICE) for third-party attributions and [CONTRIBUTING.md](CONTRIBUTING.md) for how contributions are licensed.
+
 ## Prerequisites
 
 - [.NET 10.0 SDK](https://dotnet.microsoft.com/download)
