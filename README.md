@@ -2,7 +2,23 @@
 
 Runtime for WASM on Sekiban. Enables language-agnostic event projections by running projector logic inside a Wasmtime sandbox, supporting both C# and Rust WASM modules.
 
-Source available under the [Elastic License 2.0](LICENSE). See [NOTICE](NOTICE) for third-party attributions and [CONTRIBUTING.md](CONTRIBUTING.md) for how contributions are licensed.
+## License
+
+SekibanWasmRuntime is an independent runtime module distributed under the
+[Elastic License 2.0](LICENSE). See [NOTICE](NOTICE) for third-party
+attributions and [CONTRIBUTING.md](CONTRIBUTING.md) for how contributions are
+licensed.
+
+Sekiban itself remains available under the Apache License 2.0. The ELv2 license
+in this repository applies to SekibanWasmRuntime, and does not change the
+license terms for the upstream Sekiban packages or submodule.
+
+ELv2 allows users to use, modify, redistribute, and self-host
+SekibanWasmRuntime, including for internal company use. It does not allow
+providing SekibanWasmRuntime to third parties as a hosted service, managed
+service, SaaS, or similar offering that gives users access to a substantial set
+of its features, unless a separate commercial license has been agreed with
+J-Tech Japan.
 
 ## Prerequisites
 
