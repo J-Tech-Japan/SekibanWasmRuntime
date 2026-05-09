@@ -3,9 +3,19 @@
     Directory.Build.props can be overridden by project files.
     Use .targets to ensure warning suppression is applied even when TreatWarningsAsErrors is enabled.
   -->
+  <PropertyGroup Condition="'$(IsPackable)' == 'true' and '$(PackageLicenseFile)' == ''">
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(IsPackable)' == 'true' and '$(PackageLicenseFile)' == 'LICENSE'">
+    <None Include="$(MSBuildThisFileDirectory)LICENSE"
+          Pack="true"
+          PackagePath=""
+          Visible="false" />
+  </ItemGroup>
+
   <PropertyGroup Condition="$([System.String]::Copy('$(MSBuildProjectFullPath)').Contains('/external/wasmtime-dotnet/'))">
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <WarningsNotAsErrors>$(WarningsNotAsErrors);CS1591</WarningsNotAsErrors>
   </PropertyGroup>
 </Project>
-

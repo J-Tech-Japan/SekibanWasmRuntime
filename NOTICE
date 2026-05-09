@@ -1,0 +1,62 @@
+SekibanWasmRuntime
+Copyright (c) 2026 J-Tech Japan, Inc.
+
+This product is licensed under the Elastic License 2.0. See LICENSE for
+details.
+
+This product includes and/or depends on software developed by third parties
+under the licenses below. Each dependency retains its original license; this
+repository's Elastic License 2.0 applies only to the source code contained in
+this repository.
+
+--------------------------------------------------------------------------------
+Sekiban (submodules/Sekiban)
+Copyright (c) 2022 J-Tech Japan, Inc.
+Licensed under the Apache License, Version 2.0.
+See submodules/Sekiban/LICENSE for the full text.
+
+--------------------------------------------------------------------------------
+.NET Aspire
+Copyright (c) .NET Foundation and Contributors.
+Licensed under the MIT License.
+
+--------------------------------------------------------------------------------
+Microsoft Orleans
+Copyright (c) .NET Foundation and Contributors.
+Licensed under the MIT License.
+
+--------------------------------------------------------------------------------
+Wasmtime / wasmtime-dotnet (external/wasmtime-dotnet)
+Copyright (c) Bytecode Alliance contributors.
+Licensed under the Apache License, Version 2.0 (with LLVM exceptions for
+wasmtime core).
+
+--------------------------------------------------------------------------------
+Hummingbird (https://github.com/hummingbird-project/hummingbird)
+Licensed under the Apache License, Version 2.0.
+
+--------------------------------------------------------------------------------
+swift-crypto, swift-log, swift-nio (Apple)
+Copyright (c) Apple Inc. and the Swift project authors.
+Licensed under the Apache License, Version 2.0.
+
+--------------------------------------------------------------------------------
+postgres-nio (Vapor)
+Copyright (c) Vapor contributors.
+Licensed under the Apache License, Version 2.0.
+
+--------------------------------------------------------------------------------
+Hono, pg, tsx, Next.js, React, tRPC, Tailwind CSS
+See each sample's package.json and package-lock.json for the exact versions
+and the respective licenses of those packages and their transitive
+dependencies.
+
+--------------------------------------------------------------------------------
+Dapper, Npgsql
+Licensed under the Apache License, Version 2.0 and the PostgreSQL License
+respectively.
+
+--------------------------------------------------------------------------------
+
+Full license texts for Apache-2.0 dependencies can be obtained from the
+upstream projects.
