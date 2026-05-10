@@ -604,7 +604,7 @@ public class WasmtimePrimitiveProjectionInstance :
             if (_applyBufferedEventWithSortable is not null)
             {
                 // Tagged events are routed through the buffered sortable path by default.
-                // The legacy metadata/tag ABI has proven unstable across real Kenbai payloads.
+                // The legacy metadata/tag ABI has proven unstable across larger real-world payloads.
                 return true;
             }
 
