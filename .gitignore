@@ -11,11 +11,19 @@
 *.sln.docstates
 *.env
 .DS_Store
+**/.DS_Store
 .idea/
 .vscode/
 .claude/
 .takt/
 **/target/
+
+# MoonBit build artifacts
+**/_build/
+**/.mooncakes/
+
+# Local benchmark / matrix run outputs
+/benchmark-*.json
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
