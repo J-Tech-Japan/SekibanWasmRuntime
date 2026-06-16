@@ -60,18 +60,13 @@ check_empty_except \
 check_empty 'no tracked OS/user-specific files' '(^|/)(\.DS_Store|Thumbs\.db)$|(\.rsuser|\.suo|\.user|\.userosscache|\.sln\.docstates|\.userprefs)$'
 check_empty 'no tracked build dependency caches' '(^|/)(bin|obj|node_modules|\.next|\.generated|target|_build|\.mooncakes|BenchmarkDotNet\.Artifacts|TestResults|TestResult|playwright-report)(/|$)'
 check_empty 'no tracked generated benchmark logs' '^benchmarks/results/.*\.log$'
+check_empty 'no tracked generated sample WASM modules' '^src/samples/.*/modules/.*\.wasm$'
 
-check_required_present 'required sample WASM source artifacts remain classified and present' \
+check_required_present 'required WASM source and manifest artifacts remain classified and present' \
   'src/internalUsages/cs/modules/csharp-weather.wasm' \
   'src/internalUsages/rust/modules/rust-weather.wasm' \
-  'src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Ts/modules/ts-weather.wasm' \
-  'src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-dcb-decider.wasm' \
-  'src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Go/modules/go-weather.wasm' \
-  'src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Mb/modules/sekiban-dcb-decider.wasm' \
-  'src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Mb/modules/sekiban-dcb-decider-rust.wasm' \
-  'src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider.wasm' \
-  'src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-dcb-decider-rust.wasm' \
-  'src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Swift/modules/sekiban-dcb-decider-swift.wasm'
+  'src/samples/Sekiban.Dcb.Orleans.Decider.Wasm/modules/sekiban-runtime-manifest.json' \
+  'src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/modules/sekiban-runtime-manifest.json'
 
 if (( fail != 0 )); then
   exit 1

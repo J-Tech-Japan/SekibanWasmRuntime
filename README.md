@@ -102,6 +102,22 @@ dotnet run --project src/internalUsages/rust/SekibanWasm.Rust.AppHost
 dotnet run --project src/internalUsages/rust/SekibanWasm.Rust.GenericAppHost
 ```
 
+### Sample WASM Modules
+
+Primary sample WASM modules are generated from source and are not tracked in git:
+
+```bash
+./scripts/build-samples-wasm.sh --primary
+```
+
+The primary supported samples are C# and Rust:
+
+- C#: `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm`
+- Rust: `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs`
+
+Go, MoonBit, TypeScript, and Swift samples are experimental/reference until their
+builds are promoted to the same CI-gated support tier.
+
 ### Generic Runtime Container
 
 ```bash
