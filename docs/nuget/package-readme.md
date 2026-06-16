@@ -20,6 +20,21 @@ in-process with Wasmtime. This package is part of the initial preview matrix and
 may carry preview Wasmtime dependency behavior while the host integration is
 stabilized.
 
+### Wasmtime Preview Caveat
+
+`Sekiban.Dcb.WasmRuntime.Wasmtime` is a preview-only package in this release
+line. It currently depends on the `Wasmtime` package version `35.0.0-dev` for
+runtime/native assets while compiling against the managed Wasmtime source pinned
+in this repository. Treat that dependency shape as provisional until the
+Wasmtime host policy is finalized.
+
+Package inspection is required before any publish. On macOS, the inspected
+`1.0.0-preview.1` package includes `libwasmtime.dylib` under both `content/` and
+`contentFiles/any/net10.0/`; Linux and Windows package candidates must be packed
+and inspected on their release build environments so the expected native asset
+for that platform is present. Do not treat this package as stable or
+platform-complete without that inspection evidence.
+
 ## Install
 
 Install the preview packages with prerelease resolution enabled:
