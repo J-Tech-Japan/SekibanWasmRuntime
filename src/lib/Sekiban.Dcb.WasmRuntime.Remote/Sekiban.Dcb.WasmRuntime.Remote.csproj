@@ -9,6 +9,7 @@
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <PackageId>Sekiban.Dcb.WasmRuntime.Remote</PackageId>
     <Description>Sekiban DCB WASM runtime remote HTTP runner client</Description>
+    <PackageTags>$(PackageTags);remote;http;client</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

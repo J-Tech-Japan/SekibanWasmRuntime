@@ -1,7 +1,30 @@
 <Project>
   <PropertyGroup>
     <WasmtimeDotnetPath>$(MSBuildThisFileDirectory)external/wasmtime-dotnet/src</WasmtimeDotnetPath>
+    <IsSekibanWasmRuntimePublicPackage Condition="$([System.String]::Copy('$(MSBuildProjectFullPath)').Contains('/src/lib/Sekiban.Dcb.WasmRuntime/'))">true</IsSekibanWasmRuntimePublicPackage>
+    <IsSekibanWasmRuntimePublicPackage Condition="$([System.String]::Copy('$(MSBuildProjectFullPath)').Contains('/src/lib/Sekiban.Dcb.WasmRuntime.Remote/'))">true</IsSekibanWasmRuntimePublicPackage>
+    <IsSekibanWasmRuntimePublicPackage Condition="$([System.String]::Copy('$(MSBuildProjectFullPath)').Contains('/src/lib/Sekiban.Dcb.WasmRuntime.Wasmtime/'))">true</IsSekibanWasmRuntimePublicPackage>
   </PropertyGroup>
+
+  <PropertyGroup Condition="'$(IsSekibanWasmRuntimePublicPackage)' == 'true'">
+    <Authors>J-Tech Japan, Inc.</Authors>
+    <Company>J-Tech Japan, Inc.</Company>
+    <Product>SekibanWasmRuntime</Product>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <PackageProjectUrl>https://github.com/J-Tech-Japan/SekibanWasmRuntime</PackageProjectUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageReleaseNotes>Initial preview package baseline for Sekiban DCB WASM runtime packages.</PackageReleaseNotes>
+    <PackageTags>sekiban;dcb;wasm;wasi;event-sourcing</PackageTags>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/J-Tech-Japan/SekibanWasmRuntime</RepositoryUrl>
+    <VersionPrefix>1.0.0-preview.1</VersionPrefix>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(IsSekibanWasmRuntimePublicPackage)' == 'true'">
+    <None Include="$(MSBuildThisFileDirectory)docs/nuget/package-readme.md"
+          Pack="true"
+          PackagePath="README.md" />
+  </ItemGroup>
 
   <!--
     The Sekiban submodule manages package versions explicitly in each project.
