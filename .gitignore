@@ -24,6 +24,15 @@
 
 # Local benchmark / matrix run outputs
 /benchmark-*.json
+/benchmarks/results/*.log
+
+# Local automation and agent state
+.intent-cli/
+.codex/
+**/.next/
+**/.generated/
+**/node_modules/
+**/playwright-report/
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
