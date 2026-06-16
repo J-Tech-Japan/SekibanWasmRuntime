@@ -1,9 +1,9 @@
 <Project>
   <PropertyGroup>
     <WasmtimeDotnetPath>$(MSBuildThisFileDirectory)external/wasmtime-dotnet/src</WasmtimeDotnetPath>
-    <IsSekibanWasmRuntimePublicPackage Condition="$([System.String]::Copy('$(MSBuildProjectFullPath)').Contains('/src/lib/Sekiban.Dcb.WasmRuntime/'))">true</IsSekibanWasmRuntimePublicPackage>
-    <IsSekibanWasmRuntimePublicPackage Condition="$([System.String]::Copy('$(MSBuildProjectFullPath)').Contains('/src/lib/Sekiban.Dcb.WasmRuntime.Remote/'))">true</IsSekibanWasmRuntimePublicPackage>
-    <IsSekibanWasmRuntimePublicPackage Condition="$([System.String]::Copy('$(MSBuildProjectFullPath)').Contains('/src/lib/Sekiban.Dcb.WasmRuntime.Wasmtime/'))">true</IsSekibanWasmRuntimePublicPackage>
+    <IsSekibanWasmRuntimePublicPackage Condition="'$(MSBuildProjectName)' == 'Sekiban.Dcb.WasmRuntime'">true</IsSekibanWasmRuntimePublicPackage>
+    <IsSekibanWasmRuntimePublicPackage Condition="'$(MSBuildProjectName)' == 'Sekiban.Dcb.WasmRuntime.Remote'">true</IsSekibanWasmRuntimePublicPackage>
+    <IsSekibanWasmRuntimePublicPackage Condition="'$(MSBuildProjectName)' == 'Sekiban.Dcb.WasmRuntime.Wasmtime'">true</IsSekibanWasmRuntimePublicPackage>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(IsSekibanWasmRuntimePublicPackage)' == 'true'">

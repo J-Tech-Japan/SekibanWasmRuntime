@@ -20,6 +20,70 @@ in-process with Wasmtime. This package is part of the initial preview matrix and
 may carry preview Wasmtime dependency behavior while the host integration is
 stabilized.
 
+## Install
+
+Install the preview packages with prerelease resolution enabled:
+
+```bash
+dotnet add package Sekiban.Dcb.WasmRuntime --prerelease
+dotnet add package Sekiban.Dcb.WasmRuntime.Remote --prerelease
+dotnet add package Sekiban.Dcb.WasmRuntime.Wasmtime --prerelease
+```
+
+Most applications install only the package for their runtime boundary. Use the
+core package for shared contracts, add the remote package in HTTP clients, and
+add the Wasmtime package in API services that host projection modules
+in-process.
+
+## Minimal Usage
+
+Core runtime consumers depend on `ISerializedDcbClient` so the application code
+can use the same serialized DCB path for in-process and remote transports:
+
+```csharp
+using Sekiban.Dcb.WasmRuntime;
+
+public sealed class ProjectionReader(ISerializedDcbClient client)
+{
+    public Task<ResultBoxes.ResultBox<Sekiban.Dcb.Tags.SerializableTagState>> ReadAsync(
+        Sekiban.Dcb.Tags.TagStateId tagStateId) =>
+        client.GetSerializableTagStateAsync(tagStateId);
+}
+```
+
+Remote clients use `HttpSerializedDcbClient` with the serialized endpoint base
+URL exposed by the API service:
+
+```csharp
+using System.Text.Json;
+using Sekiban.Dcb.WasmRuntime;
+using Sekiban.Dcb.WasmRuntime.Remote;
+
+ISerializedDcbClient client = new HttpSerializedDcbClient(
+    new HttpClient(),
+    new SerializedDcbClientOptions { BaseUrl = "https://localhost:5001" },
+    new JsonSerializerOptions(JsonSerializerDefaults.Web));
+```
+
+Wasmtime hosts register the in-process projection host and then enable the WASM
+tag-state runtime after registering domain event types, JSON options, and a
+`WasmProjectorRegistry`:
+
+```csharp
+using Sekiban.Dcb.WasmRuntime;
+using Sekiban.Dcb.WasmRuntime.Wasmtime;
+
+services.AddWasmtimeProjectionHost(options =>
+{
+    options.DefaultModulePath = "modules/projection.wasm";
+});
+
+services.AddWasmTagStateRuntime(options =>
+{
+    options.Mode = WasmRuntimeMode.Wasm;
+});
+```
+
 ## License
 
 SekibanWasmRuntime is licensed under Elastic License 2.0. You may use, modify,
