@@ -62,7 +62,8 @@ build_csharp() {
 build_rust() {
   local sample_root="$ROOT/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs"
   local module_path="$sample_root/modules/sekiban-dcb-decider-rust.wasm"
-  local wasm_file="$sample_root/target/wasm32-wasip1/release/sekiban_dcb_decider_rust_wasm.wasm"
+  local release_dir="$sample_root/target/wasm32-wasip1/release"
+  local wasm_file="$release_dir/sekiban_dcb_decider_rust_wasm.wasm"
 
   echo "[build-samples-wasm] Building primary Rust sample WASM"
   mkdir -p "$(dirname "$module_path")"
@@ -73,8 +74,11 @@ build_rust() {
     --release
 
   if [[ ! -f "$wasm_file" ]]; then
-    echo "[build-samples-wasm] ERROR: Rust WASM output not found: $wasm_file" >&2
-    exit 1
+    wasm_file="$(find "$release_dir" -maxdepth 1 -name '*.wasm' -type f | head -n 1)"
+    if [[ -z "$wasm_file" ]]; then
+      echo "[build-samples-wasm] ERROR: no Rust WASM output found in $release_dir" >&2
+      exit 1
+    fi
   fi
 
   cp "$wasm_file" "$module_path"

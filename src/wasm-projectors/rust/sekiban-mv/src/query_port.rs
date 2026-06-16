@@ -7,9 +7,11 @@
 
 use crate::dto::{MvParam, MvQueryResultDto, MvQueryRowDto};
 
+#[link(wasm_import_module = "env")]
 extern "C" {
     /// Host import. Signature mirrors the C# side declared in
     /// `WasmtimeMaterializedViewExecutor.HandleHostQueryRows`.
+    #[link_name = "mv_host_query_rows"]
     fn mv_host_query_rows(
         sql_ptr: i32,
         sql_len: i32,
