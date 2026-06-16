@@ -34,6 +34,8 @@ jobs:
         run: ./build/scripts/build-csharp-wasm.sh
       - name: Build Rust WASM module
         run: ./build/scripts/build-rust-wasm.sh
+      - name: Build primary sample WASM modules
+        run: ./scripts/build-samples-wasm.sh --primary
 
       - name: Test
         run: dotnet test src/SekibanWasmRuntime.ci.slnx -c Release --no-build

@@ -26,6 +26,9 @@
 /benchmark-*.json
 /benchmarks/results/*.log
 
+# Generated sample WASM modules
+/src/samples/**/modules/*.wasm
+
 # Local automation and agent state
 .intent-cli/
 .codex/
