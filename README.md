@@ -53,6 +53,23 @@ src/
 
 See [src/internalUsages/README.md](src/internalUsages/README.md) for detailed architecture and comparison with the Sekiban reference implementation.
 
+## NuGet Packages
+
+The first public packages are preview packages versioned as `1.0.0-preview.*`.
+
+- `Sekiban.Dcb.WasmRuntime`: shared runtime contracts, projection
+  abstractions, serialized command/query DTOs, and in-process client
+  abstractions.
+- `Sekiban.Dcb.WasmRuntime.Remote`: HTTP client support for applications that
+  talk to a remote serialized Sekiban DCB runtime.
+- `Sekiban.Dcb.WasmRuntime.Wasmtime`: in-process Wasmtime host integration for
+  WASM projections. This package is included in the initial preview matrix while
+  the Wasmtime host policy is finalized.
+
+Package metadata and package README content are maintained in
+[`docs/nuget/package-readme.md`](docs/nuget/package-readme.md). The same ELv2
+usage boundary described above applies to all SekibanWasmRuntime packages.
+
 ## Quick Start
 
 ### C# WASM Example

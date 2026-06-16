@@ -9,6 +9,7 @@
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <PackageId>Sekiban.Dcb.WasmRuntime</PackageId>
     <Description>Sekiban DCB WASM runtime core abstractions and common types</Description>
+    <PackageTags>$(PackageTags);runtime;abstractions;projection</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

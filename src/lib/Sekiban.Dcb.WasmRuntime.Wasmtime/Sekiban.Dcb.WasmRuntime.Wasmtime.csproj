@@ -9,6 +9,7 @@
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <PackageId>Sekiban.Dcb.WasmRuntime.Wasmtime</PackageId>
     <Description>Sekiban DCB WASM runtime Wasmtime in-process host</Description>
+    <PackageTags>$(PackageTags);wasmtime;host;preview</PackageTags>
     <WasmtimeDotnetTargetFramework Condition="'$(WasmtimeDotnetTargetFramework)' == ''">net9.0</WasmtimeDotnetTargetFramework>
     <WasmtimeNativeLibraryFileName Condition="$([MSBuild]::IsOsPlatform('OSX'))">libwasmtime.dylib</WasmtimeNativeLibraryFileName>
     <WasmtimeNativeLibraryFileName Condition="$([MSBuild]::IsOsPlatform('Linux'))">libwasmtime.so</WasmtimeNativeLibraryFileName>
