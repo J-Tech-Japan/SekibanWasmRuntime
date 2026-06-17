@@ -68,6 +68,9 @@ Package metadata and package README content are maintained in
 usage boundary described above applies to all SekibanWasmRuntime packages.
 See [`docs/quickstart.md`](docs/quickstart.md) for package-specific quickstart
 paths.
+See [`docs/compatibility/sekiban-as-a-service-boundary.md`](docs/compatibility/sekiban-as-a-service-boundary.md)
+for the runtime-owned compatibility contract that downstream hosted-service
+integrations can depend on.
 
 ## Quick Start
 
