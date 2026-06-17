@@ -177,8 +177,10 @@ run_step \
 
 run_step \
   "Compatibility evidence" \
-  "Runtime-owned serialized DCB and query compatibility contract tests passed." \
-  "dotnet test src/internalUsages/cs/SekibanWasm.Cs.Tests/SekibanWasm.Cs.Tests.csproj -c Release --no-restore --filter 'FullyQualifiedName~HttpSerializedDcbClientTests|FullyQualifiedName~InProcSerializedDcbClientTests|FullyQualifiedName~SerializedCommandEndpointContractTests|FullyQualifiedName~SerializedCommandEndpointsExecuteTests|FullyQualifiedName~RemoteSekibanExecutorTests|FullyQualifiedName~WeatherQueryClientTests'"
+  "Runtime-owned serialized DCB contract black-box baseline passed." \
+  "scripts/contract/run-serialized-dcb-contract-baseline.sh"
+
+normalize_report
 
 run_step \
   "Whitespace" \

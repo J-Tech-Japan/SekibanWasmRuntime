@@ -18,6 +18,7 @@ The `release-nuget-preview` workflow runs these checks before any publish step:
 - License, notice, package README, repository URL, and release evidence checks.
 - Public hygiene guardrail.
 - Release artifact inventory with package hashes.
+- Serialized DCB contract black-box baseline.
 - `git diff --check`.
 
 ## Publish Guard
@@ -42,4 +43,6 @@ Generated packages and release reports are written under
 `artifacts/preview-release-dry-run/`. The durable dry-run evidence pack is
 written to `reports/public-release/preview-release-dry-run.md` with explicit
 pass, warn, or fail status for package inspection, secret scan, license/notice,
-artifact inventory, compatibility evidence, and whitespace validation.
+artifact inventory, serialized DCB contract evidence, and whitespace
+validation. The contract baseline also writes durable evidence to
+`reports/compatibility/serialized-dcb-contract-black-box-baseline.md`.
