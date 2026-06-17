@@ -8,6 +8,8 @@ for the version, changelog, migration-note, and compatibility evidence rules.
 
 ## Unreleased
 
+- Added a NuGet preview GitHub Release checklist and release notes template for
+  release operators.
 - Documented the preview version, changelog, migration-note, and compatibility
   evidence source-of-truth for release operators.
 - Clarified that breaking public contract changes require migration guidance,

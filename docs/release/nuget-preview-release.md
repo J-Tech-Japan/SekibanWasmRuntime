@@ -16,6 +16,10 @@ Ordinary pushes to `main` and pull request validation do not publish packages.
 
 See [`versioning-and-changelog.md`](versioning-and-changelog.md) for the full
 preview version, changelog, migration-note, and compatibility evidence policy.
+Use [`nuget-preview-release-checklist.md`](nuget-preview-release-checklist.md)
+for the operator checklist before publishing a GitHub Release. The release notes
+body should start from
+[`../../.github/release-notes/nuget-preview.md`](../../.github/release-notes/nuget-preview.md).
 
 ## Required Gate
 
@@ -57,3 +61,16 @@ pass, warn, or fail status for package inspection, secret scan, license/notice,
 artifact inventory, serialized DCB contract evidence, and whitespace
 validation. The contract baseline also writes durable evidence to
 `reports/compatibility/serialized-dcb-contract-black-box-baseline.md`.
+
+## Checklist And Notes Template
+
+The NuGet preview release checklist is maintained in
+[`nuget-preview-release-checklist.md`](nuget-preview-release-checklist.md). It
+covers tag and package version alignment, release notes, required evidence,
+safe no-publish verification, protected `nuget-preview` environment approval,
+and final publish confirmation.
+
+The GitHub Release notes template is maintained in
+[`../../.github/release-notes/nuget-preview.md`](../../.github/release-notes/nuget-preview.md).
+Both documents are specific to NuGet package release operations and are not the
+later code/repository release checklist.
