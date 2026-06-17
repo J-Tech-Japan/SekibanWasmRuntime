@@ -8,6 +8,14 @@ Ordinary pushes to `main` and pull request validation do not publish packages.
 - Use tags in the form `v1.0.0-preview.<n>` or `1.0.0-preview.<n>`.
 - The tag version is passed into `dotnet pack` as `PackageVersion`.
 - The GitHub Release body is the public release note source.
+- `Directory.Build.props` keeps the repository default `VersionPrefix` on the
+  active `1.0.0-preview.*` line.
+- `CHANGELOG.md` is the human release history source.
+- `docs/release/migration-notes.md` is the migration guidance source for
+  breaking public contract changes.
+
+See [`versioning-and-changelog.md`](versioning-and-changelog.md) for the full
+preview version, changelog, migration-note, and compatibility evidence policy.
 
 ## Required Gate
 
@@ -20,6 +28,9 @@ The `release-nuget-preview` workflow runs these checks before any publish step:
 - Release artifact inventory with package hashes.
 - Serialized DCB contract black-box baseline.
 - `git diff --check`.
+
+Breaking public contract changes also require a matching migration note and
+current compatibility evidence before the release is considered ready.
 
 ## Publish Guard
 
