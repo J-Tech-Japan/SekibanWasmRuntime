@@ -42,4 +42,3 @@ code/repository release template.
   ```bash
   PACKAGE_VERSION=<version> scripts/release/dry-run-preview-readiness.sh
   ```
-

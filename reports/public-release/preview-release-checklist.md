@@ -30,4 +30,3 @@ validation, optional `workflow_dispatch` dry runs, and the local dry-run command
 It explicitly states that verification must not publish a GitHub Release, run a
 local `dotnet nuget push`, or bypass the protected `nuget-preview` environment
 approval.
-
