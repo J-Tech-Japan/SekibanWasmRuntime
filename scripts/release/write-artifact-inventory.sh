@@ -31,7 +31,9 @@ mkdir -p "$report_dir"
     NOTICE \
     README.md \
     docs/nuget/package-readme.md \
+    reports/compatibility/serialized-dcb-contract-black-box-baseline.md \
     reports/public-release \
+    scripts/contract/run-serialized-dcb-contract-baseline.sh \
     scripts/release \
     .github/workflows/release-nuget-preview.yml
   printf '```\n\n'
@@ -46,4 +48,3 @@ mkdir -p "$report_dir"
 } > "$report_path"
 
 cat "$report_path"
-
