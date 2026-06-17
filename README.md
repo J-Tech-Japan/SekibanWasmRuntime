@@ -66,6 +66,10 @@ The first public packages are preview packages versioned as `1.0.0-preview.*`.
 Package metadata and package README content are maintained in
 [`docs/nuget/package-readme.md`](docs/nuget/package-readme.md). The same ELv2
 usage boundary described above applies to all SekibanWasmRuntime packages.
+Preview version, changelog, migration-note, and release evidence rules are
+defined in
+[`docs/release/versioning-and-changelog.md`](docs/release/versioning-and-changelog.md),
+with human release history in [`CHANGELOG.md`](CHANGELOG.md).
 See [`docs/quickstart.md`](docs/quickstart.md) for package-specific quickstart
 paths.
 See [`docs/compatibility/sekiban-as-a-service-boundary.md`](docs/compatibility/sekiban-as-a-service-boundary.md)
