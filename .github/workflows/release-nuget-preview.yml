@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - '.github/workflows/release-nuget-preview.yml'
+      - '.github/release-notes/**'
       - 'Directory.Build.props'
       - 'Directory.Packages.props'
       - 'docs/release/**'
