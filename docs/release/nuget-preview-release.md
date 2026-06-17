@@ -35,13 +35,11 @@ Forks and pull requests can run readiness checks, but they cannot publish.
 ## Local Dry Run
 
 ```bash
-PACKAGE_VERSION=1.0.0-preview.0 scripts/release/inspect-nuget-packages.sh
-scripts/release/check-secrets.sh
-scripts/release/check-license-notice.sh
-scripts/check-public-hygiene.sh
-scripts/release/write-artifact-inventory.sh
-git diff --check
+PACKAGE_VERSION=1.0.0-preview.0 scripts/release/dry-run-preview-readiness.sh
 ```
 
-Generated packages and release reports are written under `artifacts/`.
-
+Generated packages and release reports are written under
+`artifacts/preview-release-dry-run/`. The durable dry-run evidence pack is
+written to `reports/public-release/preview-release-dry-run.md` with explicit
+pass, warn, or fail status for package inspection, secret scan, license/notice,
+artifact inventory, compatibility evidence, and whitespace validation.
