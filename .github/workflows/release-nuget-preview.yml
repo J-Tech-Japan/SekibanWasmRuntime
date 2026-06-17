@@ -1,0 +1,116 @@
+name: release-nuget-preview
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/release-nuget-preview.yml'
+      - 'Directory.Build.props'
+      - 'Directory.Packages.props'
+      - 'docs/release/**'
+      - 'docs/nuget/**'
+      - 'reports/public-release/**'
+      - 'scripts/release/**'
+      - 'src/lib/**'
+  workflow_dispatch:
+    inputs:
+      package_version:
+        description: 'Preview package version to inspect'
+        required: true
+        default: '1.0.0-preview.0'
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  readiness:
+    name: release readiness
+    runs-on: ubuntu-latest
+    env:
+      RAW_PACKAGE_VERSION: ${{ github.event.release.tag_name || inputs.package_version || '1.0.0-preview.0' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          dotnet-quality: 'preview'
+
+      - name: Resolve package version
+        run: |
+          version="${RAW_PACKAGE_VERSION#v}"
+          echo "PACKAGE_VERSION=$version" >> "$GITHUB_ENV"
+          echo "Using PACKAGE_VERSION=$version"
+
+      - name: Restore
+        run: dotnet restore src/SekibanWasmRuntime.ci.slnx
+
+      - name: Build
+        run: dotnet build src/SekibanWasmRuntime.ci.slnx -c Release --no-restore
+
+      - name: Package inspection
+        run: scripts/release/inspect-nuget-packages.sh
+
+      - name: Secret scan
+        run: scripts/release/check-secrets.sh
+
+      - name: License and notice check
+        run: scripts/release/check-license-notice.sh
+
+      - name: Public hygiene check
+        run: scripts/check-public-hygiene.sh
+
+      - name: Artifact inventory
+        run: scripts/release/write-artifact-inventory.sh
+
+      - name: Whitespace check
+        run: git diff --check
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nuget-preview-${{ env.PACKAGE_VERSION }}
+          path: |
+            artifacts/nuget/*.nupkg
+            artifacts/release/*.md
+          if-no-files-found: error
+
+  publish:
+    name: publish to NuGet
+    runs-on: ubuntu-latest
+    needs: readiness
+    if: github.event_name == 'release' && github.repository == 'J-Tech-Japan/SekibanWasmRuntime'
+    environment: nuget-preview
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: nuget-preview-*
+          path: artifacts/publish
+          merge-multiple: true
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          dotnet-quality: 'preview'
+
+      - name: Check NuGet API key
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          if [[ -z "${NUGET_API_KEY:-}" ]]; then
+            echo "NUGET_API_KEY is not configured; publish will be skipped."
+            exit 0
+          fi
+          echo "HAS_NUGET_API_KEY=true" >> "$GITHUB_ENV"
+
+      - name: Publish packages
+        if: env.HAS_NUGET_API_KEY == 'true'
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          dotnet nuget push artifacts/publish/*.nupkg \
+            --api-key "$NUGET_API_KEY" \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
