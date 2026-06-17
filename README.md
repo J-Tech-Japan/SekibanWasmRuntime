@@ -57,20 +57,36 @@ See [src/internalUsages/README.md](src/internalUsages/README.md) for detailed ar
 
 The first public packages are preview packages versioned as `1.0.0-preview.*`.
 
-- `Sekiban.Dcb.WasmRuntime`: shared runtime contracts, projection
-  abstractions, serialized command/query DTOs, and in-process client
-  abstractions.
-- `Sekiban.Dcb.WasmRuntime.Remote`: HTTP client support for applications that
-  talk to a remote serialized Sekiban DCB runtime.
-- `Sekiban.Dcb.WasmRuntime.Wasmtime`: in-process Wasmtime host integration for
-  WASM projections. This package is included in the initial preview matrix while
-  the Wasmtime host policy is finalized.
+| Package | Install when | Support tier |
+| --- | --- | --- |
+| `Sekiban.Dcb.WasmRuntime` | You need shared runtime contracts, projection abstractions, serialized command/query DTOs, and in-process client abstractions. | Primary preview package. |
+| `Sekiban.Dcb.WasmRuntime.Remote` | Your app talks to a remote serialized Sekiban DCB runtime over HTTP. The generic remote executor belongs to the runtime boundary. | Primary preview package. |
+| `Sekiban.Dcb.WasmRuntime.Wasmtime` | Your API/service process hosts WASM projections in-process with Wasmtime. | Preview package while the Wasmtime host policy and native asset packaging are finalized. |
 
 Package metadata and package README content are maintained in
 [`docs/nuget/package-readme.md`](docs/nuget/package-readme.md). The same ELv2
 usage boundary described above applies to all SekibanWasmRuntime packages.
+See [`docs/quickstart.md`](docs/quickstart.md) for package-specific quickstart
+paths.
 
 ## Quick Start
+
+Start from the package that matches your runtime boundary:
+
+- Core contracts only: install `Sekiban.Dcb.WasmRuntime`.
+- HTTP client/runtime split: install `Sekiban.Dcb.WasmRuntime.Remote` in the
+  client that calls serialized endpoints.
+- In-process projection host: install `Sekiban.Dcb.WasmRuntime.Wasmtime` in the
+  service that loads WASM projection modules.
+
+```bash
+dotnet add package Sekiban.Dcb.WasmRuntime --prerelease
+dotnet add package Sekiban.Dcb.WasmRuntime.Remote --prerelease
+dotnet add package Sekiban.Dcb.WasmRuntime.Wasmtime --prerelease
+```
+
+Most applications install only the package for the boundary they own. SaaS
+credential helpers are outside this runtime package split.
 
 ### C# WASM Example
 
@@ -117,6 +133,9 @@ The primary supported samples are C# and Rust:
 
 Go, MoonBit, TypeScript, and Swift samples are experimental/reference until their
 builds are promoted to the same CI-gated support tier.
+
+For the full sample path, including prerequisites and the generic runtime host,
+see [`docs/quickstart.md`](docs/quickstart.md).
 
 ### Generic Runtime Container
 

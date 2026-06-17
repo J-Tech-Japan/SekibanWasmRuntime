@@ -1,0 +1,132 @@
+# SekibanWasmRuntime Quickstart
+
+SekibanWasmRuntime is a WASM-first runtime layer for Sekiban DCB projection
+logic. The public preview packages are split by runtime boundary so applications
+can depend on only the pieces they use.
+
+## Choose a Package
+
+| Package | Use it for | Typical project |
+| --- | --- | --- |
+| `Sekiban.Dcb.WasmRuntime` | Shared contracts, projection abstractions, serialized command/query DTOs, and in-process client abstractions. | Domain libraries, clients, and services that share runtime contracts. |
+| `Sekiban.Dcb.WasmRuntime.Remote` | HTTP clients that call a remote serialized Sekiban DCB runtime. | Blazor/Web clients, service clients, or workers that execute through serialized endpoints. |
+| `Sekiban.Dcb.WasmRuntime.Wasmtime` | In-process WASM projection hosting with Wasmtime. | API services or hosts that load projection modules from `.wasm` files. |
+
+All three packages are currently preview packages versioned as
+`1.0.0-preview.*`. The core and remote packages are primary preview packages.
+The Wasmtime package is included in the preview matrix while native asset
+packaging and host policy are finalized.
+
+Install with prerelease resolution enabled:
+
+```bash
+dotnet add package Sekiban.Dcb.WasmRuntime --prerelease
+dotnet add package Sekiban.Dcb.WasmRuntime.Remote --prerelease
+dotnet add package Sekiban.Dcb.WasmRuntime.Wasmtime --prerelease
+```
+
+Most applications install only the package for their runtime boundary. SaaS
+credential helpers are intentionally outside this runtime package split.
+
+## Core Runtime
+
+Use `Sekiban.Dcb.WasmRuntime` when application code should depend on the
+transport-neutral serialized DCB client contract:
+
+```csharp
+using Sekiban.Dcb.WasmRuntime;
+
+public sealed class ProjectionReader(ISerializedDcbClient client)
+{
+    public Task<ResultBoxes.ResultBox<Sekiban.Dcb.Tags.SerializableTagState>> ReadAsync(
+        Sekiban.Dcb.Tags.TagStateId tagStateId) =>
+        client.GetSerializableTagStateAsync(tagStateId);
+}
+```
+
+## Remote Runtime
+
+Use `Sekiban.Dcb.WasmRuntime.Remote` in clients that call a remote serialized
+runtime over HTTP:
+
+```csharp
+using System.Text.Json;
+using Sekiban.Dcb.WasmRuntime;
+using Sekiban.Dcb.WasmRuntime.Remote;
+
+ISerializedDcbClient client = new HttpSerializedDcbClient(
+    new HttpClient(),
+    new SerializedDcbClientOptions { BaseUrl = "https://localhost:5001" },
+    new JsonSerializerOptions(JsonSerializerDefaults.Web));
+```
+
+The generic remote executor is runtime-side. SaaS-specific credential helpers
+belong outside this repository.
+
+## Wasmtime Host
+
+Use `Sekiban.Dcb.WasmRuntime.Wasmtime` in a service that hosts WASM projections
+in-process:
+
+```csharp
+using Sekiban.Dcb.WasmRuntime;
+using Sekiban.Dcb.WasmRuntime.Wasmtime;
+
+services.AddWasmtimeProjectionHost(options =>
+{
+    options.DefaultModulePath = "modules/projection.wasm";
+});
+
+services.AddWasmTagStateRuntime(options =>
+{
+    options.Mode = WasmRuntimeMode.Wasm;
+});
+```
+
+Treat the Wasmtime package as preview-only until the host policy and
+platform-native asset inspection are finalized. See
+[`docs/nuget/package-readme.md`](nuget/package-readme.md) for the current
+package caveat.
+
+## Build Primary Samples
+
+Primary sample WASM modules are built from source:
+
+```bash
+./scripts/build-samples-wasm.sh --primary
+```
+
+The primary supported sample paths are:
+
+| Language | Path | Build helper |
+| --- | --- | --- |
+| C# | `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm` | `build/scripts/build-sample-csharp-wasm.sh` |
+| Rust | `src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs` | `scripts/build-samples-wasm.sh --primary` |
+
+The internal usage examples also provide smaller C# and Rust runtime flows:
+
+```bash
+./build/scripts/build-csharp-wasm.sh
+dotnet run --project src/internalUsages/cs/SekibanWasm.Cs.AppHost
+
+./build/scripts/build-rust-wasm.sh
+dotnet run --project src/internalUsages/rust/SekibanWasm.Rust.AppHost
+```
+
+Go, MoonBit, TypeScript, and Swift samples are experimental/reference until
+their build and runtime paths are promoted to the same CI-gated support tier.
+
+## Generic Runtime Container
+
+Build or copy a WASM module into the runtime container module directory, then
+start the runtime and Postgres stack:
+
+```bash
+cp src/internalUsages/cs/modules/csharp-weather.wasm docker/sekiban-wasm-runtime/modules/weather.wasm
+
+cd docker/sekiban-wasm-runtime
+docker compose up --build
+```
+
+See [`docker/sekiban-wasm-runtime/README.md`](../docker/sekiban-wasm-runtime/README.md)
+for the runtime manifest and container layout.
