@@ -13,6 +13,7 @@ version, changelog, and migration-note discipline.
 | Public release notes | GitHub Release body | Summarize the matching `CHANGELOG.md` entry and link migration notes when required. |
 | Migration guidance | `docs/release/migration-notes.md` | Add an entry for every breaking public contract change. |
 | Compatibility evidence | `reports/compatibility/serialized-dcb-contract-black-box-baseline.md` | Refresh when serialized public contracts change. |
+| Later source/repository release staging | `docs/release/code-repository-release-checklist.md` | Run only after NuGet readiness passes or a release-blocking deferral is recorded. |
 
 `Directory.Build.props` supplies the repository default `VersionPrefix` for the
 three public packages. The release workflow still passes the GitHub Release tag
@@ -73,4 +74,7 @@ release PR is considered ready.
    public contract change, or explicitly says none are required for the release.
 5. Confirm compatibility evidence is current when serialized contracts changed.
 6. Run the preview readiness dry run and keep the resulting evidence pack.
-7. Run `git diff --check`.
+7. For later source/repository publication, run
+   `docs/release/code-repository-release-checklist.md` after NuGet readiness is
+   complete or explicitly deferred as release-blocking.
+8. Run `git diff --check`.

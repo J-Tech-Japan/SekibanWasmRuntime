@@ -11,6 +11,12 @@ the right to grant that license.
 
 If you cannot agree to those terms, please do not submit contributions.
 
+The same license boundary described in [README.md](README.md) applies to
+contributions: SekibanWasmRuntime may be used, modified, redistributed, and
+self-hosted, including for internal company use, but third-party hosted service,
+managed service, SaaS, or similar cloud-provider substitution requires a
+separate commercial license from J-Tech Japan.
+
 ## Working guidelines
 
 See [CLAUDE.md](CLAUDE.md) for the repository's working conventions (branching,
