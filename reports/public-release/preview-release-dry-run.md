@@ -270,6 +270,8 @@ PASS with WARN: readiness checks passed and `1` warning(s) were recorded for dry
 
     ## Output
 
+    Note: the following OpenTelemetry `NU1902` lines are historical output from this dry run. They are superseded by `reports/public-release/opentelemetry-vulnerability-triage.md` and the refreshed `reports/compatibility/serialized-dcb-contract-black-box-baseline.md`, which move the affected OpenTelemetry packages to patched versions and no longer show OpenTelemetry `NU1902` warnings.
+
         /Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/internalUsages/cs/SekibanWasm.Cs.Tests/SekibanWasm.Cs.Tests.csproj : warning NU1902: Package 'OpenTelemetry.Api' 1.15.0 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-g94r-2vxg-569j
         /Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/internalUsages/cs/SekibanWasm.Cs.Tests/SekibanWasm.Cs.Tests.csproj : warning NU1902: Package 'OpenTelemetry.Exporter.OpenTelemetryProtocol' 1.15.0 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-4625-4j76-fww9
         /Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/internalUsages/cs/SekibanWasm.Cs.Tests/SekibanWasm.Cs.Tests.csproj : warning NU1902: Package 'OpenTelemetry.Exporter.OpenTelemetryProtocol' 1.15.0 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-mr8r-92fq-pj8p
