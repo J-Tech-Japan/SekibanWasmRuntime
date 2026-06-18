@@ -50,6 +50,14 @@ core package for shared contracts, add the remote package in HTTP clients, and
 add the Wasmtime package in API services that host projection modules
 in-process.
 
+Before publication, release readiness restores and builds a generated consumer
+project against locally packed `.nupkg` files for this package matrix. That
+smoke uses exact preview versions so broken package IDs, missing package files,
+or invalid package dependency references fail before publishing. See
+[`../quickstart.md`](../quickstart.md) for package selection guidance and
+[`../release/nuget-preview-release.md`](../release/nuget-preview-release.md) for
+the release gate.
+
 ## Minimal Usage
 
 Core runtime consumers depend on `ISerializedDcbClient` so the application code

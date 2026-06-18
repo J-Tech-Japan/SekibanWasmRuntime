@@ -28,6 +28,12 @@ dotnet add package Sekiban.Dcb.WasmRuntime.Wasmtime --prerelease
 Most applications install only the package for their runtime boundary. SaaS
 credential helpers are intentionally outside this runtime package split.
 
+Release readiness also runs a local-package consumer smoke that restores and
+builds a generated project against exact `1.0.0-preview.*` package versions from
+the repository's locally packed `.nupkg` files. See
+[`docs/release/nuget-preview-release.md`](release/nuget-preview-release.md) for
+the release gate and generated evidence path.
+
 ## Core Runtime
 
 Use `Sekiban.Dcb.WasmRuntime` when application code should depend on the

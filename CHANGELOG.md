@@ -8,6 +8,8 @@ for the version, changelog, migration-note, and compatibility evidence rules.
 
 ## Unreleased
 
+- Added a local NuGet consumer smoke that restores and builds a generated
+  project against locally packed preview packages before publication.
 - Added a NuGet preview GitHub Release checklist and release notes template for
   release operators.
 - Documented the preview version, changelog, migration-note, and compatibility
