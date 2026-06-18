@@ -3,7 +3,8 @@
 SekibanWasmRuntime preview packages are published only from a GitHub Release.
 Ordinary pushes to `main` and pull request validation do not publish packages.
 This NuGet package release is the first public release milestone; the later
-code/repository release has a separate checklist and gate.
+code/repository release has a separate checklist and gate in
+[`code-repository-release-checklist.md`](code-repository-release-checklist.md).
 
 ## Release Inputs
 
@@ -22,6 +23,10 @@ Use [`nuget-preview-release-checklist.md`](nuget-preview-release-checklist.md)
 for the operator checklist before publishing a GitHub Release. The release notes
 body should start from
 [`../../.github/release-notes/nuget-preview.md`](../../.github/release-notes/nuget-preview.md).
+Use
+[`code-repository-release-checklist.md`](code-repository-release-checklist.md)
+only for the later source/repository publication stage after NuGet readiness is
+complete or explicitly deferred as release-blocking.
 
 ## Required Gate
 
@@ -84,4 +89,5 @@ and final publish confirmation.
 The GitHub Release notes template is maintained in
 [`../../.github/release-notes/nuget-preview.md`](../../.github/release-notes/nuget-preview.md).
 Both documents are specific to NuGet package release operations and are not the
-later code/repository release checklist.
+later code/repository release checklist. The later checklist is maintained in
+[`code-repository-release-checklist.md`](code-repository-release-checklist.md).

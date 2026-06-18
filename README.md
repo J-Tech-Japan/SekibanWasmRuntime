@@ -73,6 +73,9 @@ Preview version, changelog, migration-note, and release evidence rules are
 defined in
 [`docs/release/versioning-and-changelog.md`](docs/release/versioning-and-changelog.md),
 with human release history in [`CHANGELOG.md`](CHANGELOG.md).
+NuGet package release readiness comes first; later source/repository
+publication is staged with
+[`docs/release/code-repository-release-checklist.md`](docs/release/code-repository-release-checklist.md).
 See [`docs/quickstart.md`](docs/quickstart.md) for package-specific quickstart
 paths.
 See [`docs/compatibility/sekiban-as-a-service-boundary.md`](docs/compatibility/sekiban-as-a-service-boundary.md)
