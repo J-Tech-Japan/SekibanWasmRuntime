@@ -1,16 +1,16 @@
 # NuGet Consumer Smoke
 
-Package version: `1.0.0-preview.0`
-Package directory: `artifacts/nuget`
+Package version: `1.0.0-preview.1`
+Package directory: `artifacts/preview-release-dry-run/nuget`
 Consumer project: `artifacts/consumer-smoke-public-report/SekibanWasmRuntime.ConsumerSmoke/SekibanWasmRuntime.ConsumerSmoke.csproj`
 
 ## Referenced Packages
 
 | Package | Version | Source |
 | --- | --- | --- |
-| `Sekiban.Dcb.WasmRuntime` | `1.0.0-preview.0` | `artifacts/nuget/Sekiban.Dcb.WasmRuntime.1.0.0-preview.0.nupkg` |
-| `Sekiban.Dcb.WasmRuntime.Remote` | `1.0.0-preview.0` | `artifacts/nuget/Sekiban.Dcb.WasmRuntime.Remote.1.0.0-preview.0.nupkg` |
-| `Sekiban.Dcb.WasmRuntime.Wasmtime` | `1.0.0-preview.0` | `artifacts/nuget/Sekiban.Dcb.WasmRuntime.Wasmtime.1.0.0-preview.0.nupkg` |
+| `Sekiban.Dcb.WasmRuntime` | `1.0.0-preview.1` | `artifacts/preview-release-dry-run/nuget/Sekiban.Dcb.WasmRuntime.1.0.0-preview.1.nupkg` |
+| `Sekiban.Dcb.WasmRuntime.Remote` | `1.0.0-preview.1` | `artifacts/preview-release-dry-run/nuget/Sekiban.Dcb.WasmRuntime.Remote.1.0.0-preview.1.nupkg` |
+| `Sekiban.Dcb.WasmRuntime.Wasmtime` | `1.0.0-preview.1` | `artifacts/preview-release-dry-run/nuget/Sekiban.Dcb.WasmRuntime.Wasmtime.1.0.0-preview.1.nupkg` |
 
 ## Commands
 
@@ -31,7 +31,7 @@ See `docs/quickstart.md` and `docs/nuget/package-readme.md` for package selectio
 
 ```text
   Determining projects to restore...
-  Restored /Users/tomohisa/dev/GitHub/SekibanWasmRuntime/artifacts/consumer-smoke-public-report/SekibanWasmRuntime.ConsumerSmoke/SekibanWasmRuntime.ConsumerSmoke.csproj (in 127 ms).
+  Restored /Users/tomohisa/dev/GitHub/SekibanWasmRuntime/artifacts/consumer-smoke-public-report/SekibanWasmRuntime.ConsumerSmoke/SekibanWasmRuntime.ConsumerSmoke.csproj (in 128 ms).
 ```
 
 ## Build Output
@@ -43,5 +43,5 @@ Build succeeded.
     0 Warning(s)
     0 Error(s)
 
-Time Elapsed 00:00:00.37
+Time Elapsed 00:00:00.40
 ```

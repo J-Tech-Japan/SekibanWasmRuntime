@@ -8,6 +8,9 @@ for the version, changelog, migration-note, and compatibility evidence rules.
 
 ## Unreleased
 
+- Hardened the NuGet preview release workflow so readiness runs the serialized
+  DCB contract baseline and real release publishes fail when `NUGET_API_KEY` is
+  missing.
 - Added a local NuGet consumer smoke that restores and builds a generated
   project against locally packed preview packages before publication.
 - Added a NuGet preview GitHub Release checklist and release notes template for

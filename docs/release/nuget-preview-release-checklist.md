@@ -38,8 +38,8 @@ NuGet publish trigger for `Sekiban.Dcb.WasmRuntime`,
   ```
 
 - [ ] The evidence pack records package inspection, secret scan,
-  license/notice check, public hygiene, artifact inventory, serialized DCB
-  contract evidence, and whitespace validation.
+  consumer smoke, license/notice check, public hygiene, artifact inventory,
+  serialized DCB contract evidence, and whitespace validation.
 - [ ] `reports/compatibility/serialized-dcb-contract-black-box-baseline.md` is
   current when serialized public contracts changed.
 - [ ] `reports/public-release/release-publish-gate.md` still matches the
@@ -61,8 +61,8 @@ NuGet publish trigger for `Sekiban.Dcb.WasmRuntime`,
 - [ ] The environment approval is granted only after the release notes and
   evidence links have been reviewed.
 - [ ] `NUGET_API_KEY` is configured in the `nuget-preview` environment.
-- [ ] Operators understand that a missing `NUGET_API_KEY` skips publish before
-  `dotnet nuget push`.
+- [ ] Operators understand that a missing `NUGET_API_KEY` fails a real
+  `release.published` publish attempt before `dotnet nuget push`.
 
 ## Final Publish Step
 
@@ -70,5 +70,5 @@ NuGet publish trigger for `Sekiban.Dcb.WasmRuntime`,
 - [ ] Confirm the GitHub Release body uses the NuGet preview template.
 - [ ] Publish the GitHub Release only after all checklist items above are true.
 - [ ] Confirm the `release-nuget-preview` workflow readiness job passed.
-- [ ] Confirm the publish job either pushed the intended packages or skipped
-  because the NuGet credential was intentionally absent.
+- [ ] Confirm the publish job pushed the intended packages. A missing NuGet
+  credential is a failed publish attempt, not a successful skip.
