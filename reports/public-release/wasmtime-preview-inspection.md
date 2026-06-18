@@ -1,6 +1,6 @@
 # Wasmtime Preview Package Inspection
 
-Inspection date: 2026-06-16
+Inspection date: 2026-06-17
 
 Package: `Sekiban.Dcb.WasmRuntime.Wasmtime`
 
@@ -17,9 +17,9 @@ validation.
 ## Commands
 
 ```bash
-dotnet pack src/lib/Sekiban.Dcb.WasmRuntime.Wasmtime/Sekiban.Dcb.WasmRuntime.Wasmtime.csproj -c Release -o /tmp/sekiban-wasm-pack-119 --nologo
-unzip -l /tmp/sekiban-wasm-pack-119/Sekiban.Dcb.WasmRuntime.Wasmtime.1.0.0-preview.1.nupkg
-unzip -p /tmp/sekiban-wasm-pack-119/Sekiban.Dcb.WasmRuntime.Wasmtime.1.0.0-preview.1.nupkg Sekiban.Dcb.WasmRuntime.Wasmtime.nuspec
+PACKAGE_VERSION=1.0.0-preview.1 NUGET_OUTPUT_DIR=artifacts/issue-143-nuget RELEASE_REPORT_DIR=reports/public-release scripts/release/inspect-nuget-packages.sh 1.0.0-preview.1
+unzip -l artifacts/issue-143-nuget/Sekiban.Dcb.WasmRuntime.Wasmtime.1.0.0-preview.1.nupkg
+unzip -p artifacts/issue-143-nuget/Sekiban.Dcb.WasmRuntime.Wasmtime.1.0.0-preview.1.nupkg Sekiban.Dcb.WasmRuntime.Wasmtime.nuspec
 ```
 
 ## Observed Package Contents
@@ -50,7 +50,7 @@ The generated nuspec included:
 - repository URL `https://github.com/J-Tech-Japan/SekibanWasmRuntime`
 - tags including `wasmtime`, `host`, and `preview`
 - dependency `Sekiban.Dcb.WasmRuntime` version `1.0.0-preview.1`
-- dependency `Wasmtime` version `35.0.0-dev` with `Compile`, `Build`, and
+- dependency `Wasmtime` version `14.0.0` with `Compile`, `Build`, and
   `Analyzers` excluded
 - content file entry `any/net10.0/libwasmtime.dylib`
 
@@ -61,6 +61,6 @@ asset shape. Linux and Windows release candidates must be packed and inspected
 on their respective release build environments before publish so the expected
 native asset is present (`libwasmtime.so` on Linux, `wasmtime.dll` on Windows).
 
-The `Wasmtime 35.0.0-dev` dependency and native content layout are preview
-release caveats. They should remain visible in package-facing documentation
-until the Wasmtime host policy is finalized.
+The `Wasmtime 14.0.0` runtime/native asset dependency and native content layout
+are preview release caveats. They should remain visible in package-facing
+documentation until the Wasmtime host policy is finalized.

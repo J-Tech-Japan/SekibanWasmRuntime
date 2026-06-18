@@ -19,8 +19,9 @@ but it is not ready for a public NuGet release without follow-up work.
 - The three public package candidates are versioned as stable `1.0.0`, while
   accepted direction for release is `1.0.0-preview.*`.
 - All three package candidates emit NuGet package readme warnings.
-- `Sekiban.Dcb.WasmRuntime.Wasmtime` emits `NU5104` because stable `1.0.0`
-  depends on prerelease `Wasmtime [35.0.0-dev, )`.
+- Current preview evidence records `Sekiban.Dcb.WasmRuntime.Wasmtime` with a
+  `Wasmtime` `14.0.0` runtime/native asset dependency and platform-specific
+  native content that still requires release-environment inspection.
 - NuGet metadata is too sparse for public release quality: authors default to
   package IDs, repository URL is absent from the generated nuspec, tags are
   absent, and package README files are absent.
@@ -168,8 +169,8 @@ Package file:
 Pack result:
 
 - Succeeded.
-- Warning `NU5104`: stable package should not have prerelease dependency
-  `Wasmtime [35.0.0-dev, )`.
+- Current preview evidence records the Wasmtime package dependency as
+  `Wasmtime` `14.0.0` with `Compile`, `Build`, and `Analyzers` excluded.
 - NuGet warning text: package is missing a readme.
 
 Nuspec summary:
@@ -180,7 +181,7 @@ Nuspec summary:
 - `license`: file `LICENSE`
 - `description`: `Sekiban DCB WASM runtime Wasmtime in-process host`
 - `repository`: type `git`, commit only; no repository URL
-- Dependencies: `Wasmtime` `35.0.0-dev`, `Sekiban.Dcb.WasmRuntime` `1.0.0`,
+- Dependencies: `Wasmtime` `14.0.0`, `Sekiban.Dcb.WasmRuntime` `1.0.0`,
   `Microsoft.Extensions.DependencyInjection.Abstractions` `10.0.3`,
   `Microsoft.Extensions.Logging.Abstractions` `10.0.3`,
   `Microsoft.Extensions.Options` `10.0.3`
@@ -209,10 +210,10 @@ Observed:
 - Each package project sets `IsPackable`, `PackageId`, and `Description`.
 - None of the three package projects set package README, public repository URL,
   tags, company, product, package icon, release notes, or preview version.
-- Central package management currently lists `Wasmtime` as `14.0.0`, but the
-  generated Wasmtime package nuspec contains `Wasmtime` `35.0.0-dev` because
-  the project compiles against `external/wasmtime-dotnet` and packages the
-  prerelease dependency from that path.
+- Central package management currently lists `Wasmtime` as `14.0.0`, and the
+  current generated Wasmtime package nuspec matches that dependency version.
+  The project still compiles against `external/wasmtime-dotnet` managed source
+  and uses the NuGet package for runtime/native assets.
 
 ## Tracked Artifact Inventory
 
@@ -324,7 +325,7 @@ move them behind documented local configuration.
 | Follow-up | Classification | Evidence |
 | --- | --- | --- |
 | `SWR-G002` NuGet metadata/readme/version policy | blocker | All three packages use stable `1.0.0`, lack package readme, sparse authors, no repository URL, no tags. |
-| `SWR-G003` Wasmtime stability decision | blocker | `Sekiban.Dcb.WasmRuntime.Wasmtime` warns `NU5104` for `Wasmtime [35.0.0-dev, )`; package includes native `libwasmtime.dylib`. |
+| `SWR-G003` Wasmtime stability decision | warning | `Sekiban.Dcb.WasmRuntime.Wasmtime` remains preview-only; current inspection records `Wasmtime` `14.0.0` as the runtime/native asset dependency and includes native `libwasmtime.dylib`. |
 | `SWR-G004` Repo hygiene cleanup | warning | Tracked `dist`, `wwwroot` vendored assets, benchmark logs, and local ignored residue need policy. |
 | `SWR-G005` WASM binary policy | warning | Ten tracked `.wasm` files include generated samples up to 61 MB. |
 | `SWR-G006` Release workflow gate | blocker | CI is green, but no release gate evidence for package metadata/readme/nuspec inspection is recorded. |

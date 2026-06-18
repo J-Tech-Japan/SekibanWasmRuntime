@@ -48,7 +48,15 @@ expected_ids = {
 packages = sorted(output_dir.glob("*.nupkg"))
 errors = []
 rows = []
+dependency_rows = []
+native_rows = []
 seen_ids = set()
+
+central_props = ET.parse("Directory.Packages.props").getroot()
+central_versions = {
+    item.attrib.get("Include", ""): item.attrib.get("Version", "")
+    for item in central_props.findall(".//PackageVersion")
+}
 
 if len(packages) != len(expected_ids):
     errors.append(f"expected {len(expected_ids)} packages, found {len(packages)}")
@@ -84,6 +92,10 @@ for package in packages:
         has_readme_file = "README.md" in names
         has_license_file = "LICENSE" in names
         has_lib = any(name.startswith("lib/net10.0/") and name.endswith(".dll") for name in names)
+        native_assets = sorted(
+            name for name in names
+            if name.startswith("content/") or name.startswith("contentFiles/")
+        )
 
         if package_id not in expected_ids:
             errors.append(f"{package.name}: unexpected package id {package_id}")
@@ -99,6 +111,34 @@ for package in packages:
             errors.append(f"{package.name}: no net10.0 library asset found")
 
         rows.append((package.name, package_id, version, str(package.stat().st_size), readme, license_text, repository_url))
+
+        dependency_groups = metadata.findall("n:dependencies/n:group", ns) if ns and metadata is not None else (
+            metadata.findall("dependencies/group") if metadata is not None else []
+        )
+        for group in dependency_groups:
+            target_framework = group.attrib.get("targetFramework", "")
+            dependencies = group.findall("n:dependency", ns) if ns else group.findall("dependency")
+            for dependency in dependencies:
+                dependency_id = dependency.attrib.get("id", "")
+                dependency_version = dependency.attrib.get("version", "")
+                dependency_exclude = dependency.attrib.get("exclude", "")
+                dependency_rows.append((
+                    package_id,
+                    target_framework,
+                    dependency_id,
+                    dependency_version,
+                    dependency_exclude,
+                ))
+                if package_id == "Sekiban.Dcb.WasmRuntime.Wasmtime" and dependency_id == "Wasmtime":
+                    expected_wasmtime = central_versions.get("Wasmtime", "")
+                    if dependency_version != expected_wasmtime:
+                        errors.append(
+                            f"{package.name}: Wasmtime dependency {dependency_version} "
+                            f"does not match Directory.Packages.props {expected_wasmtime}"
+                        )
+
+        for asset in native_assets:
+            native_rows.append((package_id, asset))
 
 missing_ids = expected_ids - seen_ids
 if missing_ids:
@@ -116,6 +156,34 @@ report_lines = [
 
 for row in rows:
     report_lines.append("| " + " | ".join(f"`{cell}`" for cell in row) + " |")
+
+report_lines.extend([
+    "",
+    "## Dependencies",
+    "",
+    "| Package Id | Target Framework | Dependency | Version | Exclude |",
+    "| --- | --- | --- | --- | --- |",
+])
+
+if dependency_rows:
+    for row in dependency_rows:
+        report_lines.append("| " + " | ".join(f"`{cell}`" for cell in row) + " |")
+else:
+    report_lines.append("| `(none)` |  |  |  |  |")
+
+report_lines.extend([
+    "",
+    "## Native Content Assets",
+    "",
+    "| Package Id | Asset |",
+    "| --- | --- |",
+])
+
+if native_rows:
+    for row in native_rows:
+        report_lines.append("| " + " | ".join(f"`{cell}`" for cell in row) + " |")
+else:
+    report_lines.append("| `(none)` | `(none)` |")
 
 report_lines.extend(["", "## Result", ""])
 if errors:
