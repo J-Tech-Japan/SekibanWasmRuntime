@@ -55,6 +55,9 @@ jobs:
       - name: Package inspection
         run: scripts/release/inspect-nuget-packages.sh
 
+      - name: Consumer smoke
+        run: scripts/release/consumer-smoke-local-packages.sh
+
       - name: Secret scan
         run: scripts/release/check-secrets.sh
 

@@ -156,6 +156,11 @@ run_step \
   "PACKAGE_VERSION='$package_version' NUGET_OUTPUT_DIR='$nuget_dir' RELEASE_REPORT_DIR='$artifact_report_dir' scripts/release/inspect-nuget-packages.sh '$package_version'"
 
 run_step \
+  "Consumer smoke" \
+  "A generated consumer project restored and built against the locally packed preview packages." \
+  "PACKAGE_VERSION='$package_version' NUGET_OUTPUT_DIR='$nuget_dir' CONSUMER_SMOKE_DIR='$artifact_root/consumer-smoke' RELEASE_REPORT_DIR='$artifact_report_dir' scripts/release/consumer-smoke-local-packages.sh '$package_version'"
+
+run_step \
   "Secret scan" \
   "High-confidence secret patterns were not found in tracked repository content." \
   "scripts/release/check-secrets.sh"

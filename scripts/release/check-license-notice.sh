@@ -34,6 +34,7 @@ require_file docs/nuget/package-readme.md
 require_file reports/public-release/readiness-inventory.md
 require_file reports/public-release/hygiene-guardrail.md
 require_file reports/public-release/wasmtime-preview-inspection.md
+require_file reports/public-release/consumer-smoke-local-packages.md
 
 require_text Directory.Build.props '<PackageLicenseFile>LICENSE</PackageLicenseFile>' 'NuGet packages declare LICENSE'
 require_text Directory.Build.props '<PackageReadmeFile>README.md</PackageReadmeFile>' 'NuGet packages declare README'
@@ -46,4 +47,3 @@ if (( fail != 0 )); then
 fi
 
 printf 'license and notice check passed\n'
-

@@ -26,6 +26,7 @@ body should start from
 The `release-nuget-preview` workflow runs these checks before any publish step:
 
 - NuGet package inspection for the three public packages.
+- Consumer smoke restore/build against the locally packed preview packages.
 - High-confidence secret scan.
 - License, notice, package README, repository URL, and release evidence checks.
 - Public hygiene guardrail.
@@ -57,9 +58,16 @@ PACKAGE_VERSION=1.0.0-preview.0 scripts/release/dry-run-preview-readiness.sh
 Generated packages and release reports are written under
 `artifacts/preview-release-dry-run/`. The durable dry-run evidence pack is
 written to `reports/public-release/preview-release-dry-run.md` with explicit
-pass, warn, or fail status for package inspection, secret scan, license/notice,
-artifact inventory, serialized DCB contract evidence, and whitespace
-validation. The contract baseline also writes durable evidence to
+pass, warn, or fail status for package inspection, local-package consumer smoke,
+secret scan, license/notice, artifact inventory, serialized DCB contract
+evidence, and whitespace validation. The consumer smoke writes generated
+evidence to `artifacts/preview-release-dry-run/release/consumer-smoke-local-packages.md`.
+The durable public evidence is maintained at
+[`../../reports/public-release/consumer-smoke-local-packages.md`](../../reports/public-release/consumer-smoke-local-packages.md)
+and references the package selection guidance in
+[`../quickstart.md`](../quickstart.md) and
+[`../nuget/package-readme.md`](../nuget/package-readme.md). The contract baseline
+also writes durable evidence to
 `reports/compatibility/serialized-dcb-contract-black-box-baseline.md`.
 
 ## Checklist And Notes Template
