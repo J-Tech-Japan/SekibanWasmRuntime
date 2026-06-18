@@ -26,6 +26,10 @@ repository.
 - `scripts/contract/run-serialized-dcb-contract-baseline.sh` proves the
   runtime-owned serialized DCB command, query, tag state, and compatibility
   contract baseline before publish.
+- `reports/public-release/opentelemetry-vulnerability-triage.md` records the
+  OpenTelemetry `NU1902` warning decision. Preview publish is blocked if
+  refreshed release evidence still contains unexplained OpenTelemetry
+  vulnerability warnings.
 - `git diff --check` verifies whitespace cleanliness.
 
 ## Publish Safety
