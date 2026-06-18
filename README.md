@@ -66,6 +66,9 @@ The first public packages are preview packages versioned as `1.0.0-preview.*`.
 Package metadata and package README content are maintained in
 [`docs/nuget/package-readme.md`](docs/nuget/package-readme.md). The same ELv2
 usage boundary described above applies to all SekibanWasmRuntime packages.
+The Wasmtime preview package currently exposes a `Wasmtime` `14.0.0`
+runtime/native asset dependency in its generated nuspec while compiling against
+the managed Wasmtime source pinned in this repository.
 Preview version, changelog, migration-note, and release evidence rules are
 defined in
 [`docs/release/versioning-and-changelog.md`](docs/release/versioning-and-changelog.md),
