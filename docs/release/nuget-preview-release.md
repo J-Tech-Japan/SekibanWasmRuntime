@@ -2,6 +2,8 @@
 
 SekibanWasmRuntime preview packages are published only from a GitHub Release.
 Ordinary pushes to `main` and pull request validation do not publish packages.
+This NuGet package release is the first public release milestone; the later
+code/repository release has a separate checklist and gate.
 
 ## Release Inputs
 
@@ -46,13 +48,14 @@ The publish job runs only when all of these are true:
 - The protected `nuget-preview` environment is approved.
 - `NUGET_API_KEY` is configured in that environment.
 
-If the secret is missing, the job exits without attempting `dotnet nuget push`.
-Forks and pull requests can run readiness checks, but they cannot publish.
+If the secret is missing on a real `release.published` event, the publish job
+fails before attempting `dotnet nuget push`. Forks and pull requests can run
+readiness checks, but they cannot publish.
 
 ## Local Dry Run
 
 ```bash
-PACKAGE_VERSION=1.0.0-preview.0 scripts/release/dry-run-preview-readiness.sh
+PACKAGE_VERSION=1.0.0-preview.1 scripts/release/dry-run-preview-readiness.sh
 ```
 
 Generated packages and release reports are written under

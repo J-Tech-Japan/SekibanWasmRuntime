@@ -30,3 +30,8 @@ validation, optional `workflow_dispatch` dry runs, and the local dry-run command
 It explicitly states that verification must not publish a GitHub Release, run a
 local `dotnet nuget push`, or bypass the protected `nuget-preview` environment
 approval.
+
+The checklist also states that NuGet release is the first public release
+milestone, separate from the later code/repository release checklist, and that a
+missing `NUGET_API_KEY` fails a real `release.published` publish attempt instead
+of producing a successful skip.

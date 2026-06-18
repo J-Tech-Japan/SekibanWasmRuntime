@@ -10,6 +10,8 @@ on:
       - 'docs/release/**'
       - 'docs/nuget/**'
       - 'reports/public-release/**'
+      - 'reports/compatibility/**'
+      - 'scripts/contract/**'
       - 'scripts/release/**'
       - 'src/lib/**'
   workflow_dispatch:
@@ -17,7 +19,7 @@ on:
       package_version:
         description: 'Preview package version to inspect'
         required: true
-        default: '1.0.0-preview.0'
+        default: '1.0.0-preview.1'
   release:
     types: [published]
 
@@ -29,7 +31,7 @@ jobs:
     name: release readiness
     runs-on: ubuntu-latest
     env:
-      RAW_PACKAGE_VERSION: ${{ github.event.release.tag_name || inputs.package_version || '1.0.0-preview.0' }}
+      RAW_PACKAGE_VERSION: ${{ github.event.release.tag_name || inputs.package_version || '1.0.0-preview.1' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -70,6 +72,9 @@ jobs:
       - name: Artifact inventory
         run: scripts/release/write-artifact-inventory.sh
 
+      - name: Serialized DCB contract baseline
+        run: scripts/contract/run-serialized-dcb-contract-baseline.sh
+
       - name: Whitespace check
         run: git diff --check
 
@@ -104,13 +109,12 @@ jobs:
           NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
         run: |
           if [[ -z "${NUGET_API_KEY:-}" ]]; then
-            echo "NUGET_API_KEY is not configured; publish will be skipped."
-            exit 0
+            echo "NUGET_API_KEY is required for release.published NuGet publish attempts."
+            exit 1
           fi
-          echo "HAS_NUGET_API_KEY=true" >> "$GITHUB_ENV"
+          echo "NUGET_API_KEY is configured."
 
       - name: Publish packages
-        if: env.HAS_NUGET_API_KEY == 'true'
         env:
           NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
         run: |

@@ -42,3 +42,5 @@ code/repository release template.
   ```bash
   PACKAGE_VERSION=<version> scripts/release/dry-run-preview-readiness.sh
   ```
+- NuGet release is the first public release milestone; the later
+  code/repository release checklist is separate.

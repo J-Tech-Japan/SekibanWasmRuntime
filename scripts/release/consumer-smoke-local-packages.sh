@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
 
-package_version="${PACKAGE_VERSION:-${1:-1.0.0-preview.0}}"
+package_version="${PACKAGE_VERSION:-${1:-1.0.0-preview.1}}"
 package_version="${package_version#v}"
 
 if [[ ! "$package_version" =~ ^1\.0\.0-preview\.[0-9A-Za-z.-]+$ ]]; then
