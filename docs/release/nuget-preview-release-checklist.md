@@ -68,16 +68,22 @@ NuGet publish trigger for `Sekiban.Dcb.WasmRuntime`,
   automatically or require manual operator confirmation.
 - [ ] The environment approval is granted only after the release notes and
   evidence links have been reviewed.
-- [ ] `NUGET_API_KEY` is configured in the `nuget-preview` environment.
+- [ ] The NuGet.org Trusted Publishing policy is configured:
+  `SekibanWasmRuntime GitHub Release NuGet Preview`.
+- [ ] The policy owner is `J-Tech-Japan`, repository owner is `J-Tech-Japan`,
+  repository is `SekibanWasmRuntime`, workflow file is
+  `release-nuget-preview.yml`, and environment is `nuget-preview`.
 - [ ] Missing or unverified `nuget-preview` environment configuration is
   treated as release-blocking.
-- [ ] Missing or unverified `NUGET_API_KEY` configuration is treated as
-  release-blocking.
+- [ ] Missing, inactive, or unverified Trusted Publishing policy configuration
+  is treated as release-blocking.
+- [ ] Operators understand that a newly created policy may be temporarily active
+  for 7 days until the first successful publish activates it permanently.
 - [ ] Missing operator/legal approval for
   `reports/public-release/license-boundary-commercial-use-signoff.md` is treated
   as release-blocking.
-- [ ] Operators understand that a missing `NUGET_API_KEY` fails a real
-  `release.published` publish attempt before `dotnet nuget push`.
+- [ ] Operators understand that the publish job exchanges GitHub Actions OIDC
+  for a short-lived NuGet API key immediately before `dotnet nuget push`.
 
 ## Final Publish Step
 
@@ -87,8 +93,8 @@ NuGet publish trigger for `Sekiban.Dcb.WasmRuntime`,
   resolved before clicking Publish.
 - [ ] Publish the GitHub Release only after all checklist items above are true.
 - [ ] Confirm the `release-nuget-preview` workflow readiness job passed.
-- [ ] Confirm the publish job pushed the intended packages. A missing NuGet
-  credential is a failed publish attempt, not a successful skip.
+- [ ] Confirm the publish job pushed the intended packages. A failed Trusted
+  Publishing OIDC exchange is a failed publish attempt, not a successful skip.
 
 ## Post-Publish NuGet.org Verification
 

@@ -18,11 +18,11 @@ NuGet packages.
 | Area | Status | Evidence |
 | --- | --- | --- |
 | GitHub Release body | READY WITH MANUAL BLOCKER | `.github/release-notes/nuget-preview.md` contains concrete package versions, highlights, migration status, preview limitations, and evidence links for `1.0.0-preview.1`. |
-| Changelog | READY WITH MANUAL BLOCKER | `CHANGELOG.md` contains a `1.0.0-preview.1` release-candidate entry and states the remaining protected-environment and credential blocker before publication. |
+| Changelog | READY WITH MANUAL BLOCKER | `CHANGELOG.md` contains a `1.0.0-preview.1` release-candidate entry and states the remaining protected-environment and publish-policy blocker before publication. |
 | Migration status | READY | `docs/release/migration-notes.md` states that no breaking public contract change is introduced by the release-process documentation update. |
 | Compatibility evidence | READY | `reports/compatibility/serialized-dcb-contract-black-box-baseline.md` records a passing serialized DCB contract baseline. |
-| Dry-run evidence | READY WITH WARN | `reports/public-release/preview-release-dry-run.md` records `1.0.0-preview.1` readiness as PASS with WARN for the dry-run-only missing `NUGET_API_KEY` condition. |
-| Publish gate | MANUAL BLOCKER | `reports/public-release/nuget-environment-credential-preflight.md` could not verify `nuget-preview` or `NUGET_API_KEY` metadata from this checkout; an operator must confirm both in repository settings before publishing. |
+| Dry-run evidence | READY | `reports/public-release/preview-release-dry-run.md` records `1.0.0-preview.1` readiness through the no-publish path; Trusted Publishing OIDC exchange is reserved for the real publish job. |
+| Publish gate | MANUAL BLOCKER | `reports/public-release/nuget-environment-credential-preflight.md` could not verify `nuget-preview` metadata or NuGet.org Trusted Publishing policy state from this checkout; an operator must confirm both before publishing. |
 
 ## Operator Release Body Inputs
 
@@ -39,11 +39,15 @@ NuGet packages.
 ## Release-Blocking Note
 
 Do not publish the GitHub Release until an operator with repository settings
-access confirms:
+and NuGet.org package-owner access confirms:
 
 1. `nuget-preview` exists as a protected GitHub Environment.
-2. `nuget-preview` contains an environment secret named `NUGET_API_KEY`.
-3. The secret value is not displayed, copied into logs, pasted into issues or
-   pull requests, or committed.
+2. NuGet.org Trusted Publishing policy
+   `SekibanWasmRuntime GitHub Release NuGet Preview` exists for package owner
+   `J-Tech-Japan`, repository owner `J-Tech-Japan`, repository
+   `SekibanWasmRuntime`, workflow file `release-nuget-preview.yml`, and
+   environment `nuget-preview`.
+3. If the policy is temporarily active, it is still within the 7-day activation
+   window for the first successful publish.
 
 If either setting is missing or still unverified, the release remains blocked.

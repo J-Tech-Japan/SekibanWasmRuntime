@@ -5,9 +5,10 @@ This is the NuGet package release note source, not the later code/repository
 release note source.
 
 > Release blocker: do not publish the GitHub Release until an operator confirms
-> the `nuget-preview` protected environment exists and contains an environment
-> secret named `NUGET_API_KEY`. The automated metadata preflight could not verify
-> those settings from this checkout.
+> the `nuget-preview` protected environment exists and the NuGet.org Trusted
+> Publishing policy `SekibanWasmRuntime GitHub Release NuGet Preview` is active
+> for owner `J-Tech-Japan`, repository `J-Tech-Japan/SekibanWasmRuntime`,
+> workflow file `release-nuget-preview.yml`, and environment `nuget-preview`.
 
 ## Packages
 
@@ -25,8 +26,8 @@ release note source.
   inventory, a generated local NuGet consumer smoke, and the serialized DCB
   contract black-box baseline.
 - Publishes through the GitHub Release driven NuGet gate only after the
-  `nuget-preview` environment approval and `NUGET_API_KEY` credential are
-  confirmed.
+  `nuget-preview` environment approval and NuGet.org Trusted Publishing policy
+  are confirmed.
 
 ## Compatibility And Migration
 
@@ -59,8 +60,8 @@ release note source.
 ## Release Evidence
 
 - Dry-run evidence: `reports/public-release/preview-release-dry-run.md`
-  records a `1.0.0-preview.1` PASS with WARN for the dry-run-only missing
-  `NUGET_API_KEY` condition.
+  records a `1.0.0-preview.1` no-publish readiness path. Trusted Publishing
+  OIDC exchange is exercised only by the real `release.published` publish job.
 - Publish gate: `reports/public-release/release-publish-gate.md`.
 - Environment and credential preflight:
   `reports/public-release/nuget-environment-credential-preflight.md`.
@@ -72,6 +73,8 @@ release note source.
 
 - Tag/package version: `1.0.0-preview.1`
 - Protected environment: `nuget-preview`
+- NuGet.org Trusted Publishing policy:
+  `SekibanWasmRuntime GitHub Release NuGet Preview`
 - Dry-run command:
 
   ```bash
