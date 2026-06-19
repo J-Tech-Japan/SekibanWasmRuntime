@@ -83,3 +83,22 @@ NuGet publish trigger for `Sekiban.Dcb.WasmRuntime`,
 - [ ] Confirm the `release-nuget-preview` workflow readiness job passed.
 - [ ] Confirm the publish job pushed the intended packages. A missing NuGet
   credential is a failed publish attempt, not a successful skip.
+
+## Post-Publish NuGet.org Verification
+
+- [ ] Wait for NuGet.org indexing after the publish job succeeds.
+- [ ] Run the NuGet.org consumer verification for the exact package version:
+
+  ```bash
+  PACKAGE_VERSION=1.0.0-preview.<n> scripts/release/verify-nuget-org-packages.sh
+  ```
+
+- [ ] Confirm `Sekiban.Dcb.WasmRuntime`,
+  `Sekiban.Dcb.WasmRuntime.Remote`, and
+  `Sekiban.Dcb.WasmRuntime.Wasmtime` all restore from NuGet.org at the intended
+  version.
+- [ ] Confirm the generated consumer project builds against the NuGet.org
+  packages.
+- [ ] If any package is missing or delayed, follow
+  `reports/public-release/nuget-org-post-publish-verification.md` and do not
+  announce consumer availability until all three packages are available.
