@@ -21,6 +21,8 @@ NuGet publish trigger for `Sekiban.Dcb.WasmRuntime`,
 
 - [ ] Start from `.github/release-notes/nuget-preview.md`.
 - [ ] Copy the operator-relevant summary from `CHANGELOG.md`.
+- [ ] Confirm `reports/public-release/preview-release-notes-closeout.md` matches
+  the intended release version and blocker state.
 - [ ] Link `docs/release/migration-notes.md` when the release includes breaking
   public contract changes.
 - [ ] List known preview limitations that affect package selection, runtime
@@ -75,6 +77,8 @@ NuGet publish trigger for `Sekiban.Dcb.WasmRuntime`,
 
 - [ ] Confirm the release tag, release title, and package version agree.
 - [ ] Confirm the GitHub Release body uses the NuGet preview template.
+- [ ] Confirm any release-blocking notes in the GitHub Release body have been
+  resolved before clicking Publish.
 - [ ] Publish the GitHub Release only after all checklist items above are true.
 - [ ] Confirm the `release-nuget-preview` workflow readiness job passed.
 - [ ] Confirm the publish job pushed the intended packages. A missing NuGet
