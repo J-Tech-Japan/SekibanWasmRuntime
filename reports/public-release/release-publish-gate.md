@@ -23,6 +23,10 @@ repository.
 - `scripts/check-public-hygiene.sh` verifies public repository hygiene.
 - `scripts/release/write-artifact-inventory.sh` records package hashes and
   release-relevant tracked assets.
+- `reports/public-release/release-artifact-provenance-sbom-readiness.md`
+  records the preview artifact provenance and SBOM decision. The first NuGet
+  preview may proceed with package hashes and release evidence while formal
+  SBOM/provenance attestations are explicitly deferred.
 - `scripts/contract/run-serialized-dcb-contract-baseline.sh` proves the
   runtime-owned serialized DCB command, query, tag state, and compatibility
   contract baseline before publish.
@@ -52,3 +56,7 @@ Missing secrets cause a real `release.published` publish job to fail before
 `dotnet nuget push`, so a GitHub Release cannot appear successfully published to
 NuGet when credentials are absent. Pull requests, forks, and manual dry runs can
 validate readiness but do not attempt publish.
+
+Release notes must not claim SBOM publication, SLSA provenance, in-toto
+attestations, package signing, or reproducible-build certification unless a
+future release PR adds and verifies those artifacts.
