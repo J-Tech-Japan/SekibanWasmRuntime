@@ -51,19 +51,23 @@ The publish job runs only when all of these are true:
 - The event is `release.published`.
 - The repository is `J-Tech-Japan/SekibanWasmRuntime`.
 - The protected `nuget-preview` environment is approved.
-- `NUGET_API_KEY` is configured in that environment.
+- The publish job has `id-token: write` and can exchange GitHub Actions OIDC
+  through `NuGet/login@v1`.
+- The NuGet.org Trusted Publishing policy matches package owner `J-Tech-Japan`,
+  repository owner `J-Tech-Japan`, repository `SekibanWasmRuntime`, workflow
+  file `release-nuget-preview.yml`, and environment `nuget-preview`.
 
-Before publishing, operators must complete the safe environment and credential
+Before publishing, operators must complete the safe environment and policy
 preflight recorded in
 [`../../reports/public-release/nuget-environment-credential-preflight.md`](../../reports/public-release/nuget-environment-credential-preflight.md).
-If GitHub metadata cannot confirm the `nuget-preview` environment or the
-`NUGET_API_KEY` environment secret name, that uncertainty is release-blocking
-until an operator confirms both in repository settings. The preflight must never
-print or copy the secret value.
+If GitHub metadata cannot confirm the `nuget-preview` environment, or if an
+operator cannot confirm the NuGet.org Trusted Publishing policy, that
+uncertainty is release-blocking until both are confirmed.
 
-If the secret is missing on a real `release.published` event, the publish job
-fails before attempting `dotnet nuget push`. Forks and pull requests can run
-readiness checks, but they cannot publish.
+On a real `release.published` event, the workflow requests a short-lived NuGet
+API key through Trusted Publishing immediately before `dotnet nuget push`.
+Forks, pull requests, and manual dry runs can run readiness checks, but they
+cannot publish.
 
 ## Local Dry Run
 

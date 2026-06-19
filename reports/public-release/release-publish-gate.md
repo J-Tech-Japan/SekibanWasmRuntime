@@ -43,19 +43,22 @@ The publish job requires:
 - `release.published` event.
 - Canonical repository `J-Tech-Japan/SekibanWasmRuntime`.
 - Protected `nuget-preview` environment approval.
-- Configured `NUGET_API_KEY`.
+- `id-token: write` permission for the publish job.
+- NuGet.org Trusted Publishing policy
+  `SekibanWasmRuntime GitHub Release NuGet Preview`.
 
 `reports/public-release/nuget-environment-credential-preflight.md` records the
-operator-safe metadata preflight for the protected environment and environment
-secret name. If the environment or secret-name metadata cannot be verified
-automatically, operators must treat the release as blocked until repository
-settings confirm `nuget-preview` and its `NUGET_API_KEY` environment secret.
-Secret values must never be printed or committed.
+operator-safe metadata preflight for the protected environment and NuGet.org
+Trusted Publishing policy. If the environment or policy cannot be verified,
+operators must treat the release as blocked until repository settings confirm
+`nuget-preview` and NuGet.org confirms a matching active or temporarily active
+policy.
 
-Missing secrets cause a real `release.published` publish job to fail before
-`dotnet nuget push`, so a GitHub Release cannot appear successfully published to
-NuGet when credentials are absent. Pull requests, forks, and manual dry runs can
-validate readiness but do not attempt publish.
+The publish job obtains a short-lived NuGet API key through `NuGet/login@v1`
+immediately before `dotnet nuget push`. A failed OIDC exchange fails the real
+`release.published` publish job, so a GitHub Release cannot appear successfully
+published to NuGet when Trusted Publishing is absent or inactive. Pull requests,
+forks, and manual dry runs can validate readiness but do not attempt publish.
 
 Release notes must not claim SBOM publication, SLSA provenance, in-toto
 attestations, package signing, or reproducible-build certification unless a

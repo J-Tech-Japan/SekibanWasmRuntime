@@ -33,5 +33,5 @@ approval.
 
 The checklist also states that NuGet release is the first public release
 milestone, separate from the later code/repository release checklist, and that a
-missing `NUGET_API_KEY` fails a real `release.published` publish attempt instead
-of producing a successful skip.
+missing or inactive NuGet.org Trusted Publishing policy fails a real
+`release.published` publish attempt instead of producing a successful skip.

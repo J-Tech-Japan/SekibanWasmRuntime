@@ -41,14 +41,8 @@ write_header() {
     printf '| --- | --- | --- |\n'
     printf '| GitHub Release creation | PASS | Not attempted by this script. |\n'
     printf '| NuGet publish | PASS | `dotnet nuget push` is not invoked by this script. |\n'
+    printf '| Trusted Publishing OIDC exchange | PASS | Not requested by this local dry run; `NuGet/login@v1` runs only in the real `release.published` publish job after `nuget-preview` environment approval. |\n'
   } > "$report_path"
-
-  if [[ -n "${NUGET_API_KEY:-}" ]]; then
-    printf '| NuGet credential | PASS | `NUGET_API_KEY` is present, but dry-run mode does not use it. |\n' >> "$report_path"
-  else
-    printf '| NuGet credential | WARN | `NUGET_API_KEY` is missing; this is safe for dry-run and would block real publish. |\n' >> "$report_path"
-    warn_count=$((warn_count + 1))
-  fi
 
   printf '\n## Check Details\n\n' >> "$report_path"
 }
@@ -112,7 +106,7 @@ write_summary() {
     for row in "${step_rows[@]}"; do
       printf '%s\n' "$row"
     done
-    printf '| Missing NuGet credential behavior | WARN | `NUGET_API_KEY` environment check | Missing credentials are safe in dry-run; real publish remains blocked. |\n'
+    printf '| Trusted Publishing publish credential | PASS | Local dry-run scope | No long-lived NuGet API key is required for dry-run; the real publish job obtains a short-lived key through Trusted Publishing. |\n'
     printf '\n## Result\n\n'
     if (( fail_count > 0 )); then
       printf 'FAIL: `%s` readiness check(s) failed; fix blockers before publishing.\n' "$fail_count"
