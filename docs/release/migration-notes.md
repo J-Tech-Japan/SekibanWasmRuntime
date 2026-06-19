@@ -4,11 +4,13 @@ This file is the source of truth for public preview migration guidance.
 
 See [`versioning-and-changelog.md`](versioning-and-changelog.md) for the rules
 that decide when a migration note is required.
+The current preview public API comparison baseline is
+[`../../reports/public-release/public-api-semver-baseline.md`](../../reports/public-release/public-api-semver-baseline.md).
 
 ## Unreleased
 
 No breaking public contract change is introduced by the release process
-documentation update.
+documentation update or by recording the public API/SemVer baseline.
 
 ## Template For Breaking Changes
 
