@@ -58,9 +58,16 @@ NuGet publish trigger for `Sekiban.Dcb.WasmRuntime`,
 ## Publish Guard
 
 - [ ] The protected `nuget-preview` environment is configured.
+- [ ] `reports/public-release/nuget-environment-credential-preflight.md`
+  confirms whether the environment and credential metadata were checked
+  automatically or require manual operator confirmation.
 - [ ] The environment approval is granted only after the release notes and
   evidence links have been reviewed.
 - [ ] `NUGET_API_KEY` is configured in the `nuget-preview` environment.
+- [ ] Missing or unverified `nuget-preview` environment configuration is
+  treated as release-blocking.
+- [ ] Missing or unverified `NUGET_API_KEY` configuration is treated as
+  release-blocking.
 - [ ] Operators understand that a missing `NUGET_API_KEY` fails a real
   `release.published` publish attempt before `dotnet nuget push`.
 
