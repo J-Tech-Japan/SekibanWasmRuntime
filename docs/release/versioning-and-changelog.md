@@ -12,6 +12,7 @@ version, changelog, and migration-note discipline.
 | Human changelog | `CHANGELOG.md` | Add an `Unreleased` entry before every public preview release. |
 | Public release notes | GitHub Release body | Summarize the matching `CHANGELOG.md` entry and link migration notes when required. |
 | Migration guidance | `docs/release/migration-notes.md` | Add an entry for every breaking public contract change. |
+| Public API baseline | `reports/public-release/public-api-semver-baseline.md` | Refresh when public package types, serialized DTOs, package metadata, or dependency shape changes. |
 | Compatibility evidence | `reports/compatibility/serialized-dcb-contract-black-box-baseline.md` | Refresh when serialized public contracts change. |
 | Later source/repository release staging | `docs/release/code-repository-release-checklist.md` | Run only after NuGet readiness passes or a release-blocking deferral is recorded. |
 
@@ -56,6 +57,8 @@ Breaking public contract changes require all of the following before release:
 - A `CHANGELOG.md` entry that names the breaking change.
 - A `docs/release/migration-notes.md` entry with affected packages, migration
   steps, and compatibility impact.
+- A refreshed `reports/public-release/public-api-semver-baseline.md` entry or
+  linked API-diff evidence when public package surface changes.
 - Compatibility evidence from the serialized DCB contract baseline, or an
   explicit release-blocking note explaining why evidence is not available.
 - GitHub Release notes that link the migration entry.
@@ -72,9 +75,11 @@ release PR is considered ready.
 3. Confirm `CHANGELOG.md` has the release entry.
 4. Confirm `docs/release/migration-notes.md` has entries for every breaking
    public contract change, or explicitly says none are required for the release.
-5. Confirm compatibility evidence is current when serialized contracts changed.
-6. Run the preview readiness dry run and keep the resulting evidence pack.
-7. For later source/repository publication, run
+5. Confirm `reports/public-release/public-api-semver-baseline.md` is current
+   when public package surfaces changed.
+6. Confirm compatibility evidence is current when serialized contracts changed.
+7. Run the preview readiness dry run and keep the resulting evidence pack.
+8. For later source/repository publication, run
    `docs/release/code-repository-release-checklist.md` after NuGet readiness is
    complete or explicitly deferred as release-blocking.
-8. Run `git diff --check`.
+9. Run `git diff --check`.
