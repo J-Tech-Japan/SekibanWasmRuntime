@@ -53,6 +53,14 @@ The publish job runs only when all of these are true:
 - The protected `nuget-preview` environment is approved.
 - `NUGET_API_KEY` is configured in that environment.
 
+Before publishing, operators must complete the safe environment and credential
+preflight recorded in
+[`../../reports/public-release/nuget-environment-credential-preflight.md`](../../reports/public-release/nuget-environment-credential-preflight.md).
+If GitHub metadata cannot confirm the `nuget-preview` environment or the
+`NUGET_API_KEY` environment secret name, that uncertainty is release-blocking
+until an operator confirms both in repository settings. The preflight must never
+print or copy the secret value.
+
 If the secret is missing on a real `release.published` event, the publish job
 fails before attempting `dotnet nuget push`. Forks and pull requests can run
 readiness checks, but they cannot publish.
