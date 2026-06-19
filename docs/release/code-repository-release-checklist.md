@@ -38,6 +38,8 @@ checklist and must not be used to publish packages.
 - [ ] README, package README, and contribution docs consistently explain that
   users may use, modify, redistribute, and self-host SekibanWasmRuntime,
   including for internal company use.
+- [ ] `reports/public-release/license-boundary-commercial-use-signoff.md`
+  records the current public-facing wording review and any release blocker.
 - [ ] The same docs consistently explain that third-party hosted service,
   managed service, SaaS, or similar cloud-provider substitution requires a
   separate commercial license from J-Tech Japan.

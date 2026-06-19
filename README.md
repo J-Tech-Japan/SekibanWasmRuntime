@@ -20,6 +20,9 @@ service, SaaS, or similar offering that gives users access to a substantial set
 of its features, unless a separate commercial license has been agreed with
 J-Tech Japan.
 
+Public release signoff for this boundary is tracked in
+[`reports/public-release/license-boundary-commercial-use-signoff.md`](reports/public-release/license-boundary-commercial-use-signoff.md).
+
 ## Prerequisites
 
 - [.NET 10.0 SDK](https://dotnet.microsoft.com/download)

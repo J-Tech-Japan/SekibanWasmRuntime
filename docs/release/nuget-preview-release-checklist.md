@@ -23,6 +23,9 @@ NuGet publish trigger for `Sekiban.Dcb.WasmRuntime`,
 - [ ] Copy the operator-relevant summary from `CHANGELOG.md`.
 - [ ] Confirm `reports/public-release/preview-release-notes-closeout.md` matches
   the intended release version and blocker state.
+- [ ] Confirm
+  `reports/public-release/license-boundary-commercial-use-signoff.md` has no
+  unresolved wording drift before package publication.
 - [ ] Link `docs/release/migration-notes.md` when the release includes breaking
   public contract changes.
 - [ ] List known preview limitations that affect package selection, runtime
@@ -70,6 +73,9 @@ NuGet publish trigger for `Sekiban.Dcb.WasmRuntime`,
   treated as release-blocking.
 - [ ] Missing or unverified `NUGET_API_KEY` configuration is treated as
   release-blocking.
+- [ ] Missing operator/legal approval for
+  `reports/public-release/license-boundary-commercial-use-signoff.md` is treated
+  as release-blocking.
 - [ ] Operators understand that a missing `NUGET_API_KEY` fails a real
   `release.published` publish attempt before `dotnet nuget push`.
 
