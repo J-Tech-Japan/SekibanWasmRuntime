@@ -14,6 +14,7 @@ version, changelog, and migration-note discipline.
 | Migration guidance | `docs/release/migration-notes.md` | Add an entry for every breaking public contract change. |
 | Public API baseline | `reports/public-release/public-api-semver-baseline.md` | Refresh when public package types, serialized DTOs, package metadata, or dependency shape changes. |
 | Compatibility evidence | `reports/compatibility/serialized-dcb-contract-black-box-baseline.md` | Refresh when serialized public contracts change. |
+| Artifact provenance and SBOM decision | `reports/public-release/release-artifact-provenance-sbom-readiness.md` | Confirm the implemented/deferred status before every public preview release. |
 | Later source/repository release staging | `docs/release/code-repository-release-checklist.md` | Run only after NuGet readiness passes or a release-blocking deferral is recorded. |
 
 `Directory.Build.props` supplies the repository default `VersionPrefix` for the
@@ -78,8 +79,11 @@ release PR is considered ready.
 5. Confirm `reports/public-release/public-api-semver-baseline.md` is current
    when public package surfaces changed.
 6. Confirm compatibility evidence is current when serialized contracts changed.
-7. Run the preview readiness dry run and keep the resulting evidence pack.
-8. For later source/repository publication, run
+7. Confirm the artifact provenance and SBOM readiness report still matches the
+   release being published, and that release notes do not advertise deferred
+   supply-chain artifacts.
+8. Run the preview readiness dry run and keep the resulting evidence pack.
+9. For later source/repository publication, run
    `docs/release/code-repository-release-checklist.md` after NuGet readiness is
    complete or explicitly deferred as release-blocking.
-9. Run `git diff --check`.
+10. Run `git diff --check`.

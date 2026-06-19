@@ -10,7 +10,8 @@ The current preview public API comparison baseline is
 ## Unreleased
 
 No breaking public contract change is introduced by the release process
-documentation update or by recording the public API/SemVer baseline.
+documentation updates, by recording the public API/SemVer baseline, or by
+recording the preview provenance/SBOM deferral.
 
 ## Template For Breaking Changes
 
