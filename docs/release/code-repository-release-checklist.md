@@ -49,6 +49,13 @@ checklist and must not be used to publish packages.
 
 ## Final Checks
 
+- [ ] Run the source/repository publication dry run and review the generated
+  report:
+
+  ```bash
+  scripts/release/dry-run-code-publication.sh
+  ```
+
 - [ ] Run a link/path review across README, package README, CONTRIBUTING, and
   release docs.
 - [ ] Confirm no reserved cloud-service product branding is present.
