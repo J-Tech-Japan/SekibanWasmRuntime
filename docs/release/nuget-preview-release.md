@@ -56,6 +56,9 @@ The publish job runs only when all of these are true:
 - The NuGet.org Trusted Publishing policy matches package owner `J-Tech-Japan`,
   repository owner `J-Tech-Japan`, repository `SekibanWasmRuntime`, workflow
   file `release-nuget-preview.yml`, and environment `nuget-preview`.
+- The `NuGet/login@v1` `user` input is the NuGet.org policy creator username
+  `tomohisa_takaoka`; this is intentionally not the package owner
+  `J-Tech-Japan`.
 
 Before publishing, operators must complete the safe environment and policy
 preflight recorded in

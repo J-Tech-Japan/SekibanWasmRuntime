@@ -111,7 +111,7 @@ jobs:
         id: nuget-login
         uses: NuGet/login@v1
         with:
-          user: J-Tech-Japan
+          user: tomohisa_takaoka
 
       - name: Publish packages
         run: |

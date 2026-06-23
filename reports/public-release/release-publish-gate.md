@@ -46,6 +46,8 @@ The publish job requires:
 - `id-token: write` permission for the publish job.
 - NuGet.org Trusted Publishing policy
   `SekibanWasmRuntime GitHub Release NuGet Preview`.
+- `NuGet/login@v1` configured with the NuGet.org policy creator username
+  `tomohisa_takaoka`, not the package owner `J-Tech-Japan`.
 
 `reports/public-release/nuget-environment-credential-preflight.md` records the
 operator-safe metadata preflight for the protected environment and NuGet.org

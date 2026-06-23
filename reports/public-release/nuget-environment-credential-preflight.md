@@ -49,12 +49,15 @@ access must confirm:
    rules for a NuGet preview publish.
 3. NuGet.org Trusted Publishing contains policy
    `SekibanWasmRuntime GitHub Release NuGet Preview`.
-4. The policy owner is `J-Tech-Japan`, repository owner is `J-Tech-Japan`,
+4. The package owner is `J-Tech-Japan`, repository owner is `J-Tech-Japan`,
    repository is `SekibanWasmRuntime`, workflow file is
    `release-nuget-preview.yml`, and environment is `nuget-preview`.
-5. If the policy is temporarily active, it is still within the 7-day activation
+5. The GitHub Actions `NuGet/login@v1` `user` input uses the NuGet.org policy
+   creator username `tomohisa_takaoka`, not the package owner
+   `J-Tech-Japan`.
+6. If the policy is temporarily active, it is still within the 7-day activation
    window for the first successful publish.
-6. The release is not published until the dry-run evidence and release notes
+7. The release is not published until the dry-run evidence and release notes
    are reviewed and the environment approval is intentionally granted.
 
 ## Release-Blocking Rule
