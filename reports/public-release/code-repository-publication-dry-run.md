@@ -72,11 +72,13 @@ ok: reports/public-release/readiness-inventory.md
 ok: reports/public-release/hygiene-guardrail.md
 ok: reports/public-release/wasmtime-preview-inspection.md
 ok: reports/public-release/consumer-smoke-local-packages.md
+ok: reports/public-release/release-artifact-provenance-sbom-readiness.md
 ok: NuGet packages declare LICENSE
 ok: NuGet packages declare README
 ok: NuGet packages declare repository URL
 ok: README license disclosure
 ok: NOTICE attribution content
+ok: preview SBOM/provenance deferral
 license and notice check passed
 ```
 

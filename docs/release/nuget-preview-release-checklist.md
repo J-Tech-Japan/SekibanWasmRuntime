@@ -23,9 +23,9 @@ NuGet publish trigger for `Sekiban.Dcb.WasmRuntime`,
 - [ ] Copy the operator-relevant summary from `CHANGELOG.md`.
 - [ ] Confirm `reports/public-release/preview-release-notes-closeout.md` matches
   the intended release version and blocker state.
-- [ ] Confirm
-  `reports/public-release/license-boundary-commercial-use-signoff.md` has no
-  unresolved wording drift before package publication.
+- [ ] Confirm operator/legal approval for the public ELv2 boundary wording has
+  no unresolved drift before package publication. The approval evidence is
+  retained outside this public repository.
 - [ ] Link `docs/release/migration-notes.md` when the release includes breaking
   public contract changes.
 - [ ] List known preview limitations that affect package selection, runtime
@@ -79,9 +79,9 @@ NuGet publish trigger for `Sekiban.Dcb.WasmRuntime`,
   is treated as release-blocking.
 - [ ] Operators understand that a newly created policy may be temporarily active
   for 7 days until the first successful publish activates it permanently.
-- [ ] Missing operator/legal approval for
-  `reports/public-release/license-boundary-commercial-use-signoff.md` is treated
-  as release-blocking.
+- [ ] Missing operator/legal approval for the public ELv2 boundary wording is
+  treated as release-blocking. Do not publish host-only signoff evidence in this
+  repository.
 - [ ] Operators understand that the publish job exchanges GitHub Actions OIDC
   for a short-lived NuGet API key immediately before `dotnet nuget push`.
 

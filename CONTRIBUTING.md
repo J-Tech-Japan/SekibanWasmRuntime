@@ -17,9 +17,6 @@ self-hosted, including for internal company use, but third-party hosted service,
 managed service, SaaS, or similar cloud-provider substitution requires a
 separate commercial license from J-Tech Japan.
 
-Public release signoff for that boundary is tracked in
-[reports/public-release/license-boundary-commercial-use-signoff.md](reports/public-release/license-boundary-commercial-use-signoff.md).
-
 ## Working guidelines
 
 See [CLAUDE.md](CLAUDE.md) for the repository's working conventions (branching,
