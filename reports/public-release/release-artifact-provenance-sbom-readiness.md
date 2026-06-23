@@ -20,8 +20,9 @@ the package set:
   command evidence and links the generated artifact inventory step.
 - `reports/public-release/package-inspection.md` records package metadata,
   dependencies, and native content assets for the public package candidates.
-- `reports/public-release/license-boundary-commercial-use-signoff.md` records
-  the license/commercial-use boundary for the public preview.
+- Public README, package README, contribution docs, and release notes record
+  the license/commercial-use boundary for the public preview. Operator/legal
+  signoff evidence is retained outside this public repository.
 
 This is sufficient provenance evidence for the first NuGet preview because the
 release is operator-approved, GitHub Release driven, package hashes are

@@ -231,7 +231,6 @@ PASS: readiness checks passed without warnings.
     reports/public-release/code-repository-release-staging.md
     reports/public-release/consumer-smoke-local-packages.md
     reports/public-release/hygiene-guardrail.md
-    reports/public-release/license-boundary-commercial-use-signoff.md
     reports/public-release/nuget-environment-credential-preflight.md
     reports/public-release/nuget-org-post-publish-verification.md
     reports/public-release/opentelemetry-vulnerability-triage.md
