@@ -31,13 +31,13 @@ See `docs/quickstart.md` and `docs/nuget/package-readme.md` for package selectio
 
 ```text
   Determining projects to restore...
-  Restored /Users/tomohisa/dev/GitHub/SekibanWasmRuntime/artifacts/consumer-smoke-public-report/SekibanWasmRuntime.ConsumerSmoke/SekibanWasmRuntime.ConsumerSmoke.csproj (in 128 ms).
+  Restored <repo>/artifacts/consumer-smoke-public-report/SekibanWasmRuntime.ConsumerSmoke/SekibanWasmRuntime.ConsumerSmoke.csproj (in 128 ms).
 ```
 
 ## Build Output
 
 ```text
-  SekibanWasmRuntime.ConsumerSmoke -> /Users/tomohisa/dev/GitHub/SekibanWasmRuntime/artifacts/consumer-smoke-public-report/SekibanWasmRuntime.ConsumerSmoke/bin/Release/net10.0/SekibanWasmRuntime.ConsumerSmoke.dll
+  SekibanWasmRuntime.ConsumerSmoke -> <repo>/artifacts/consumer-smoke-public-report/SekibanWasmRuntime.ConsumerSmoke/bin/Release/net10.0/SekibanWasmRuntime.ConsumerSmoke.dll
 
 Build succeeded.
     0 Warning(s)

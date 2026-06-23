@@ -3,6 +3,7 @@ set -uo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
 
+repo_root="$(pwd)"
 package_version="${PACKAGE_VERSION:-${1:-1.0.0-preview.1}}"
 package_version="${package_version#v}"
 
@@ -50,7 +51,8 @@ write_header() {
 append_output_block() {
   local output_file="$1"
   if [[ -s "$output_file" ]]; then
-    sed -e 's/\r$//' "$output_file" | awk '{ if ($0 == "") print ""; else print "    " $0 }' >> "$report_path"
+    sed -e 's/\r$//' -e "s#${repo_root}#<repo>#g" "$output_file" |
+      awk '{ if ($0 == "") print ""; else print "    " $0 }' >> "$report_path"
     printf '\n' >> "$report_path"
   else
     printf '_No output._\n\n' >> "$report_path"

@@ -69,6 +69,7 @@ require_file LICENSE "LICENSE"
 require_file NOTICE "NOTICE"
 require_file docs/release/code-repository-release-checklist.md "Code release checklist"
 require_file reports/public-release/preview-release-dry-run.md "NuGet dry-run evidence"
+require_file reports/public-release/evidence-boundary-classification.md "Public evidence boundary classification"
 require_file reports/public-release/nuget-org-post-publish-verification.md "NuGet.org post-publish verification path"
 
 require_text README.md 'Elastic License 2\.0|Elastic License' "README license boundary" "README links the ELv2 license boundary."

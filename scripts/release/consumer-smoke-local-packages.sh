@@ -3,6 +3,7 @@ set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
 
+repo_root="$(pwd)"
 package_version="${PACKAGE_VERSION:-${1:-1.0.0-preview.1}}"
 package_version="${package_version#v}"
 
@@ -124,6 +125,10 @@ EOF
 restore_log="$smoke_root/restore.log"
 build_log="$smoke_root/build.log"
 
+sanitize_output() {
+  sed -e 's/\r$//' -e "s#${repo_root}#<repo>#g"
+}
+
 write_failure_report() {
   local failed_step="$1"
   {
@@ -136,13 +141,13 @@ write_failure_report() {
     if [[ -s "$restore_log" ]]; then
       printf '## Restore Output\n\n'
       printf '```text\n'
-      sed -e 's/\r$//' "$restore_log"
+      sanitize_output < "$restore_log"
       printf '```\n\n'
     fi
     if [[ -s "$build_log" ]]; then
       printf '## Build Output\n\n'
       printf '```text\n'
-      sed -e 's/\r$//' "$build_log"
+      sanitize_output < "$build_log"
       printf '```\n'
     fi
   } > "$report_path"
@@ -188,11 +193,11 @@ fi
   printf 'See `docs/quickstart.md` and `docs/nuget/package-readme.md` for package selection guidance.\n\n'
   printf '## Restore Output\n\n'
   printf '```text\n'
-  sed -e 's/\r$//' "$restore_log"
+  sanitize_output < "$restore_log"
   printf '```\n\n'
   printf '## Build Output\n\n'
   printf '```text\n'
-  sed -e 's/\r$//' "$build_log"
+  sanitize_output < "$build_log"
   printf '```\n'
 } > "$report_path"
 

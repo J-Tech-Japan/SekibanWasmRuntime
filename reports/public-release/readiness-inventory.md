@@ -78,7 +78,7 @@ Result summary:
 - SDK: `10.0.100`
 - Workload: `wasi-experimental` installed
 - Host runtime: `11.0.0-preview.3.26207.106`
-- `global.json`: `/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/global.json`
+- `global.json`: `<repo>/global.json`
 - `global.json` pins SDK `10.0.100` with `rollForward: latestFeature`
 
 ### Latest Main CI

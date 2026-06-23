@@ -16,14 +16,14 @@ for the version, changelog, migration-note, and compatibility evidence rules.
 - Release status: GitHub Release notes, changelog content, dry-run evidence,
   compatibility evidence, and publish-gate documentation are prepared for the
   NuGet preview release. The actual GitHub Release and NuGet publish remain
-  blocked until an operator confirms the `nuget-preview` protected environment
-  and its `NUGET_API_KEY` environment secret in repository settings.
+  blocked until the `nuget-preview` protected environment and NuGet.org Trusted
+  Publishing policy are confirmed in repository/package-owner settings.
 - Established the initial public preview package baseline for:
   `Sekiban.Dcb.WasmRuntime`, `Sekiban.Dcb.WasmRuntime.Remote`, and
   `Sekiban.Dcb.WasmRuntime.Wasmtime`.
 - Hardened the NuGet preview release workflow so readiness runs the serialized
-  DCB contract baseline and real release publishes fail when `NUGET_API_KEY` is
-  missing.
+  DCB contract baseline and real release publishes use NuGet.org Trusted
+  Publishing instead of a long-lived NuGet API key.
 - Added a local NuGet consumer smoke that restores and builds a generated
   project against locally packed preview packages before publication.
 - Added a NuGet preview GitHub Release checklist and release notes template for

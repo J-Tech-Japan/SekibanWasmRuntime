@@ -24,6 +24,7 @@ NuGet release readiness remains the upstream gate for source publication. The lo
 | NOTICE | PASS | `NOTICE` exists and is non-empty. |
 | Code release checklist | PASS | `docs/release/code-repository-release-checklist.md` exists and is non-empty. |
 | NuGet dry-run evidence | PASS | `reports/public-release/preview-release-dry-run.md` exists and is non-empty. |
+| Public evidence boundary classification | PASS | `reports/public-release/evidence-boundary-classification.md` exists and is non-empty. |
 | NuGet.org post-publish verification path | PASS | `reports/public-release/nuget-org-post-publish-verification.md` exists and is non-empty. |
 | README license boundary | PASS | README links the ELv2 license boundary. |
 | Contribution license boundary | PASS | CONTRIBUTING keeps contributions under ELv2. |
@@ -70,6 +71,7 @@ ok: README.md
 ok: docs/nuget/package-readme.md
 ok: reports/public-release/readiness-inventory.md
 ok: reports/public-release/hygiene-guardrail.md
+ok: reports/public-release/evidence-boundary-classification.md
 ok: reports/public-release/wasmtime-preview-inspection.md
 ok: reports/public-release/consumer-smoke-local-packages.md
 ok: reports/public-release/release-artifact-provenance-sbom-readiness.md
@@ -78,6 +80,7 @@ ok: NuGet packages declare README
 ok: NuGet packages declare repository URL
 ok: README license disclosure
 ok: NOTICE attribution content
+ok: public evidence boundary classification
 ok: preview SBOM/provenance deferral
 license and notice check passed
 ```

@@ -33,6 +33,7 @@ require_file README.md
 require_file docs/nuget/package-readme.md
 require_file reports/public-release/readiness-inventory.md
 require_file reports/public-release/hygiene-guardrail.md
+require_file reports/public-release/evidence-boundary-classification.md
 require_file reports/public-release/wasmtime-preview-inspection.md
 require_file reports/public-release/consumer-smoke-local-packages.md
 require_file reports/public-release/release-artifact-provenance-sbom-readiness.md
@@ -42,6 +43,7 @@ require_text Directory.Build.props '<PackageReadmeFile>README.md</PackageReadmeF
 require_text Directory.Build.props '<RepositoryUrl>https://github.com/J-Tech-Japan/SekibanWasmRuntime</RepositoryUrl>' 'NuGet packages declare repository URL'
 require_text README.md 'Elastic License 2\.0|Elastic License' 'README license disclosure'
 require_text NOTICE 'Wasmtime|Sekiban' 'NOTICE attribution content'
+require_text reports/public-release/evidence-boundary-classification.md 'Host-Only Material Excluded' 'public evidence boundary classification'
 require_text reports/public-release/release-artifact-provenance-sbom-readiness.md 'Formal SBOM and provenance attestations are deferred' 'preview SBOM/provenance deferral'
 
 if (( fail != 0 )); then
