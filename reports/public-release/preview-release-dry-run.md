@@ -48,20 +48,20 @@ PASS: readiness checks passed without warnings.
 
       Determining projects to restore...
       All projects are up-to-date for restore.
-    /Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/lib/Sekiban.Dcb.WasmRuntime/WasmProjectionRuntime.cs(224,35): warning CS8604: Possible null reference argument for parameter 'stateJson' in 'void IPrimitiveProjectionInstance.RestoreState(string stateJson)'. [/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/lib/Sekiban.Dcb.WasmRuntime/Sekiban.Dcb.WasmRuntime.csproj]
-      Sekiban.Dcb.WasmRuntime -> /Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/lib/Sekiban.Dcb.WasmRuntime/bin/Release/net10.0/Sekiban.Dcb.WasmRuntime.dll
-      Successfully created package '/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/artifacts/preview-release-dry-run/nuget/Sekiban.Dcb.WasmRuntime.1.0.0-preview.1.nupkg'.
+    <repo>/src/lib/Sekiban.Dcb.WasmRuntime/WasmProjectionRuntime.cs(224,35): warning CS8604: Possible null reference argument for parameter 'stateJson' in 'void IPrimitiveProjectionInstance.RestoreState(string stateJson)'. [<repo>/src/lib/Sekiban.Dcb.WasmRuntime/Sekiban.Dcb.WasmRuntime.csproj]
+      Sekiban.Dcb.WasmRuntime -> <repo>/src/lib/Sekiban.Dcb.WasmRuntime/bin/Release/net10.0/Sekiban.Dcb.WasmRuntime.dll
+      Successfully created package '<repo>/artifacts/preview-release-dry-run/nuget/Sekiban.Dcb.WasmRuntime.1.0.0-preview.1.nupkg'.
       Determining projects to restore...
       All projects are up-to-date for restore.
-      Sekiban.Dcb.WasmRuntime -> /Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/lib/Sekiban.Dcb.WasmRuntime/bin/Release/net10.0/Sekiban.Dcb.WasmRuntime.dll
-      Sekiban.Dcb.WasmRuntime.Remote -> /Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/lib/Sekiban.Dcb.WasmRuntime.Remote/bin/Release/net10.0/Sekiban.Dcb.WasmRuntime.Remote.dll
-      Successfully created package '/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/artifacts/preview-release-dry-run/nuget/Sekiban.Dcb.WasmRuntime.Remote.1.0.0-preview.1.nupkg'.
+      Sekiban.Dcb.WasmRuntime -> <repo>/src/lib/Sekiban.Dcb.WasmRuntime/bin/Release/net10.0/Sekiban.Dcb.WasmRuntime.dll
+      Sekiban.Dcb.WasmRuntime.Remote -> <repo>/src/lib/Sekiban.Dcb.WasmRuntime.Remote/bin/Release/net10.0/Sekiban.Dcb.WasmRuntime.Remote.dll
+      Successfully created package '<repo>/artifacts/preview-release-dry-run/nuget/Sekiban.Dcb.WasmRuntime.Remote.1.0.0-preview.1.nupkg'.
       Determining projects to restore...
       All projects are up-to-date for restore.
-      Sekiban.Dcb.WasmRuntime -> /Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/lib/Sekiban.Dcb.WasmRuntime/bin/Release/net10.0/Sekiban.Dcb.WasmRuntime.dll
-      Wasmtime -> /Users/tomohisa/dev/GitHub/SekibanWasmRuntime/external/wasmtime-dotnet/src/bin/Release/net9.0/Wasmtime.Dotnet.dll
-      Sekiban.Dcb.WasmRuntime.Wasmtime -> /Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/lib/Sekiban.Dcb.WasmRuntime.Wasmtime/bin/Release/net10.0/Sekiban.Dcb.WasmRuntime.Wasmtime.dll
-      Successfully created package '/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/artifacts/preview-release-dry-run/nuget/Sekiban.Dcb.WasmRuntime.Wasmtime.1.0.0-preview.1.nupkg'.
+      Sekiban.Dcb.WasmRuntime -> <repo>/src/lib/Sekiban.Dcb.WasmRuntime/bin/Release/net10.0/Sekiban.Dcb.WasmRuntime.dll
+      Wasmtime -> <repo>/external/wasmtime-dotnet/src/bin/Release/net9.0/Wasmtime.Dotnet.dll
+      Sekiban.Dcb.WasmRuntime.Wasmtime -> <repo>/src/lib/Sekiban.Dcb.WasmRuntime.Wasmtime/bin/Release/net10.0/Sekiban.Dcb.WasmRuntime.Wasmtime.dll
+      Successfully created package '<repo>/artifacts/preview-release-dry-run/nuget/Sekiban.Dcb.WasmRuntime.Wasmtime.1.0.0-preview.1.nupkg'.
     # NuGet Package Inspection
 
     Package version: `1.0.0-preview.1`
@@ -140,13 +140,13 @@ PASS: readiness checks passed without warnings.
 
     ```text
       Determining projects to restore...
-      Restored /Users/tomohisa/dev/GitHub/SekibanWasmRuntime/artifacts/preview-release-dry-run/consumer-smoke/SekibanWasmRuntime.ConsumerSmoke/SekibanWasmRuntime.ConsumerSmoke.csproj (in 459 ms).
+      Restored <repo>/artifacts/preview-release-dry-run/consumer-smoke/SekibanWasmRuntime.ConsumerSmoke/SekibanWasmRuntime.ConsumerSmoke.csproj (in 459 ms).
     ```
 
     ## Build Output
 
     ```text
-      SekibanWasmRuntime.ConsumerSmoke -> /Users/tomohisa/dev/GitHub/SekibanWasmRuntime/artifacts/preview-release-dry-run/consumer-smoke/SekibanWasmRuntime.ConsumerSmoke/bin/Release/net10.0/SekibanWasmRuntime.ConsumerSmoke.dll
+      SekibanWasmRuntime.ConsumerSmoke -> <repo>/artifacts/preview-release-dry-run/consumer-smoke/SekibanWasmRuntime.ConsumerSmoke/bin/Release/net10.0/SekibanWasmRuntime.ConsumerSmoke.dll
 
     Build succeeded.
         0 Warning(s)
@@ -230,6 +230,7 @@ PASS: readiness checks passed without warnings.
     reports/public-release/code-repository-publication-dry-run.md
     reports/public-release/code-repository-release-staging.md
     reports/public-release/consumer-smoke-local-packages.md
+    reports/public-release/evidence-boundary-classification.md
     reports/public-release/hygiene-guardrail.md
     reports/public-release/nuget-environment-credential-preflight.md
     reports/public-release/nuget-org-post-publish-verification.md
@@ -303,26 +304,26 @@ PASS: readiness checks passed without warnings.
 
     ## Output
 
-          Sekiban.Dcb.WasmRuntime -> /Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/lib/Sekiban.Dcb.WasmRuntime/bin/Release/net10.0/Sekiban.Dcb.WasmRuntime.dll
-          Sekiban.Dcb.Core.Model -> /Users/tomohisa/dev/GitHub/SekibanWasmRuntime/submodules/Sekiban/dcb/src/Sekiban.Dcb.Core.Model/bin/Release/net10.0/Sekiban.Dcb.Core.Model.dll
-          Sekiban.Dcb.WasmRuntime.Remote -> /Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/lib/Sekiban.Dcb.WasmRuntime.Remote/bin/Release/net10.0/Sekiban.Dcb.WasmRuntime.Remote.dll
-          Wasmtime -> /Users/tomohisa/dev/GitHub/SekibanWasmRuntime/external/wasmtime-dotnet/src/bin/Release/net9.0/Wasmtime.Dotnet.dll
-          SekibanWasm.Cs.ServiceDefaults -> /Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/internalUsages/cs/SekibanWasm.Cs.ServiceDefaults/bin/Release/net10.0/SekibanWasm.Cs.ServiceDefaults.dll
-          Sekiban.Dcb.WasmRuntime.Wasmtime -> /Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/lib/Sekiban.Dcb.WasmRuntime.Wasmtime/bin/Release/net10.0/Sekiban.Dcb.WasmRuntime.Wasmtime.dll
-          SekibanDcbDecider.MeetingRoomModels -> /Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Ts/SekibanDcbDecider.MeetingRoomModels/bin/Release/net10.0/SekibanDcbDecider.MeetingRoomModels.dll
-          Sekiban.Dcb.Core -> /Users/tomohisa/dev/GitHub/SekibanWasmRuntime/submodules/Sekiban/dcb/src/Sekiban.Dcb.Core/bin/Release/net10.0/Sekiban.Dcb.Core.dll
-          Sekiban.Dcb.WithoutResult.Model -> /Users/tomohisa/dev/GitHub/SekibanWasmRuntime/submodules/Sekiban/dcb/src/Sekiban.Dcb.WithoutResult.Model/bin/Release/net10.0/Sekiban.Dcb.WithoutResult.Model.dll
-          Sekiban.Dcb.WithoutResult -> /Users/tomohisa/dev/GitHub/SekibanWasmRuntime/submodules/Sekiban/dcb/src/Sekiban.Dcb.WithoutResult/bin/Release/net10.0/Sekiban.Dcb.WithoutResult.dll
-          SekibanWasm.Cs.Domain -> /Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/internalUsages/cs/SekibanWasm.Cs.Domain/bin/Release/net10.0/SekibanWasm.Cs.Domain.dll
-        /Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/runtime/Sekiban.Dcb.WasmRuntime.Host/Program.cs(30,7): warning CS0105: The using directive for 'Microsoft.Extensions.DependencyInjection.Extensions' appeared previously in this namespace [/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/runtime/Sekiban.Dcb.WasmRuntime.Host/Sekiban.Dcb.WasmRuntime.Host.csproj]
-        /Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/runtime/Sekiban.Dcb.WasmRuntime.Host/Program.cs(887,38): warning CS8602: Dereference of a possibly null reference. [/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/runtime/Sekiban.Dcb.WasmRuntime.Host/Sekiban.Dcb.WasmRuntime.Host.csproj]
-        /Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/runtime/Sekiban.Dcb.WasmRuntime.Host/Program.cs(1133,25): warning CS8602: Dereference of a possibly null reference. [/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/runtime/Sekiban.Dcb.WasmRuntime.Host/Sekiban.Dcb.WasmRuntime.Host.csproj]
-        /Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/runtime/Sekiban.Dcb.WasmRuntime.Host/Program.cs(737,5): warning CS0162: Unreachable code detected [/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/runtime/Sekiban.Dcb.WasmRuntime.Host/Sekiban.Dcb.WasmRuntime.Host.csproj]
-          Sekiban.Dcb.WasmRuntime.Host -> /Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/runtime/Sekiban.Dcb.WasmRuntime.Host/bin/Release/net10.0/Sekiban.Dcb.WasmRuntime.Host.dll
-          SekibanWasm.Cs.ClientApi -> /Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/internalUsages/cs/SekibanWasm.Cs.ClientApi/bin/Release/net10.0/SekibanWasm.Cs.ClientApi.dll
-        /Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/internalUsages/cs/SekibanWasm.Cs.Tests/RemoteSekibanExecutorTests.cs(199,21): warning CS8602: Dereference of a possibly null reference. [/Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/internalUsages/cs/SekibanWasm.Cs.Tests/SekibanWasm.Cs.Tests.csproj]
-          SekibanWasm.Cs.Tests -> /Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/internalUsages/cs/SekibanWasm.Cs.Tests/bin/Release/net10.0/SekibanWasm.Cs.Tests.dll
-        Test run for /Users/tomohisa/dev/GitHub/SekibanWasmRuntime/src/internalUsages/cs/SekibanWasm.Cs.Tests/bin/Release/net10.0/SekibanWasm.Cs.Tests.dll (.NETCoreApp,Version=v10.0)
+          Sekiban.Dcb.WasmRuntime -> <repo>/src/lib/Sekiban.Dcb.WasmRuntime/bin/Release/net10.0/Sekiban.Dcb.WasmRuntime.dll
+          Sekiban.Dcb.Core.Model -> <repo>/submodules/Sekiban/dcb/src/Sekiban.Dcb.Core.Model/bin/Release/net10.0/Sekiban.Dcb.Core.Model.dll
+          Sekiban.Dcb.WasmRuntime.Remote -> <repo>/src/lib/Sekiban.Dcb.WasmRuntime.Remote/bin/Release/net10.0/Sekiban.Dcb.WasmRuntime.Remote.dll
+          Wasmtime -> <repo>/external/wasmtime-dotnet/src/bin/Release/net9.0/Wasmtime.Dotnet.dll
+          SekibanWasm.Cs.ServiceDefaults -> <repo>/src/internalUsages/cs/SekibanWasm.Cs.ServiceDefaults/bin/Release/net10.0/SekibanWasm.Cs.ServiceDefaults.dll
+          Sekiban.Dcb.WasmRuntime.Wasmtime -> <repo>/src/lib/Sekiban.Dcb.WasmRuntime.Wasmtime/bin/Release/net10.0/Sekiban.Dcb.WasmRuntime.Wasmtime.dll
+          SekibanDcbDecider.MeetingRoomModels -> <repo>/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Ts/SekibanDcbDecider.MeetingRoomModels/bin/Release/net10.0/SekibanDcbDecider.MeetingRoomModels.dll
+          Sekiban.Dcb.Core -> <repo>/submodules/Sekiban/dcb/src/Sekiban.Dcb.Core/bin/Release/net10.0/Sekiban.Dcb.Core.dll
+          Sekiban.Dcb.WithoutResult.Model -> <repo>/submodules/Sekiban/dcb/src/Sekiban.Dcb.WithoutResult.Model/bin/Release/net10.0/Sekiban.Dcb.WithoutResult.Model.dll
+          Sekiban.Dcb.WithoutResult -> <repo>/submodules/Sekiban/dcb/src/Sekiban.Dcb.WithoutResult/bin/Release/net10.0/Sekiban.Dcb.WithoutResult.dll
+          SekibanWasm.Cs.Domain -> <repo>/src/internalUsages/cs/SekibanWasm.Cs.Domain/bin/Release/net10.0/SekibanWasm.Cs.Domain.dll
+        <repo>/src/runtime/Sekiban.Dcb.WasmRuntime.Host/Program.cs(30,7): warning CS0105: The using directive for 'Microsoft.Extensions.DependencyInjection.Extensions' appeared previously in this namespace [<repo>/src/runtime/Sekiban.Dcb.WasmRuntime.Host/Sekiban.Dcb.WasmRuntime.Host.csproj]
+        <repo>/src/runtime/Sekiban.Dcb.WasmRuntime.Host/Program.cs(887,38): warning CS8602: Dereference of a possibly null reference. [<repo>/src/runtime/Sekiban.Dcb.WasmRuntime.Host/Sekiban.Dcb.WasmRuntime.Host.csproj]
+        <repo>/src/runtime/Sekiban.Dcb.WasmRuntime.Host/Program.cs(1133,25): warning CS8602: Dereference of a possibly null reference. [<repo>/src/runtime/Sekiban.Dcb.WasmRuntime.Host/Sekiban.Dcb.WasmRuntime.Host.csproj]
+        <repo>/src/runtime/Sekiban.Dcb.WasmRuntime.Host/Program.cs(737,5): warning CS0162: Unreachable code detected [<repo>/src/runtime/Sekiban.Dcb.WasmRuntime.Host/Sekiban.Dcb.WasmRuntime.Host.csproj]
+          Sekiban.Dcb.WasmRuntime.Host -> <repo>/src/runtime/Sekiban.Dcb.WasmRuntime.Host/bin/Release/net10.0/Sekiban.Dcb.WasmRuntime.Host.dll
+          SekibanWasm.Cs.ClientApi -> <repo>/src/internalUsages/cs/SekibanWasm.Cs.ClientApi/bin/Release/net10.0/SekibanWasm.Cs.ClientApi.dll
+        <repo>/src/internalUsages/cs/SekibanWasm.Cs.Tests/RemoteSekibanExecutorTests.cs(199,21): warning CS8602: Dereference of a possibly null reference. [<repo>/src/internalUsages/cs/SekibanWasm.Cs.Tests/SekibanWasm.Cs.Tests.csproj]
+          SekibanWasm.Cs.Tests -> <repo>/src/internalUsages/cs/SekibanWasm.Cs.Tests/bin/Release/net10.0/SekibanWasm.Cs.Tests.dll
+        Test run for <repo>/src/internalUsages/cs/SekibanWasm.Cs.Tests/bin/Release/net10.0/SekibanWasm.Cs.Tests.dll (.NETCoreApp,Version=v10.0)
         VSTest version 18.0.1 (arm64)
 
         Starting test execution, please wait...

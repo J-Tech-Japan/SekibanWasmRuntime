@@ -3,6 +3,7 @@ set -uo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
 
+repo_root="$(pwd)"
 test_project="src/internalUsages/cs/SekibanWasm.Cs.Tests/SekibanWasm.Cs.Tests.csproj"
 report_path="${CONTRACT_BASELINE_REPORT:-reports/compatibility/serialized-dcb-contract-black-box-baseline.md}"
 tmp_dir="$(mktemp -d)"
@@ -13,6 +14,10 @@ mkdir -p "$(dirname "$report_path")"
 test_filter='FullyQualifiedName~HttpSerializedDcbClientTests|FullyQualifiedName~InProcSerializedDcbClientTests|FullyQualifiedName~SerializedCommandEndpointContractTests|FullyQualifiedName~SerializedCommandEndpointsExecuteTests|FullyQualifiedName~RemoteSekibanExecutorTests|FullyQualifiedName~WeatherQueryClientTests|FullyQualifiedName~HttpSerializedQueryClientTests|FullyQualifiedName~WasmTagStatePrimitiveTests'
 test_command="dotnet test $test_project -c Release --no-restore --filter '$test_filter'"
 output_file="$tmp_dir/contract-baseline.log"
+
+sanitize_output() {
+  sed -e 's/\r$//' -e "s#${repo_root}#<repo>#g"
+}
 
 printf 'running: %s\n' "$test_command"
 bash -lc "$test_command" > "$output_file" 2>&1
@@ -53,7 +58,7 @@ fi
   printf '| Runtime compatibility | `SerializedCommandEndpointContractTests`, `SerializedCommandEndpointsExecuteTests`, `RemoteSekibanExecutorTests`, `WasmTagStatePrimitiveTests`. |\n\n'
   printf '## Output\n\n'
   if [[ -s "$output_file" ]]; then
-    sed -e 's/\r$//' "$output_file" | awk '{ if ($0 == "") print ""; else print "    " $0 }'
+    sanitize_output < "$output_file" | awk '{ if ($0 == "") print ""; else print "    " $0 }'
   else
     printf '_No output._\n'
   fi

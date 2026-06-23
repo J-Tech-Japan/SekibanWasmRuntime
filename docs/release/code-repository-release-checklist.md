@@ -38,8 +38,8 @@ checklist and must not be used to publish packages.
 - [ ] README, package README, and contribution docs consistently explain that
   users may use, modify, redistribute, and self-host SekibanWasmRuntime,
   including for internal company use.
-- [ ] Operator/legal approval for the public-facing ELv2 wording is confirmed
-  outside this public repository, and any release blocker is summarized without
+- [ ] Required approval for the public-facing ELv2 wording is confirmed outside
+  this public repository, and any release blocker is summarized without
   publishing host-only signoff evidence.
 - [ ] The same docs consistently explain that third-party hosted service,
   managed service, SaaS, or similar cloud-provider substitution requires a

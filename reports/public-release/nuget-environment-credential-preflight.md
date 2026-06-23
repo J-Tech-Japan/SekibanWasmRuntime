@@ -8,7 +8,7 @@ This report records the safe preflight for the protected `nuget-preview`
 GitHub Environment and the NuGet.org Trusted Publishing policy required by the
 NuGet preview publish workflow.
 
-The normal publish path no longer uses a long-lived `NUGET_API_KEY` secret.
+The normal publish path no longer uses a long-lived NuGet API key secret.
 Trusted Publishing exchanges GitHub Actions OIDC for a short-lived NuGet API key
 immediately before package push. This preflight verifies only metadata when it
 is available to the operator.

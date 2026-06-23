@@ -21,13 +21,12 @@ the package set:
 - `reports/public-release/package-inspection.md` records package metadata,
   dependencies, and native content assets for the public package candidates.
 - Public README, package README, contribution docs, and release notes record
-  the license/commercial-use boundary for the public preview. Operator/legal
-  signoff evidence is retained outside this public repository.
+  the license/commercial-use boundary for the public preview. Approval evidence
+  is retained outside this public repository.
 
 This is sufficient provenance evidence for the first NuGet preview because the
-release is operator-approved, GitHub Release driven, package hashes are
-recorded, and the release does not yet claim SLSA provenance, signed
-attestations, or a formal SBOM.
+release is GitHub Release driven, package hashes are recorded, and the release
+does not yet claim SLSA provenance, signed attestations, or a formal SBOM.
 
 ## Decision
 
