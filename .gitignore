@@ -10,6 +10,9 @@
 *.userosscache
 *.sln.docstates
 *.env
+
+# Generated smoke-test reports (scripts/smoke-runtime-compose.sh)
+/reports/smoke/
 .DS_Store
 **/.DS_Store
 .idea/

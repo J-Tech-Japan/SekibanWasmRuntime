@@ -242,6 +242,15 @@ The compose `runtime` service already wires `ConnectionStrings__SekibanDcb`,
 `SEKIBAN_MANIFEST_PATH`, and `WASM_MODULE_PATH`, and mounts `./config` and
 `./modules` into the container.
 
+The published host ports default to `3000` (runtime), `5432` (Postgres), and
+`3001` (DBGate), but are overridable to avoid conflicts (for example with a
+running Aspire app on `3000`):
+
+```bash
+SEKIBAN_RUNTIME_PORT=18080 SEKIBAN_POSTGRES_PORT=15432 docker compose up --build
+# runtime then on http://localhost:18080
+```
+
 ### Compose: local build vs published image
 
 By default the `runtime` service builds the image locally from the repository:
@@ -264,6 +273,31 @@ block with an `image:` reference (keep the rest of the service — `environment`
 
 Then `docker compose pull runtime` (or `docker compose up` without `--build`)
 uses the published image.
+
+## Smoke Test
+
+[`scripts/smoke-runtime-compose.sh`](../../scripts/smoke-runtime-compose.sh) is a
+single-command local smoke that proves the container works as a real
+event-sourced backend. It starts external Postgres + the runtime container (with
+a mounted manifest and WASM module), commits a serialized `WeatherForecastCreated`
+event through the container, reads it back via
+`/api/sekiban/serialized/tag-latest-sortable`, then tears the stack down. It
+prints a clear `PASS` / `FAIL` / `SKIP` result and writes
+`reports/smoke/runtime-compose-smoke.md` (with container log tail on failure).
+
+```bash
+bash scripts/smoke-runtime-compose.sh
+```
+
+- Detects Docker or Podman (set `SMOKE_ENGINE=podman` to force). If no engine is
+  available it records an explicit `SKIP` and exits 0.
+- Resolves a WASM module in this order: `SMOKE_WASM_MODULE` → an existing
+  `modules/weather.wasm` → the C# weather sample
+  (`src/internalUsages/cs/modules/csharp-weather.wasm`) → builds it via
+  `build/scripts/build-csharp-wasm.sh` (skip with `SMOKE_SKIP_BUILD=1`). If none
+  can be obtained it records an explicit `SKIP`.
+- Useful knobs: `SMOKE_RUNTIME_URL` (default `http://localhost:3000`),
+  `SMOKE_HEALTH_TIMEOUT` (default `180`), `SMOKE_KEEP_UP=1` to leave the stack up.
 
 ## Container Engines
 
