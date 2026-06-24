@@ -19,7 +19,17 @@ internal sealed record RuntimeHostStorageConfiguration(
     string? SqlitePath = null,
     string? CosmosDatabaseName = null)
 {
-    public bool RequiresRelationalMigration => Provider == RuntimeHostStorageProvider.Sqlite;
+    // Both relational providers (Postgres and Sqlite) need the runtime host to run
+    // EF migrations at startup so the DCB schema (e.g. dcb_events) exists before the
+    // first commit. Postgres was previously excluded, which let the public-container
+    // sample reach /health against an empty Aspire-created database and then fail the
+    // first commit with `42P01: relation "dcb_events" does not exist`: the upstream
+    // Postgres DatabaseInitializerService only calls EnsureCreatedAsync, which no-ops
+    // when the database already exists (Aspire pre-creates it empty). MigrateAsync,
+    // which MigrateSekibanDcbDatabaseAsync uses, creates the schema reliably on an
+    // existing empty database. Cosmos is not relational and self-provisions.
+    public bool RequiresRelationalMigration =>
+        Provider is RuntimeHostStorageProvider.Postgres or RuntimeHostStorageProvider.Sqlite;
 }
 
 internal static class RuntimeHostStorageConfigurationResolver

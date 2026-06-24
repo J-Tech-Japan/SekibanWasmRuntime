@@ -113,10 +113,15 @@ as multi-arch until resolved:
 - [ ] Release notes state plainly what preview 2 supports (multi-arch
   `linux/amd64` + `linux/arm64` runtime-host image) and what remains
   known-limited.
-- [ ] The **public-container sample live commit smoke** still has a separate
-  Postgres schema-initialization failure (DCB tables are not created before the
-  first commit). This is **out of scope** for preview 2 and is **not** fixed by
-  multi-arch; the release notes must disclose it rather than imply a clean smoke.
+- [ ] The **public-container sample live commit smoke** previously failed on a
+  Postgres schema-initialization gap (DCB tables not created before the first
+  commit, `42P01: relation "dcb_events" does not exist`). This is **fixed in the
+  runtime host** (SWR-G041: the host now runs EF migration for Postgres at
+  startup and `/ready` is schema-fail-closed) — see
+  [`runtime-host-postgres-schema-smoke.md`](runtime-host-postgres-schema-smoke.md).
+  The fix requires a **republished runtime-host container**: do not claim preview
+  2 readiness until the **commit/query smoke is green against the preview 2
+  image**, not only `/health`. Multi-arch alone does not fix this.
 - [ ] Migration note for preview 1 users: preview 1
   (`1.0.0-preview.1`) is **amd64-only**. Apple Silicon users on preview 1 needed
   `--platform linux/amd64` / `DOCKER_DEFAULT_PLATFORM=linux/amd64`; on preview 2

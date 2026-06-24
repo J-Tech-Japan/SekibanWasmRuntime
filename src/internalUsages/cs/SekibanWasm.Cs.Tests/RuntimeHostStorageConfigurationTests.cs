@@ -20,8 +20,38 @@ public class RuntimeHostStorageConfigurationTests
         var resolved = RuntimeHostStorageConfigurationResolver.Resolve(configuration, Directory.GetCurrentDirectory());
 
         Assert.Equal(RuntimeHostStorageProvider.Postgres, resolved.Provider);
-        Assert.False(resolved.RequiresRelationalMigration);
+        // Postgres requires startup EF migration so the DCB schema (dcb_events) exists
+        // before the first commit; otherwise the runtime reaches /health against an
+        // empty Aspire-created database and the first commit fails with 42P01.
+        Assert.True(resolved.RequiresRelationalMigration);
         Assert.Contains("Host=127.0.0.1", resolved.ConnectionString);
+    }
+
+    [Theory]
+    [InlineData("postgres")]
+    [InlineData("sqlite")]
+    public void Resolve_RelationalProviders_RequireRelationalMigration(string provider)
+    {
+        var contentRoot = Path.Combine(Path.GetTempPath(), "runtime-host-storage-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(contentRoot);
+
+        try
+        {
+            var configuration = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["SEKIBAN_STORAGE_PROVIDER"] = provider
+                })
+                .Build();
+
+            var resolved = RuntimeHostStorageConfigurationResolver.Resolve(configuration, contentRoot);
+
+            Assert.True(resolved.RequiresRelationalMigration);
+        }
+        finally
+        {
+            Directory.Delete(contentRoot, recursive: true);
+        }
     }
 
     [Fact]
