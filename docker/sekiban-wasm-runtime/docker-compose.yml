@@ -49,6 +49,14 @@ services:
     volumes:
       - ./config:/app/config:ro
       - ./modules:/app/modules:ro
+    healthcheck:
+      # Strict readiness (vs /health liveness): manifest + WASM module present,
+      # storage configured, and Postgres reachable.
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
 
 volumes:
   postgres-data:

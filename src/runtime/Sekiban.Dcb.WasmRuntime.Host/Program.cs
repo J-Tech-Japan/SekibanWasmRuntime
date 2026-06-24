@@ -21,6 +21,7 @@ using Sekiban.Dcb.Orleans.Grains;
 using Sekiban.Dcb.Orleans.Serialization;
 using Sekiban.Dcb.Orleans.ServiceId;
 using Sekiban.Dcb.Orleans.Streams;
+using Microsoft.EntityFrameworkCore;
 using Sekiban.Dcb.Postgres;
 using Sekiban.Dcb.Runtime;
 using Sekiban.Dcb.ServiceId;
@@ -267,6 +268,38 @@ app.MapGet("/health", () => Results.Ok(new
     tagStateFastPathEnabled,
     manifest.DefaultModulePath
 }));
+
+// Strict readiness probe (vs the lightweight /health liveness above): verifies the manifest
+// and WASM module are present, the storage provider is configured, and — for Postgres — that
+// the event store database is reachable. Returns 200 when ready, 503 + JSON details otherwise.
+app.MapGet("/ready", async (HttpContext http, CancellationToken ct) =>
+{
+    Func<CancellationToken, Task<ReadinessCheck>>? databaseProbe = null;
+    if (storageConfiguration.Provider == RuntimeHostStorageProvider.Postgres)
+    {
+        databaseProbe = async token =>
+        {
+            var factory = http.RequestServices
+                .GetRequiredService<IDbContextFactory<SekibanDcbDbContext>>();
+            await using var dbContext = await factory.CreateDbContextAsync(token);
+            return await dbContext.Database.CanConnectAsync(token)
+                ? new ReadinessCheck("database", true, "postgres reachable")
+                : new ReadinessCheck("database", false, "postgres not reachable");
+        };
+    }
+
+    var report = await ReadinessChecker.EvaluateAsync(
+        manifestPath,
+        manifest.DefaultModulePath,
+        databaseType,
+        databaseProbe,
+        ct);
+
+    var payload = new { status = report.Ready ? "ready" : "not-ready", checks = report.Checks };
+    return report.Ready
+        ? Results.Ok(payload)
+        : Results.Json(payload, statusCode: StatusCodes.Status503ServiceUnavailable);
+});
 
 if (enableProjectionStatusEndpoint && projectionModeEnabled)
 {
