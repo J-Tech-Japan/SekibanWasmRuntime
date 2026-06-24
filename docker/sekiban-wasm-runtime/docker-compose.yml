@@ -11,7 +11,7 @@ services:
       timeout: 3s
       retries: 20
     ports:
-      - "5432:5432"
+      - "${SEKIBAN_POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
@@ -30,7 +30,7 @@ services:
       USER_weather: postgres
       PASSWORD_weather: postgres
     ports:
-      - "3001:3000"
+      - "${SEKIBAN_DBGATE_PORT:-3001}:3000"
 
   runtime:
     build:
@@ -45,7 +45,7 @@ services:
       SEKIBAN_MANIFEST_PATH: /app/config/sekiban-manifest.json
       WASM_MODULE_PATH: /app/modules/weather.wasm
     ports:
-      - "3000:8080"
+      - "${SEKIBAN_RUNTIME_PORT:-3000}:8080"
     volumes:
       - ./config:/app/config:ro
       - ./modules:/app/modules:ro
