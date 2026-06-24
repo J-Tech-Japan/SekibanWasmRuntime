@@ -30,11 +30,11 @@ write_report() {
   mkdir -p "$REPORT_DIR"
   {
     printf '# Public Container CS Decider Smoke (SWR-G036)\n\n'
-    printf '- Result: **%s**\n' "$result"
-    printf '- Detail: %s\n' "$detail"
-    printf '- Runtime image: `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.1`\n'
-    printf '- Runtime URL: `%s`\n' "${RUNTIME_URL:-unresolved}"
-    printf '- Commit: `%s`\n' "$(git rev-parse HEAD 2>/dev/null || echo unknown)"
+    printf '%s\n' "- Result: **$result**"
+    printf '%s\n' "- Detail: $detail"
+    printf '%s\n' "- Runtime image: \`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.1\`"
+    printf '%s\n' "- Runtime URL: \`${RUNTIME_URL:-unresolved}\`"
+    printf '%s\n' "- Commit: \`$(git rev-parse HEAD 2>/dev/null || echo unknown)\`"
     if [[ -n "${SMOKE_LOG_TAIL:-}" ]]; then
       printf '\n## AppHost log (tail)\n\n```\n%s\n```\n' "$SMOKE_LOG_TAIL"
     fi

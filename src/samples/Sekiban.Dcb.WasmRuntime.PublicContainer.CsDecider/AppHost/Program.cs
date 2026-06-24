@@ -33,10 +33,13 @@ if (!File.Exists(moduleFile) || !File.Exists(manifestFile))
 var postgres = builder.AddPostgres("pg");
 var sekibanDb = postgres.AddDatabase("SekibanDcb");
 
+// The runtime connects to Postgres lazily and retries, so it is NOT gated on a
+// Postgres health check (WaitFor) — that gate can stall a headless run before the
+// runtime container is ever created. WithReference still injects the connection
+// string; the runtime tolerates the DB coming up moments later.
 var runtime = builder
     .AddContainer("runtime", RuntimeImage, RuntimeImageTag)
     .WithReference(sekibanDb)
-    .WaitFor(sekibanDb)
     .WithBindMount(configDir, "/app/config", isReadOnly: true)
     .WithBindMount(modulesDir, "/app/modules", isReadOnly: true)
     .WithEnvironment("ASPNETCORE_URLS", "http://0.0.0.0:8080")
