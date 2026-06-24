@@ -1,0 +1,22 @@
+# Keep the Docker build context clean and reproducible.
+#
+# The runtime host image is built with `COPY . .` then `dotnet publish`. Local
+# build outputs must NOT leak into the context: a host-built obj/ (e.g. a macOS
+# wasmtime-dotnet native bundle) makes the in-container build skip the fresh
+# Linux native-library download/extract and fail with MSB3030.
+
+# .NET build outputs
+**/bin/
+**/obj/
+artifacts/
+
+# Test / tooling output
+**/TestResults/
+
+# IDE / editor state
+**/.vs/
+**/.vscode/
+**/.idea/
+
+# OS cruft
+**/.DS_Store
