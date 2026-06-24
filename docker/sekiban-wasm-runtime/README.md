@@ -178,6 +178,41 @@ curl http://localhost:8080/health
 > For the Weather sample, copy it from an internal usage build, e.g.
 > `cp src/internalUsages/cs/modules/csharp-weather.wasm docker/sekiban-wasm-runtime/modules/weather.wasm`.
 
+## Published Image (GHCR Preview)
+
+A preview image is published to GitHub Container Registry as:
+
+```text
+ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:<tag>
+```
+
+Pull a preview tag and run it instead of building locally — the runtime inputs
+are identical to the [`docker run`](#run-with-docker-run) flow above (mounted
+manifest, mounted `.wasm`, Postgres connection string):
+
+```bash
+docker pull ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.1
+
+docker run --rm \
+  -p 8080:8080 \
+  -v "$PWD/docker/sekiban-wasm-runtime/config/sekiban-manifest.json:/app/config/sekiban-manifest.json:ro" \
+  -v "$PWD/docker/sekiban-wasm-runtime/modules/weather.wasm:/app/modules/weather.wasm:ro" \
+  -e SEKIBAN_MANIFEST_PATH=/app/config/sekiban-manifest.json \
+  -e WASM_MODULE_PATH=/app/modules/weather.wasm \
+  -e "ConnectionStrings__SekibanDcb=Host=host.docker.internal;Port=5432;Database=sekiban;Username=postgres;Password=postgres" \
+  ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.1
+```
+
+The image is published by the
+[`release-ghcr-image-preview`](../../.github/workflows/release-ghcr-image-preview.yml)
+GitHub Actions workflow via manual `workflow_dispatch` (build-only by default;
+push is opt-in). Image publishing is separate from NuGet publishing and uses the
+built-in `GITHUB_TOKEN` with `packages: write` scoped to the publish job only.
+The first published target is a Linux OCI image. If a tag has not been pushed
+yet, build locally with [Build the Image](#build-the-image). See
+[`docs/release/ghcr-image-preview.md`](../../docs/release/ghcr-image-preview.md)
+for the publish procedure and tagging policy.
+
 ## Run with Docker Compose
 
 The committed [`docker-compose.yml`](docker-compose.yml) starts the smallest
@@ -206,6 +241,29 @@ local stack — `runtime` + `postgres` (+ `dbgate` for inspection):
 The compose `runtime` service already wires `ConnectionStrings__SekibanDcb`,
 `SEKIBAN_MANIFEST_PATH`, and `WASM_MODULE_PATH`, and mounts `./config` and
 `./modules` into the container.
+
+### Compose: local build vs published image
+
+By default the `runtime` service builds the image locally from the repository:
+
+```yaml
+  runtime:
+    build:
+      context: ../..
+      dockerfile: src/runtime/Sekiban.Dcb.WasmRuntime.Host/Dockerfile
+```
+
+To run a published preview image instead of building, replace that `build:`
+block with an `image:` reference (keep the rest of the service — `environment`,
+`ports`, `volumes` — unchanged):
+
+```yaml
+  runtime:
+    image: ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.1
+```
+
+Then `docker compose pull runtime` (or `docker compose up` without `--build`)
+uses the published image.
 
 ## Container Engines
 

@@ -167,12 +167,27 @@ cd docker/sekiban-wasm-runtime
 docker compose up --build
 ```
 
+A preview image is also published to GitHub Container Registry, so you can run
+the runtime without building from source:
+
+```bash
+docker pull ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.1
+```
+
+The image is published by the
+[`release-ghcr-image-preview`](.github/workflows/release-ghcr-image-preview.yml)
+workflow via manual dispatch (build-only by default; push is opt-in), separate
+from NuGet publishing. See
+[`docs/release/ghcr-image-preview.md`](docs/release/ghcr-image-preview.md) for
+the publish procedure and tagging policy.
+
 See [docker/sekiban-wasm-runtime/README.md](docker/sekiban-wasm-runtime/README.md)
 for the public local runtime container contract: provided/non-goal behavior,
 ports, volumes, required and optional environment variables, storage-provider
-configuration, and a minimal `docker run` example. Docker is the first-class
-local engine; Podman is an OCI compatibility target; Apple container and Windows
-container are future targets.
+configuration, a minimal `docker run` example, and how to pull and run the
+published GHCR image (including switching compose from `build:` to `image:`).
+Docker is the first-class local engine; Podman is an OCI compatibility target;
+Apple container and Windows container are future targets.
 
 ## Testing
 
