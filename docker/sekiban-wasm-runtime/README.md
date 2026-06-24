@@ -20,7 +20,9 @@ ports, and storage configuration it expects.
   manifest.
 - Serialized HTTP endpoints for tag-state, commit, and query operations
   (see [Endpoints](#endpoints)).
-- A `/health` endpoint for liveness/readiness checks.
+- A `/health` liveness endpoint and a strict `/ready` readiness endpoint
+  (manifest, WASM module, storage, and Postgres connectivity). The compose
+  `runtime` service uses `/ready` as its healthcheck.
 - External event persistence. Postgres is the first-class local event store;
   SQLite and Cosmos DB are selectable via storage-provider configuration.
 - A self-contained local Orleans silo: clustering, grain storage, and streams
@@ -160,7 +162,8 @@ for measured runs.
 | Method & Path | Purpose |
 | --- | --- |
 | `GET /` | Runtime info (provider, manifest default module, projectors, query mappings). |
-| `GET /health` | Health check; returns `{ "status": "ok", ... }`. |
+| `GET /health` | Lightweight **liveness**; returns `{ "status": "ok", ... }` whenever the process is up. |
+| `GET /ready` | Strict **readiness**; `200` `{ "status": "ready", "checks": [...] }` when the manifest and WASM module are present, the storage provider is configured, and (for Postgres) the database is reachable — otherwise `503` `{ "status": "not-ready", "checks": [...] }`. |
 | `POST /api/sekiban/serialized/tag-state` | Read the current serialized tag state. |
 | `POST /api/sekiban/serialized/tag-latest-sortable` | Read the latest sortable unique id for a tag. |
 | `POST /api/sekiban/serialized/commit` | Commit serialized events with consistency tags. |
@@ -255,7 +258,8 @@ local stack — `runtime` + `postgres` (+ `dbgate` for inspection):
 3. Open the runtime:
 
    - API root: `http://localhost:3000/`
-   - Health: `http://localhost:3000/health`
+   - Liveness: `http://localhost:3000/health`
+   - Readiness: `http://localhost:3000/ready`
    - DBGate: `http://localhost:3001/`
    - PostgreSQL: `localhost:5432`
    - Serialized tag state: `POST http://localhost:3000/api/sekiban/serialized/tag-state`

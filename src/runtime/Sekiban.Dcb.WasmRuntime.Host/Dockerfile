@@ -27,6 +27,11 @@ RUN dotnet publish src/runtime/Sekiban.Dcb.WasmRuntime.Host/Sekiban.Dcb.WasmRunt
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 
+# curl is used by the container/compose readiness healthcheck against /ready.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
 # Link the published GHCR package back to this repository.
 LABEL org.opencontainers.image.source="https://github.com/J-Tech-Japan/SekibanWasmRuntime"
 LABEL org.opencontainers.image.description="Sekiban WASM Runtime Host — OSS local runtime container (not Sekiban Cloud)."
