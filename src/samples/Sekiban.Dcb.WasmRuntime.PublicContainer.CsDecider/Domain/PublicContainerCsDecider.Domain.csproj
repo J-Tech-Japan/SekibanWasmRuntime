@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsAotCompatible>true</IsAotCompatible>
+    <RootNamespace>PublicContainerCsDecider.Domain</RootNamespace>
+    <AssemblyName>PublicContainerCsDecider.Domain</AssemblyName>
+    <!-- Self-contained like an external consumer: pin public package versions here
+         rather than via this repo's Central Package Management. -->
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <!--
+    Public-consumer proof: the Decider domain depends ONLY on the public Sekiban DCB
+    NuGet package, pinned to the same 10.2.2 contract line that the public runtime
+    image (1.0.0-preview.1) is built on. No repo-local runtime / internalUsages /
+    submodule-source references.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Sekiban.Dcb.WithoutResult" Version="10.2.2" />
+  </ItemGroup>
+
+</Project>

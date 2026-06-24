@@ -163,3 +163,12 @@ for the public local runtime container contract: provided/non-goal behavior,
 ports, volumes, required and optional environment variables, storage-provider
 configuration, and container-engine support (Docker first-class; Podman OCI
 compatibility target; Apple container and Windows container as future targets).
+
+### Public-consumer sample (NuGet + GHCR + Aspire)
+
+For an end-to-end proof that consumes only the published artifacts — public NuGet
+DCB packages, the public GHCR runtime image, a WASM-compiled Decider domain, and
+Postgres via Aspire — see
+[`docs/samples/public-container-cs-decider.md`](samples/public-container-cs-decider.md)
+and the sample under
+[`src/samples/Sekiban.Dcb.WasmRuntime.PublicContainer.CsDecider`](../src/samples/Sekiban.Dcb.WasmRuntime.PublicContainer.CsDecider).
