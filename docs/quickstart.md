@@ -124,6 +124,14 @@ their build and runtime paths are promoted to the same CI-gated support tier.
 
 ## Generic Runtime Container
 
+The local runtime container is an OSS local backend host (not Sekiban Cloud).
+You provide a WASM module (`WASM_MODULE_PATH`), a runtime manifest
+(`SEKIBAN_MANIFEST_PATH`), and an external Event DB connection
+(`ConnectionStrings__SekibanDcb`, Postgres by default), then run the serialized
+Sekiban runtime over HTTP without hosting Orleans manually. Orleans clustering,
+grain storage, and streams run in-memory inside the container while event
+persistence stays external.
+
 Build or copy a WASM module into the runtime container module directory, then
 start the runtime and Postgres stack:
 
@@ -134,5 +142,24 @@ cd docker/sekiban-wasm-runtime
 docker compose up --build
 ```
 
+The container listens on port `8080` (the compose sample maps it to host port
+`3000`) and exposes `GET /health`. For a single-container run, build the image
+from the repository root and mount the manifest and module:
+
+```bash
+docker build -f src/runtime/Sekiban.Dcb.WasmRuntime.Host/Dockerfile -t sekiban-wasm-runtime .
+
+docker run --rm -p 8080:8080 \
+  -v "$PWD/docker/sekiban-wasm-runtime/config/sekiban-manifest.json:/app/config/sekiban-manifest.json:ro" \
+  -v "$PWD/docker/sekiban-wasm-runtime/modules/weather.wasm:/app/modules/weather.wasm:ro" \
+  -e SEKIBAN_MANIFEST_PATH=/app/config/sekiban-manifest.json \
+  -e WASM_MODULE_PATH=/app/modules/weather.wasm \
+  -e "ConnectionStrings__SekibanDcb=Host=host.docker.internal;Port=5432;Database=sekiban;Username=postgres;Password=postgres" \
+  sekiban-wasm-runtime
+```
+
 See [`docker/sekiban-wasm-runtime/README.md`](../docker/sekiban-wasm-runtime/README.md)
-for the runtime manifest and container layout.
+for the public local runtime container contract: provided/non-goal behavior,
+ports, volumes, required and optional environment variables, storage-provider
+configuration, and container-engine support (Docker first-class; Podman OCI
+compatibility target; Apple container and Windows container as future targets).
