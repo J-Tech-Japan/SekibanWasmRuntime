@@ -7,6 +7,12 @@ Use it before publishing a GitHub Release because `release.published` is the
 NuGet publish trigger for `Sekiban.Dcb.WasmRuntime`,
 `Sekiban.Dcb.WasmRuntime.Remote`, and `Sekiban.Dcb.WasmRuntime.Wasmtime`.
 
+> Prepare the release wording and version-specific evidence **before** publishing
+> with the local preparation kit so the publish-time action is review and
+> publish, not release-text composition:
+> `PACKAGE_VERSION=1.0.0-preview.1 scripts/release/prepare-nuget-preview-release.sh`.
+> See [`nuget-preview-release-preparation.md`](nuget-preview-release-preparation.md).
+
 ## Release Identity
 
 - [ ] The GitHub Release is created in `J-Tech-Japan/SekibanWasmRuntime`.
