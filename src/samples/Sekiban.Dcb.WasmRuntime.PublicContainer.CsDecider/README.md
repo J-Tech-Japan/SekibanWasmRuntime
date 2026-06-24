@@ -52,7 +52,9 @@ Generated outputs are git-ignored under
 ## Smoke
 
 [`scripts/smoke.sh`](scripts/smoke.sh) starts the AppHost, waits for the runtime
-container `/health`, confirms it is the Sekiban runtime, then proves the full
+container `/health`, then for **`/ready`** (schema-aware: it fails closed until
+the DCB Postgres schema exists, so the smoke never proceeds to commit against a
+schema-less database), confirms it is the Sekiban runtime, then proves the full
 path through the **public** container:
 
 1. `POST /api/sekiban/serialized/commit` — a `WeatherForecastCreated` event;
@@ -60,7 +62,12 @@ path through the **public** container:
 3. `POST /api/sekiban/serialized/list-query` — `GetWeatherForecastListQuery`.
 
 It writes `reports/smoke/public-container-cs-decider-smoke.md` (`PASS` / `FAIL` /
-`SKIP`) and tears the stack down.
+`SKIP`) and tears the stack down. On failure it captures the HTTP response body
+and the runtime container logs, and it talks to the runtime with `curl -q` so a
+user `~/.curlrc` cannot break it. The runtime host now runs EF migration for
+Postgres at startup so `dcb_events` exists before the first commit — see
+[`docs/release/runtime-host-postgres-schema-smoke.md`](../../../docs/release/runtime-host-postgres-schema-smoke.md)
+for the root-cause classification and the preview 2 republish requirement.
 
 ## Troubleshooting
 

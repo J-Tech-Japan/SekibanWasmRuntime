@@ -25,6 +25,20 @@ APPHOST_LOG="$(mktemp)"
 
 log() { printf '[smoke] %s\n' "$*"; }
 
+# Talk to the runtime with a clean curl config: a user-level ~/.curlrc (e.g. a
+# hardened allowlist) must not change how the smoke reaches the local runtime.
+# `-q` (first arg) makes curl ignore curlrc.
+curlq() { curl -q "$@"; }
+
+# Best-effort tail of the runtime container's logs for failure diagnostics. Aspire
+# DCP names the container from the "runtime" resource; match the public image.
+runtime_container_logs() {
+  local cid
+  cid="$(docker ps -a --format '{{.ID}} {{.Image}}' 2>/dev/null \
+    | awk '/sekiban-wasm-runtime-host/{print $1; exit}')"
+  [[ -n "$cid" ]] && docker logs --tail 120 "$cid" 2>&1
+}
+
 write_report() {
   local result="$1" detail="$2"
   mkdir -p "$REPORT_DIR"
@@ -35,6 +49,12 @@ write_report() {
     printf '%s\n' "- Runtime image: \`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.1\`"
     printf '%s\n' "- Runtime URL: \`${RUNTIME_URL:-unresolved}\`"
     printf '%s\n' "- Commit: \`$(git rev-parse HEAD 2>/dev/null || echo unknown)\`"
+    if [[ -n "${LAST_HTTP_BODY:-}" ]]; then
+      printf '\n## Last HTTP response body\n\n```\n%s\n```\n' "$LAST_HTTP_BODY"
+    fi
+    if [[ -n "${RUNTIME_LOG_TAIL:-}" ]]; then
+      printf '\n## Runtime container log (tail)\n\n```\n%s\n```\n' "$RUNTIME_LOG_TAIL"
+    fi
     if [[ -n "${SMOKE_LOG_TAIL:-}" ]]; then
       printf '\n## AppHost log (tail)\n\n```\n%s\n```\n' "$SMOKE_LOG_TAIL"
     fi
@@ -55,7 +75,13 @@ trap cleanup EXIT
 skip() { log "SKIP: $*"; write_report "SKIP" "$*"; exit 0; }
 fail() {
   SMOKE_LOG_TAIL="$(tail -120 "$APPHOST_LOG" 2>/dev/null)"
-  log "FAIL: $*"; write_report "FAIL" "$*"; exit 1
+  RUNTIME_LOG_TAIL="$(runtime_container_logs 2>/dev/null)"
+  log "FAIL: $*"
+  if [[ -n "${RUNTIME_LOG_TAIL:-}" ]]; then
+    log "--- runtime container log (tail) ---"
+    printf '%s\n' "$RUNTIME_LOG_TAIL"
+  fi
+  write_report "FAIL" "$*"; exit 1
 }
 
 command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 || skip "Docker is not available (the runtime container needs it)."
@@ -91,18 +117,35 @@ healthy=0
 deadline=$(( $(date +%s) + TIMEOUT ))
 while [[ $(date +%s) -lt $deadline ]]; do
   if ! kill -0 "$APPHOST_PID" 2>/dev/null; then fail "AppHost exited before the runtime became healthy"; fi
-  code=$(curl -s -o /dev/null --max-time 5 -w '%{http_code}' "$RUNTIME_URL/health" || true)
+  code=$(curlq -s -o /dev/null --max-time 5 -w '%{http_code}' "$RUNTIME_URL/health" || true)
   if [[ "$code" == "200" ]]; then healthy=1; break; fi
   sleep 5
 done
 [[ "$healthy" == "1" ]] || fail "runtime did not become healthy within ${TIMEOUT}s"
 log "runtime healthy"
 
-root_resp=$(curl -s --max-time 10 "$RUNTIME_URL/" || true)
+# Schema-aware readiness gate. /ready fails closed when the DCB Postgres schema
+# (dcb_events) is absent, so this guards against a runtime that is live but whose
+# first commit would fail with `42P01: relation "dcb_events" does not exist`.
+log "waiting up to ${TIMEOUT}s for ${RUNTIME_URL}/ready (schema-aware)"
+ready=0
+deadline=$(( $(date +%s) + TIMEOUT ))
+while [[ $(date +%s) -lt $deadline ]]; do
+  if ! kill -0 "$APPHOST_PID" 2>/dev/null; then fail "AppHost exited before the runtime became ready"; fi
+  ready_out=$(curlq -s --max-time 5 -w '\n%{http_code}' "$RUNTIME_URL/ready" || true)
+  rcode=$(printf '%s' "$ready_out" | tail -n1)
+  LAST_HTTP_BODY=$(printf '%s' "$ready_out" | sed '$d')
+  if [[ "$rcode" == "200" ]]; then ready=1; break; fi
+  sleep 5
+done
+[[ "$ready" == "1" ]] || fail "runtime did not become READY within ${TIMEOUT}s (DCB schema may be missing): ${LAST_HTTP_BODY:0:300}"
+log "runtime ready (schema present)"
+
+root_resp=$(curlq -s --max-time 10 "$RUNTIME_URL/" || true)
 printf '%s' "$root_resp" | grep -q "Sekiban WASM Runtime Host" || fail "service at $RUNTIME_URL is not the Sekiban runtime: ${root_resp:0:200}"
 log "runtime identity confirmed"
 
-http_post() { curl -s --max-time 60 -w '\n%{http_code}' -H 'Content-Type: application/json' -X POST -d "$2" "$RUNTIME_URL$1"; }
+http_post() { curlq -s --max-time 60 -w '\n%{http_code}' -H 'Content-Type: application/json' -X POST -d "$2" "$RUNTIME_URL$1"; }
 
 forecast_id="sample-$(date +%Y%m%d%H%M%S)-${RANDOM}"
 tag="weather:${forecast_id}"
@@ -112,7 +155,8 @@ commit_body=$(printf '{"eventCandidates":[{"payload":"%s","eventPayloadName":"We
 
 log "commit WeatherForecastCreated (tag=$tag)"
 out=$(http_post "/api/sekiban/serialized/commit" "$commit_body"); code=$(printf '%s' "$out" | tail -n1)
-[[ "$code" == "200" ]] || fail "commit returned HTTP $code: $(printf '%s' "$out" | sed '$d')"
+LAST_HTTP_BODY="$(printf '%s' "$out" | sed '$d')"
+[[ "$code" == "200" ]] || fail "commit returned HTTP $code: ${LAST_HTTP_BODY}"
 log "commit OK"
 
 log "tag-state read (tag-latest-sortable)"

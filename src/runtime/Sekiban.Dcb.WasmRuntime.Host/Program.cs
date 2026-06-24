@@ -282,9 +282,27 @@ app.MapGet("/ready", async (HttpContext http, CancellationToken ct) =>
             var factory = http.RequestServices
                 .GetRequiredService<IDbContextFactory<SekibanDcbDbContext>>();
             await using var dbContext = await factory.CreateDbContextAsync(token);
-            return await dbContext.Database.CanConnectAsync(token)
-                ? new ReadinessCheck("database", true, "postgres reachable")
-                : new ReadinessCheck("database", false, "postgres not reachable");
+            if (!await dbContext.Database.CanConnectAsync(token))
+            {
+                return new ReadinessCheck("database", false, "postgres not reachable");
+            }
+
+            // Fail closed on a missing schema: /health and CanConnect both succeed
+            // against an empty database, but the first commit then fails with
+            // `42P01: relation "dcb_events" does not exist`. Probe the events table so
+            // readiness reflects a usable DCB schema, not just connectivity.
+            try
+            {
+                await dbContext.Events.Take(1).AnyAsync(token);
+                return new ReadinessCheck("database", true, "postgres reachable; dcb schema present");
+            }
+            catch (Exception ex)
+            {
+                return new ReadinessCheck(
+                    "database",
+                    false,
+                    $"postgres reachable but dcb schema missing: {ex.GetBaseException().Message}");
+            }
         };
     }
 
