@@ -176,10 +176,12 @@ docker pull ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.1
 
 The image is published by the
 [`release-ghcr-image-preview`](.github/workflows/release-ghcr-image-preview.yml)
-workflow via manual dispatch (build-only by default; push is opt-in), separate
-from NuGet publishing. See
+workflow on its own runtime-host image release lane (a `runtime-host-v*` tag or
+manual dispatch), **separate from and independently releasable from NuGet
+publishing**. See
 [`docs/release/ghcr-image-preview.md`](docs/release/ghcr-image-preview.md) for
-the publish procedure and tagging policy.
+the release lanes, publish procedure, tagging policy, and source-commit
+traceability.
 
 See [docker/sekiban-wasm-runtime/README.md](docker/sekiban-wasm-runtime/README.md)
 for the public local runtime container contract: provided/non-goal behavior,
