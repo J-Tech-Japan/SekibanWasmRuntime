@@ -84,6 +84,12 @@ Published preview tags are **multi-arch Linux manifest lists** (see
 [Platform support](#platform-support)). Apple container and Windows container
 remain out of scope for this preview path.
 
+> Releasing a multi-arch preview tag (e.g. preview 2): follow
+> [`runtime-host-preview-2-release-checklist.md`](runtime-host-preview-2-release-checklist.md),
+> which defines the tag contract, the fail-closed manifest/native-asset/smoke
+> gates, and the post-publish verification
+> (`scripts/release/verify-runtime-host-multiarch.sh`).
+
 ## Platform support
 
 Newly published preview tags are **manifest lists** that include both
