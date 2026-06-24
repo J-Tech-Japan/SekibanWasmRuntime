@@ -152,6 +152,12 @@ see [`docs/quickstart.md`](docs/quickstart.md).
 
 ### Generic Runtime Container
 
+The local runtime container is an OSS local backend host (not Sekiban Cloud):
+provide a WASM module, a runtime manifest, and an external Event DB connection,
+then run the serialized Sekiban runtime without hosting Orleans manually. Event
+persistence is external (Postgres by default) while Orleans clustering, grain
+storage, and streams run in-memory inside the container.
+
 ```bash
 # 1. Put your Weather module here
 cp src/internalUsages/cs/modules/csharp-weather.wasm docker/sekiban-wasm-runtime/modules/weather.wasm
@@ -161,7 +167,12 @@ cd docker/sekiban-wasm-runtime
 docker compose up --build
 ```
 
-See [docker/sekiban-wasm-runtime/README.md](docker/sekiban-wasm-runtime/README.md) for manifest details.
+See [docker/sekiban-wasm-runtime/README.md](docker/sekiban-wasm-runtime/README.md)
+for the public local runtime container contract: provided/non-goal behavior,
+ports, volumes, required and optional environment variables, storage-provider
+configuration, and a minimal `docker run` example. Docker is the first-class
+local engine; Podman is an OCI compatibility target; Apple container and Windows
+container are future targets.
 
 ## Testing
 
