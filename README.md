@@ -189,6 +189,11 @@ published GHCR image (including switching compose from `build:` to `image:`).
 Docker is the first-class local engine; Podman is an OCI compatibility target;
 Apple container and Windows container are future targets.
 
+For sizing the container, see
+[`docs/runtime-memory-profiles.md`](docs/runtime-memory-profiles.md) — small /
+standard / large memory profiles and how `SEKIBAN_PROJECTION_MODE`,
+`SEKIBAN_WASM_POOL_SIZE`, and `/api/sekiban/memory-stats` affect memory use.
+
 ## Testing
 
 ```bash
