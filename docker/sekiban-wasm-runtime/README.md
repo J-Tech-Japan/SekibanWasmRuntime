@@ -233,13 +233,18 @@ docker run --rm \
 
 The image is published by the
 [`release-ghcr-image-preview`](../../.github/workflows/release-ghcr-image-preview.yml)
-GitHub Actions workflow via manual `workflow_dispatch` (build-only by default;
-push is opt-in). Image publishing is separate from NuGet publishing and uses the
-built-in `GITHUB_TOKEN` with `packages: write` scoped to the publish job only.
-The first published target is a Linux OCI image. If a tag has not been pushed
-yet, build locally with [Build the Image](#build-the-image). See
+GitHub Actions workflow on its own **runtime-host image release lane** — a
+`runtime-host-v*` git tag (e.g. `runtime-host-v1.0.0-preview.2`) or a manual
+`workflow_dispatch`. This lane is **separate from NuGet publishing**: the two are
+released independently and never share a GitHub Release. It uses the built-in
+`GITHUB_TOKEN` with `packages: write` scoped to the publish job only. Image tags
+are an immutable semver (e.g. `1.0.0-preview.2`) plus a moving `preview` tag (no
+`latest` for preview); each image records its source commit via
+`org.opencontainers.image.revision`. The first published target is a Linux OCI
+image. If a tag has not been pushed yet, build locally with
+[Build the Image](#build-the-image). See
 [`docs/release/ghcr-image-preview.md`](../../docs/release/ghcr-image-preview.md)
-for the publish procedure and tagging policy.
+for the release lanes, publish procedure, tagging policy, and traceability.
 
 ## Run with Docker Compose
 

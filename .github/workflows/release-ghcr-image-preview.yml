@@ -1,13 +1,17 @@
 name: release-ghcr-image-preview
 
-# Build (and, on explicit manual dispatch, publish) the Sekiban WASM Runtime Host
+# Build (and, on its own release lane, publish) the Sekiban WASM Runtime Host
 # container image to GitHub Container Registry as a preview image.
 #
 # Image: ghcr.io/j-tech-japan/sekiban-wasm-runtime-host
 #
-# Publishing is image-only and intentionally separate from the NuGet release
-# workflow: it uses the built-in GITHUB_TOKEN with packages: write (scoped to the
-# publish job only) and never touches NuGet credentials or Trusted Publishing.
+# This is the RUNTIME-HOST IMAGE release lane, intentionally SEPARATE from the
+# NuGet package lane (release-nuget-preview.yml). The two are released
+# independently: the image lane is triggered by `runtime-host-v*` git tags (or a
+# manual dispatch), never by NuGet's `release` event, and it uses only the
+# built-in GITHUB_TOKEN with packages: write (scoped to the publish job) — no
+# NuGet credentials or Trusted Publishing. NuGet and the image may share a
+# compatible version string but do not share a GitHub Release object.
 
 on:
   pull_request:
@@ -15,6 +19,11 @@ on:
       - '.github/workflows/release-ghcr-image-preview.yml'
       - 'src/runtime/Sekiban.Dcb.WasmRuntime.Host/Dockerfile'
       - 'docker/sekiban-wasm-runtime/**'
+  push:
+    # Runtime-host image release lane (artifact-family-prefixed tag, mirroring the
+    # Sekiban `dcbTemplates-v*` convention). e.g. runtime-host-v1.0.0-preview.2
+    tags:
+      - 'runtime-host-v*'
   workflow_dispatch:
     inputs:
       image_tag:
@@ -61,17 +70,22 @@ jobs:
           file: src/runtime/Sekiban.Dcb.WasmRuntime.Host/Dockerfile
           push: false
           tags: ${{ env.IMAGE_NAME }}:${{ inputs.image_tag || '1.0.0-preview.1' }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
 
   publish:
     name: publish to GHCR
     needs: build
     runs-on: ubuntu-latest
-    # Push only on an explicit manual dispatch that opts in, and only from the
-    # canonical repository. Pull-request runs build but never publish.
+    # Publish only from the canonical repository, and only on the runtime-host
+    # image release lane: a `runtime-host-v*` tag push, or an explicit manual
+    # dispatch that opts in. Pull-request runs build but never publish.
     if: >-
-      github.event_name == 'workflow_dispatch'
-      && github.event.inputs.push == 'true'
-      && github.repository == 'J-Tech-Japan/SekibanWasmRuntime'
+      github.repository == 'J-Tech-Japan/SekibanWasmRuntime'
+      && (
+        startsWith(github.ref, 'refs/tags/runtime-host-v')
+        || (github.event_name == 'workflow_dispatch' && github.event.inputs.push == 'true')
+      )
     permissions:
       contents: read
       packages: write
@@ -92,12 +106,22 @@ jobs:
       - name: Compute image tags
         id: tags
         env:
-          IMAGE_TAG: ${{ github.event.inputs.image_tag }}
-          UPDATE_MOVING_TAG: ${{ github.event.inputs.update_moving_tag }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_TAG: ${{ github.event.inputs.image_tag }}
+          INPUT_MOVING: ${{ github.event.inputs.update_moving_tag }}
         run: |
           set -euo pipefail
-          tags="${IMAGE_NAME}:${IMAGE_TAG}"
-          if [ "${UPDATE_MOVING_TAG}" = "true" ]; then
+          if [ "${EVENT_NAME}" = "push" ]; then
+            # runtime-host-v1.0.0-preview.2 -> 1.0.0-preview.2; always move `preview`.
+            version="${REF_NAME#runtime-host-v}"
+            moving="true"
+          else
+            version="${INPUT_TAG}"
+            moving="${INPUT_MOVING}"
+          fi
+          tags="${IMAGE_NAME}:${version}"
+          if [ "${moving}" = "true" ]; then
             tags="${tags}"$'\n'"${IMAGE_NAME}:${MOVING_PREVIEW_TAG}"
           fi
           {
@@ -105,6 +129,7 @@ jobs:
             echo "${tags}"
             echo 'EOF'
           } >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push runtime host image
         uses: docker/build-push-action@v6
@@ -113,3 +138,6 @@ jobs:
           file: src/runtime/Sekiban.Dcb.WasmRuntime.Host/Dockerfile
           push: true
           tags: ${{ steps.tags.outputs.tags }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.tags.outputs.version }}
