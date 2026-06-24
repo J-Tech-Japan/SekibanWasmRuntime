@@ -231,6 +231,25 @@ docker run --rm \
   ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.1
 ```
 
+### Platform support (Apple Silicon)
+
+Newly published preview tags are **multi-arch** manifest lists containing both
+`linux/amd64` and `linux/arm64`, so Apple Silicon (arm64) developers can `docker
+pull` and run a current tag directly — no platform override needed. Confirm a tag
+is multi-arch with:
+
+```bash
+docker buildx imagetools inspect ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:<tag>
+# Expect Manifests entries for both linux/amd64 and linux/arm64.
+```
+
+Older tags published before multi-arch support (e.g. `1.0.0-preview.1`) are
+**amd64 only**; on arm64 they fail with `no matching manifest for linux/arm64/v8`.
+As a workaround for those legacy tags only, force the amd64 variant under
+emulation with `--platform linux/amd64` (or `export
+DOCKER_DEFAULT_PLATFORM=linux/amd64`). Prefer a multi-arch tag instead of relying
+on the override.
+
 The image is published by the
 [`release-ghcr-image-preview`](../../.github/workflows/release-ghcr-image-preview.yml)
 GitHub Actions workflow on its own **runtime-host image release lane** — a
@@ -240,8 +259,10 @@ released independently and never share a GitHub Release. It uses the built-in
 `GITHUB_TOKEN` with `packages: write` scoped to the publish job only. Image tags
 are an immutable semver (e.g. `1.0.0-preview.2`) plus a moving `preview` tag (no
 `latest` for preview); each image records its source commit via
-`org.opencontainers.image.revision`. The first published target is a Linux OCI
-image. If a tag has not been pushed yet, build locally with
+`org.opencontainers.image.revision`. Newly published preview tags are multi-arch
+Linux manifest lists (`linux/amd64` + `linux/arm64`); see
+[Platform support](#platform-support-apple-silicon). If a tag has not been pushed
+yet, build locally with
 [Build the Image](#build-the-image). See
 [`docs/release/ghcr-image-preview.md`](../../docs/release/ghcr-image-preview.md)
 for the release lanes, publish procedure, tagging policy, and traceability.
