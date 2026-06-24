@@ -95,9 +95,13 @@ Mount both read-only (`:ro`) for a local runtime; the host only reads them.
 | `ASPNETCORE_URLS` | `http://0.0.0.0:8080` | Bind address/port for the host. |
 | `SEKIBAN_STORAGE_PROVIDER` | `postgres` | Event-store provider: `postgres`, `sqlite`, or `cosmos`. |
 | `SEKIBAN_SQLITE_PATH` | host content root | SQLite database path when `SEKIBAN_STORAGE_PROVIDER=sqlite`. |
-| `SEKIBAN_WASM_POOL_SIZE` | `1` | Pooled WASM instances per projector. Set `0` for TinyGo/Go modules. |
+| `SEKIBAN_WASM_POOL_SIZE` | `1` | Pooled WASM instances per projector (~36 MB each). Set `0` for TinyGo/Go modules. |
 | `SEKIBAN_PROJECTION_MODE` | `dual` | `dual`, `memory-only`, or `materialized-view-only`. |
+| `SEKIBAN_WASMTIME_STATIC_MEMORY_MAX_MB` | Wasmtime default | Upper bound (MB) for a Wasmtime instance's static linear-memory reservation. |
 | `KEEP_TAG_PROJECTORS` | `false` | Keep tag-only projectors active in the MultiProjection grain when `true`. |
+
+See [Memory Profiles](#memory-profiles) for how these settings map to small /
+standard / large local memory profiles.
 
 ### Storage Providers
 
@@ -129,6 +133,27 @@ clustering, grain storage, and streams are intentionally **in-memory** for local
 runtime use, so projection caches and grain state do not survive a container
 restart. This is the expected local-runtime assumption, not a limitation to work
 around.
+
+## Memory Profiles
+
+Because Orleans and projections run in memory, the container memory limit is the
+outer control and the runtime settings above are the inner controls. The
+dominant inner cost is projection WASM (each active instance holds ~36 MB), so
+memory scales roughly with `active projectors × SEKIBAN_WASM_POOL_SIZE × ~36 MB`
+plus the base process and accumulating in-memory projection state.
+
+| Profile | Container memory (start) | Suggested settings |
+| --- | --- | --- |
+| **small** | ~512 MB | `SEKIBAN_WASM_POOL_SIZE=0`; optionally `SEKIBAN_PROJECTION_MODE=materialized-view-only` (skips loading projection WASM). |
+| **standard** | ~1–2 GB | Defaults (`SEKIBAN_PROJECTION_MODE=dual`, `SEKIBAN_WASM_POOL_SIZE=1`). |
+| **large** | ~4 GB+ | `SEKIBAN_WASM_POOL_SIZE>=1`, `KEEP_TAG_PROJECTORS=true` only if needed; size from observed `processRssMB`. |
+
+Set the outer limit with `docker run --memory=1g …` or Compose `mem_limit: 1g`,
+and observe real usage with `GET /api/sekiban/memory-stats`
+(`{ processRssMB, projectors[] }`). These are **observations, not guarantees** —
+see [`docs/runtime-memory-profiles.md`](../../docs/runtime-memory-profiles.md)
+for the full guide and [`docs/benchmark-results.md`](../../docs/benchmark-results.md)
+for measured runs.
 
 ## Endpoints
 
