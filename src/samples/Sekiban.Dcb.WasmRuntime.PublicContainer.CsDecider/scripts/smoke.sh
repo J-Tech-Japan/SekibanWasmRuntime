@@ -69,10 +69,18 @@ if [[ ! -s "$MODULE" || ! -s "$MANIFEST" ]]; then
   fi
 fi
 
-RUNTIME_PORT="$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1]);s.close()')"
+free_port() { python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1]);s.close()'; }
+RUNTIME_PORT="$(free_port)"
 RUNTIME_URL="http://localhost:${RUNTIME_PORT}"
 export SAMPLE_RUNTIME_HOST_PORT="$RUNTIME_PORT"
 log "runtime host port=$RUNTIME_PORT"
+
+# Launching the AppHost headlessly via `dotnet run` requires the Aspire dashboard
+# endpoints to be configured; provide them on free ports for the smoke.
+export ASPIRE_ALLOW_UNSECURED_TRANSPORT=true
+export ASPNETCORE_URLS="http://localhost:$(free_port)"
+export ASPIRE_DASHBOARD_OTLP_ENDPOINT_URL="http://localhost:$(free_port)"
+export ASPIRE_DASHBOARD_OTLP_HTTP_ENDPOINT_URL="http://localhost:$(free_port)"
 
 log "starting Aspire AppHost (Postgres + public runtime container)"
 dotnet run --project "$APPHOST" -c Release > "$APPHOST_LOG" 2>&1 &
