@@ -24,6 +24,36 @@ RUN dotnet publish src/runtime/Sekiban.Dcb.WasmRuntime.Host/Sekiban.Dcb.WasmRunt
     -o /app/publish \
     /p:UseAppHost=false
 
+# Fail closed if the Wasmtime native asset for THIS build platform is missing or
+# is built for the wrong architecture. wasmtime-dotnet's CopyWasmtimeLibrary
+# target copies only the build host's libwasmtime.so to the output root (its Copy
+# condition keys off the build OSArchitecture), so this assertion runs per Buildx
+# platform leg and proves the amd64 and arm64 images each carry their OWN native
+# library instead of silently shipping one arch. The ELF e_machine check
+# (0x3e = x86-64, 0xb7 = AArch64) guards against an arch mismatch slipping in.
+# TARGETARCH is populated by BuildKit for `--platform` builds; fall back to the
+# Debian arch for a plain single-platform build.
+ARG TARGETARCH
+RUN set -eux; \
+    arch="${TARGETARCH:-$(dpkg --print-architecture)}"; \
+    case "$arch" in \
+      amd64) want_machine=3e00 ;; \
+      arm64) want_machine=b700 ;; \
+      *) echo "unsupported target arch: $arch" >&2; exit 1 ;; \
+    esac; \
+    lib="/app/publish/libwasmtime.so"; \
+    if [ ! -f "$lib" ]; then \
+      echo "MISSING Wasmtime native asset for $arch at $lib" >&2; \
+      ls -la /app/publish | head -50; \
+      exit 1; \
+    fi; \
+    machine="$(od -An -tx1 -j18 -N2 "$lib" | tr -d ' ')"; \
+    if [ "$machine" != "$want_machine" ]; then \
+      echo "Wasmtime native asset arch mismatch for $arch: e_machine=$machine want=$want_machine" >&2; \
+      exit 1; \
+    fi; \
+    echo "OK: Wasmtime native asset present and matches $arch (e_machine=$machine) -> $lib"
+
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 

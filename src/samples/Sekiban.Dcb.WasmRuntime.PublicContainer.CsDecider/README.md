@@ -71,6 +71,12 @@ It writes `reports/smoke/public-container-cs-decider-smoke.md` (`PASS` / `FAIL` 
   running; on Linux it can build natively with the WASI SDK on `PATH`.
 - **`docker pull` of the runtime image fails** → confirm
   `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.1` is reachable.
+- **`no matching manifest for linux/arm64/v8`** on Apple Silicon → the pinned
+  `1.0.0-preview.1` tag is an **older amd64-only** image. Either use a newer
+  multi-arch tag, or run the sample with the amd64 emulation workaround:
+  `export DOCKER_DEFAULT_PLATFORM=linux/amd64` before `dotnet run`/`scripts/smoke.sh`.
+  Newly published tags are multi-arch (`linux/amd64` + `linux/arm64`) and need no
+  override; verify with `docker buildx imagetools inspect <image>:<tag>`.
 - **Port already in use** → the smoke picks a free host port; for a manual run,
   Aspire assigns one (see the dashboard), or set `SAMPLE_RUNTIME_HOST_PORT`.
 

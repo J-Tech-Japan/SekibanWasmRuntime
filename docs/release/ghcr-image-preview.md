@@ -35,8 +35,11 @@ NuGet and image releases can be cut on independent cadences.
 [`.github/workflows/release-ghcr-image-preview.yml`](../../.github/workflows/release-ghcr-image-preview.yml)
 
 - **`pull_request`** (paths-filtered): builds the runtime host image from
-  `src/runtime/Sekiban.Dcb.WasmRuntime.Host/Dockerfile` with `push: false` to
-  validate the build. It never publishes.
+  `src/runtime/Sekiban.Dcb.WasmRuntime.Host/Dockerfile` for **both
+  `linux/amd64` and `linux/arm64`** (Buildx + QEMU) with `push: false` to
+  validate the build. It never publishes. Validating both legs means a change
+  that breaks the arm64 build fails the PR instead of silently shipping an
+  amd64-only image.
 - **`push` to a `runtime-host-v*` tag**: the runtime-host image release lane. The
   image version is derived from the tag (`runtime-host-v1.0.0-preview.2` →
   `1.0.0-preview.2`) and the moving `preview` tag is updated.
@@ -77,8 +80,57 @@ Image tags are independent of the NuGet package version and follow these rules:
   imply a stable line that does not exist yet); use the `preview` moving tag or a
   pinned immutable tag instead.
 
-The first published target is a Linux OCI image. Multi-arch, Apple container,
-and Windows container are out of scope for this preview path.
+Published preview tags are **multi-arch Linux manifest lists** (see
+[Platform support](#platform-support)). Apple container and Windows container
+remain out of scope for this preview path.
+
+## Platform support
+
+Newly published preview tags are **manifest lists** that include both
+`linux/amd64` and `linux/arm64`. Apple Silicon (arm64) developers can therefore
+pull and run a current multi-arch tag **without** a platform override:
+
+```bash
+docker pull ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:<tag>
+```
+
+The runtime host Dockerfile is built once per platform by Buildx, so each leg
+downloads and packages its own Wasmtime native library
+(`runtimes/linux-x64/native/libwasmtime.so` on amd64,
+`runtimes/linux-arm64/native/libwasmtime.so` on arm64). The Dockerfile asserts
+the native asset for the target platform is present and **fails the build** if it
+is missing, so a manifest list never ships an image leg without its Wasmtime
+runtime.
+
+### Manifest inspection (release evidence)
+
+The publish job inspects the pushed tag and fails closed if either platform is
+absent from the manifest list. Reproduce that evidence with:
+
+```bash
+docker buildx imagetools inspect ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:<tag>
+# Expect Manifests entries for linux/amd64 and linux/arm64.
+
+docker pull --platform linux/arm64 ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:<tag>
+docker pull --platform linux/amd64 ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:<tag>
+```
+
+### Already-published amd64-only preview tags
+
+Tags published before this slice (for example `1.0.0-preview.1`) are **amd64
+only**. On Apple Silicon they fail with
+`no matching manifest for linux/arm64/v8 in the manifest list entries` unless you
+force the amd64 variant under emulation:
+
+```bash
+docker pull --platform linux/amd64 ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.1
+# or, for a single shell session:
+export DOCKER_DEFAULT_PLATFORM=linux/amd64
+```
+
+Treat the `--platform linux/amd64` / `DOCKER_DEFAULT_PLATFORM=linux/amd64`
+override strictly as a **workaround for those older amd64-only tags**, not as the
+expected path for newly published multi-arch tags.
 
 ## Source-commit traceability and compatible baseline
 
