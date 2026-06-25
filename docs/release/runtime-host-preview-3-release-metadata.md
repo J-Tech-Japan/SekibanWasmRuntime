@@ -28,16 +28,18 @@ from `main` at commit `c7e63cd` (or later). It carries the WASI preview2 shim
 
 - Run [`28142753464`](https://github.com/J-Tech-Japan/SekibanWasmRuntime/actions/runs/28142753464)
   was dispatched from `8381a5a` with `image_tag=1.0.0-preview.2`,
-  `push=true`. As of this packet it is still `in_progress` and, by design, would
-  **re-push the immutable `1.0.0-preview.2` tag** — a tagging-policy conflict.
-- **Action (operator/CI):** cancel or let it fail, and **supersede** it with the
-  preview 3 publish below. It must NOT be allowed to move `preview` to a
-  preview-2 digest. Record its final state (cancelled / failed / superseded)
-  before moving `preview`.
+  `push=true`. By design it would have **re-pushed the immutable `1.0.0-preview.2`
+  tag** — a tagging-policy conflict.
+- **Reconciled (AC3): the run `completed` with conclusion `failure`** (updated
+  `2026-06-25T04:54:10Z`). It did **not** publish, so it did **not** move
+  `1.0.0-preview.2` or `preview` — both still point at the stale shim-less digest
+  `sha256:11a8006f…`. No cancellation was needed; the failure is its terminal
+  disposition. The corrected release proceeds as `1.0.0-preview.3` below.
 
   ```bash
-  gh run cancel 28142753464 --repo J-Tech-Japan/SekibanWasmRuntime   # if still running
-  gh run view 28142753464 --repo J-Tech-Japan/SekibanWasmRuntime --json status,conclusion
+  $ gh run view 28142753464 --repo J-Tech-Japan/SekibanWasmRuntime \
+      --json status,conclusion
+  {"status":"completed","conclusion":"failure"}
   ```
 
 ## Publish plan (operator/CI)
@@ -94,8 +96,14 @@ SAMPLE_RUNTIME_IMAGE_TAG=1.0.0-preview.3 \
 
 ## Status
 
-- [ ] Run `28142753464` reconciled (cancelled / failed / superseded) with evidence.
-- [ ] `1.0.0-preview.3` published from `c7e63cd` (or later) — run URL + digest recorded.
+> **Release readiness is NOT claimed.** `1.0.0-preview.3` is the *planned* corrected
+> tag; it is **not yet published**, so it is not a working public tag and docs must
+> not present it as a successful default until the gate below is green.
+
+- [x] Run `28142753464` reconciled — `completed` / `conclusion: failure`; did not
+  publish; `1.0.0-preview.2` + `preview` unchanged (stale `sha256:11a8006f…`).
+- [ ] `1.0.0-preview.3` published from `c7e63cd` (or later) — run URL + digest
+  recorded. **(operator/CI — `workflow_dispatch push=true`)**
 - [ ] `verify-runtime-host-multiarch.sh` PASS (both platforms, both native libs).
 - [ ] `preview` digest == `1.0.0-preview.3` digest.
 - [ ] Public-container smoke PASS through list-query + Materialized View read.
