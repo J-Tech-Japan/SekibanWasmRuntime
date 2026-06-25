@@ -99,6 +99,7 @@ Mount both read-only (`:ro`) for a local runtime; the host only reads them.
 | `SEKIBAN_SQLITE_PATH` | host content root | SQLite database path when `SEKIBAN_STORAGE_PROVIDER=sqlite`. |
 | `SEKIBAN_WASM_POOL_SIZE` | `1` | Pooled WASM instances per projector (~36 MB each). Set `0` for TinyGo/Go modules. |
 | `SEKIBAN_PROJECTION_MODE` | `dual` | `dual`, `memory-only`, or `materialized-view-only`. |
+| `ConnectionStrings__DcbMaterializedViewPostgres` | _(unset)_ | Postgres connection string for the materialized-view registry + state tables. The MV runtime activates only when the manifest declares `materializedViews`, the mode is `dual` / `materialized-view-only`, **and** this is set. MV reads are caller-owned (no host MV read API). |
 | `SEKIBAN_WASMTIME_STATIC_MEMORY_MAX_MB` | Wasmtime default | Upper bound (MB) for a Wasmtime instance's static linear-memory reservation. |
 | `KEEP_TAG_PROJECTORS` | `false` | Keep tag-only projectors active in the MultiProjection grain when `true`. |
 

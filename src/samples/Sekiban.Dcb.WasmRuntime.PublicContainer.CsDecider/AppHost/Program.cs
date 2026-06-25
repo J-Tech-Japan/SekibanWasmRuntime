@@ -34,10 +34,15 @@ if (!File.Exists(moduleFile) || !File.Exists(manifestFile))
     return 1;
 }
 
-// External Postgres event DB through Aspire. Naming the database "SekibanDcb"
-// makes WithReference inject ConnectionStrings__SekibanDcb into the container.
+// External Postgres through Aspire. Naming a database "SekibanDcb" makes
+// WithReference inject ConnectionStrings__SekibanDcb (the event store). A second
+// database "DcbMaterializedViewPostgres" backs the materialized-view runtime
+// (registry + MV state tables) — the runtime host activates the WASM MV executor
+// only when the manifest declares materializedViews, the projection mode is
+// dual/materialized-view-only, AND this connection string is present.
 var postgres = builder.AddPostgres("pg");
 var sekibanDb = postgres.AddDatabase("SekibanDcb");
+var materializedViewDb = postgres.AddDatabase("DcbMaterializedViewPostgres");
 
 // The runtime connects to Postgres lazily and retries, so it is NOT gated on a
 // Postgres health check (WaitFor) — that gate can stall a headless run before the
@@ -46,9 +51,14 @@ var sekibanDb = postgres.AddDatabase("SekibanDcb");
 var runtime = builder
     .AddContainer("runtime", RuntimeImage, runtimeImageTag)
     .WithReference(sekibanDb)
+    .WithReference(materializedViewDb)
     .WithBindMount(configDir, "/app/config", isReadOnly: true)
     .WithBindMount(modulesDir, "/app/modules", isReadOnly: true)
     .WithEnvironment("ASPNETCORE_URLS", "http://0.0.0.0:8080")
+    // dual = MultiProjection grains AND materialized views (the default; set
+    // explicitly so the sample's intent is clear). The MV catch-up worker polls
+    // the event store and writes MV state to DcbMaterializedViewPostgres.
+    .WithEnvironment("SEKIBAN_PROJECTION_MODE", "dual")
     .WithEnvironment("SEKIBAN_MANIFEST_PATH", "/app/config/sekiban-manifest.json")
     .WithEnvironment("WASM_MODULE_PATH", $"/app/modules/{ModuleFileName}");
 

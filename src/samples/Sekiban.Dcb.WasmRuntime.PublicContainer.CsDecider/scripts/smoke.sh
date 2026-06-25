@@ -177,6 +177,35 @@ done
 [[ "$query_found" == "1" ]] || fail "list-query did not return the committed forecast within timeout: ${resp:0:200}"
 log "list-query OK"
 
-log "PASS: commit + tag-state read + list-query all succeeded through the public runtime container"
-write_report "PASS" "Committed WeatherForecastCreated (tag=$tag), read it back via tag-latest-sortable, and saw it in GetWeatherForecastListQuery — all through ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.1."
+# Materialized View path (caller-owned read). The runtime host has no MV read API by
+# design; a caller reads MV state directly from DcbMaterializedViewPostgres. After commit,
+# the host's MV catch-up worker applies WeatherForecastCreated to the WASM MV projector,
+# which writes the row to the physical table named in sekiban_mv_registry. We locate the
+# Aspire Postgres container, resolve the MV database + physical table, and poll for the row.
+log "materialized-view read (DcbMaterializedViewPostgres)"
+pg_cid="$(docker ps --filter ancestor=postgres --format '{{.ID}}' 2>/dev/null | head -1)"
+[[ -n "$pg_cid" ]] || pg_cid="$(docker ps --format '{{.ID}} {{.Names}}' 2>/dev/null | awk '/ pg-/{print $1; exit}')"
+[[ -n "$pg_cid" ]] || fail "could not locate the Aspire Postgres container to verify the materialized view"
+
+MV_DB="$(docker exec "$pg_cid" psql -U postgres -tAc \
+  "SELECT datname FROM pg_database WHERE datname ILIKE 'dcbmaterializedview%' LIMIT 1;" 2>/dev/null | tr -d '[:space:]')"
+[[ -n "$MV_DB" ]] || fail "DcbMaterializedViewPostgres database was not created (MV runtime not provisioned)"
+psql_mv() { docker exec "$pg_cid" psql -U postgres -d "$MV_DB" -tAc "$1" 2>/dev/null; }
+
+mv_found=0
+mv_detail=""
+for i in $(seq 1 30); do
+  mv_table="$(psql_mv "SELECT physical_table FROM sekiban_mv_registry WHERE view_name='WeatherForecast' AND logical_table='weather_forecast' LIMIT 1;" | tr -d '[:space:]')"
+  if [[ -n "$mv_table" ]]; then
+    mv_loc="$(psql_mv "SELECT location FROM \"$mv_table\" WHERE forecast_id='$forecast_id' AND is_deleted=FALSE LIMIT 1;" | tr -d '[:space:]')"
+    if [[ -n "$mv_loc" ]]; then mv_found=1; mv_detail="table=$mv_table location=$mv_loc"; break; fi
+  fi
+  sleep 2
+done
+[[ "$mv_found" == "1" ]] || fail "materialized view did not catch up the committed forecast in DcbMaterializedViewPostgres within timeout (db=$MV_DB)"
+log "materialized-view read OK ($mv_detail)"
+
+IMAGE_TAG_USED="${SAMPLE_RUNTIME_IMAGE_TAG:-1.0.0-preview.1}"
+log "PASS: commit + tag-state read + list-query + materialized-view read all succeeded through the public runtime container"
+write_report "PASS" "Committed WeatherForecastCreated (tag=$tag); read it back via tag-latest-sortable; saw it in GetWeatherForecastListQuery; and confirmed the WeatherForecast materialized view caught it up in DcbMaterializedViewPostgres ($mv_detail) — all through ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:${IMAGE_TAG_USED}."
 exit 0

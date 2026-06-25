@@ -26,8 +26,11 @@ It runs SekibanWasmRuntime exactly as an external developer would:
 Domain/    Weather Decider domain (events, command, tag, projector, multi-projector,
            query) on the public Sekiban.Dcb.WithoutResult package.
 Wasm/      NativeAOT-LLVM wasi-wasm reactor exposing the runtime ABI for the domain.
-AppHost/   Aspire AppHost: public GHCR runtime image + Postgres + read-only mounts.
-scripts/   build-wasm.sh (build module + manifest), smoke.sh (live commit/read/query).
+Wasm/MaterializedView/  WeatherForecast materialized view (mv_metadata / mv_initialize /
+           mv_apply_event) — emits SQL the host runs against DcbMaterializedViewPostgres.
+AppHost/   Aspire AppHost: public GHCR runtime image + Postgres (event store +
+           materialized-view DB) + read-only mounts.
+scripts/   build-wasm.sh (build module + manifest), smoke.sh (live commit/read/query/MV).
 ```
 
 ## Run it
@@ -63,6 +66,9 @@ path through the **public** container:
    (exercises projection catch-up, which loads the WASI **preview2 shim**; a
    runtime image missing `libwasmtime_preview2_shim.so` fails here with
    `DllNotFoundException: ... 'wasmtime_preview2_shim'`).
+4. **Materialized view read** — confirms the `WeatherForecast` MV caught the
+   committed event up into `DcbMaterializedViewPostgres` (read directly from
+   Postgres; see [Materialized View](#materialized-view)).
 
 It writes `reports/smoke/public-container-cs-decider-smoke.md` (`PASS` / `FAIL` /
 `SKIP`) and tears the stack down. On failure it captures the HTTP response body
@@ -71,6 +77,36 @@ user `~/.curlrc` cannot break it. The runtime host now runs EF migration for
 Postgres at startup so `dcb_events` exists before the first commit — see
 [`docs/release/runtime-host-postgres-schema-smoke.md`](../../../docs/release/runtime-host-postgres-schema-smoke.md)
 for the root-cause classification and the preview 2 republish requirement.
+
+## Materialized View
+
+The sample also demonstrates a **Materialized View (MV)** through the same public
+artifacts. The WASM module exports `mv_metadata` / `mv_initialize` / `mv_apply_event`
+([`Wasm/MaterializedView/`](Wasm/MaterializedView/)) for a single-table
+`WeatherForecast` view, and the generated manifest declares it under
+`materializedViews`.
+
+- **Projection mode**: the AppHost sets `SEKIBAN_PROJECTION_MODE=dual` (the
+  default), which runs both the in-memory MultiProjection path *and* the
+  materialized-view runtime. Other values: `materialized-view-only`, `memory-only`.
+- **Connection strings**: `SekibanDcb` is the event store; **`DcbMaterializedViewPostgres`**
+  is the MV registry + state DB. The runtime activates the WASM MV executor only
+  when the manifest declares `materializedViews`, the mode is `dual` /
+  `materialized-view-only`, **and** `DcbMaterializedViewPostgres` is configured.
+- **Reads are caller-owned**: the generic runtime host exposes **no** MV read API.
+  After commit, the host's MV catch-up worker applies the event to the WASM
+  projector, which writes the row to the physical table named in the
+  `sekiban_mv_registry` table. A caller (here, `scripts/smoke.sh`) reads MV state
+  **directly from `DcbMaterializedViewPostgres`** — exactly as an external app
+  would with its own Postgres driver.
+
+> **Live MV verification requires a runtime image that carries the WASI preview2
+> shim.** The MV catch-up uses the same preview2 component path as `list-query`,
+> so it needs `libwasmtime_preview2_shim.so` (SWR-G042). The currently published
+> `1.0.0-preview.2` tag predates that fix and is shim-less; see
+> [`docs/release/runtime-host-mv-public-artifact-evidence.md`](../../../docs/release/runtime-host-mv-public-artifact-evidence.md)
+> for the container blocker and the re-publish requirement. Point the sample at a
+> corrected image with `SAMPLE_RUNTIME_IMAGE_TAG=<tag>` once it is published.
 
 ## Troubleshooting
 

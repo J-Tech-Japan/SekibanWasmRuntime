@@ -37,6 +37,10 @@
     <LinkerArg Include="-Wl,--export,execute_list_query" />
     <LinkerArg Include="-Wl,--export,serialize_state" />
     <LinkerArg Include="-Wl,--export,restore_state" />
+    <!-- Materialized View ABI (mv_host_query_rows is auto-emitted as an `env` import). -->
+    <LinkerArg Include="-Wl,--export,mv_metadata" />
+    <LinkerArg Include="-Wl,--export,mv_initialize" />
+    <LinkerArg Include="-Wl,--export,mv_apply_event" />
   </ItemGroup>
 
   <ItemGroup>
