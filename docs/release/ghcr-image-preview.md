@@ -113,12 +113,20 @@ docker pull ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:<tag>
 ```
 
 The runtime host Dockerfile is built once per platform by Buildx, so each leg
-downloads and packages its own Wasmtime native library
-(`runtimes/linux-x64/native/libwasmtime.so` on amd64,
-`runtimes/linux-arm64/native/libwasmtime.so` on arm64). The Dockerfile asserts
-the native asset for the target platform is present and **fails the build** if it
-is missing, so a manifest list never ships an image leg without its Wasmtime
-runtime.
+packages its own native libraries for the target architecture:
+
+- `/app/libwasmtime.so` — the Wasmtime C API (from wasmtime-dotnet).
+- `/app/libwasmtime_preview2_shim.so` — the WASI preview2 shim, compiled from the
+  Rust `wasmtime-preview2-shim` crate in a dedicated build stage. The runtime
+  DllImports it for `list-query` / projection catch-up; without it those paths
+  throw `DllNotFoundException: ... 'wasmtime_preview2_shim'` even though
+  `libwasmtime.so` is present and `/health` passes.
+
+The Dockerfile asserts **both** libraries are present **and** match the target
+architecture (ELF `e_machine`) and **fails the build** otherwise, per platform
+leg — so a manifest list never ships an image variant missing a native library.
+The image sets `WASMTIME_PREVIEW2_SHIM_PATH=/app/libwasmtime_preview2_shim.so` so
+the runtime resolves the shim deterministically.
 
 ### Manifest inspection (release evidence)
 

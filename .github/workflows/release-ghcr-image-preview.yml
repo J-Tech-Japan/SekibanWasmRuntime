@@ -65,7 +65,10 @@ jobs:
       github.event_name == 'pull_request'
       || (github.event_name == 'workflow_dispatch' && github.event.inputs.push != 'true')
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    # Generous bound: the image now also compiles the Rust wasmtime-preview2 shim
+    # from source for both platforms (the linux/arm64 leg under QEMU is slow on a
+    # cold cache); the GitHub Actions layer cache makes unchanged re-runs fast.
+    timeout-minutes: 150
     permissions:
       contents: read
     steps:
@@ -104,7 +107,9 @@ jobs:
     # multi-arch build first. This job does its own multi-arch build + fail-closed
     # manifest verification, so validation is not lost.
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    # Generous bound for a cold multi-arch build that also compiles the Rust
+    # wasmtime-preview2 shim (the linux/arm64 leg runs under QEMU).
+    timeout-minutes: 180
     # Publish only from the canonical repository, and only on the runtime-host
     # image release lane: a `runtime-host-v*` tag push, or an explicit manual
     # dispatch that opts in. Pull-request runs build but never publish.

@@ -59,7 +59,10 @@ path through the **public** container:
 
 1. `POST /api/sekiban/serialized/commit` — a `WeatherForecastCreated` event;
 2. `POST /api/sekiban/serialized/tag-latest-sortable` — tag-state read back;
-3. `POST /api/sekiban/serialized/list-query` — `GetWeatherForecastListQuery`.
+3. `POST /api/sekiban/serialized/list-query` — `GetWeatherForecastListQuery`
+   (exercises projection catch-up, which loads the WASI **preview2 shim**; a
+   runtime image missing `libwasmtime_preview2_shim.so` fails here with
+   `DllNotFoundException: ... 'wasmtime_preview2_shim'`).
 
 It writes `reports/smoke/public-container-cs-decider-smoke.md` (`PASS` / `FAIL` /
 `SKIP`) and tears the stack down. On failure it captures the HTTP response body

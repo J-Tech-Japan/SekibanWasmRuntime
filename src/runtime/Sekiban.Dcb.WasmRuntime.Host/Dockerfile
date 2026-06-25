@@ -1,3 +1,27 @@
+# syntax=docker/dockerfile:1
+
+# Build the WASI preview2 shim (Rust cdylib) for the TARGET platform. The runtime
+# DllImports `wasmtime_preview2_shim` for WASI preview2 component support, which
+# the list-query / projection catch-up paths exercise; without it those paths
+# throw `DllNotFoundException: Unable to load shared library 'wasmtime_preview2_shim'`
+# even though libwasmtime.so is present. Buildx runs this stage once per platform
+# leg, so the amd64 and arm64 images each get their own correctly-built shim.
+# Pinned to the crate's rust-version (1.86) on bookworm to match the
+# aspnet:10.0 (Debian 12) runtime glibc.
+FROM rust:1.86-bookworm AS shim-build
+WORKDIR /shim
+ARG TARGETARCH
+COPY external/wasmtime-dotnet/native/wasmtime-preview2-shim/ ./
+# Cache the crates.io registry and a per-arch target dir so rebuilds are not full
+# cold wasmtime compiles; copy the artifact OUT of the cache mount so it persists
+# into the image layer.
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/shim/target,id=shim-target-${TARGETARCH} \
+    set -eux; \
+    cargo build --release; \
+    mkdir -p /out; \
+    cp target/release/libwasmtime_preview2_shim.so /out/libwasmtime_preview2_shim.so
+
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
@@ -24,15 +48,13 @@ RUN dotnet publish src/runtime/Sekiban.Dcb.WasmRuntime.Host/Sekiban.Dcb.WasmRunt
     -o /app/publish \
     /p:UseAppHost=false
 
-# Fail closed if the Wasmtime native asset for THIS build platform is missing or
-# is built for the wrong architecture. wasmtime-dotnet's CopyWasmtimeLibrary
-# target copies only the build host's libwasmtime.so to the output root (its Copy
-# condition keys off the build OSArchitecture), so this assertion runs per Buildx
-# platform leg and proves the amd64 and arm64 images each carry their OWN native
-# library instead of silently shipping one arch. The ELF e_machine check
-# (0x3e = x86-64, 0xb7 = AArch64) guards against an arch mismatch slipping in.
-# TARGETARCH is populated by BuildKit for `--platform` builds; fall back to the
-# Debian arch for a plain single-platform build.
+# Fail closed early if the Wasmtime native asset for THIS build platform is
+# missing from the publish output or is the wrong architecture. wasmtime-dotnet's
+# CopyWasmtimeLibrary target copies only the build host's libwasmtime.so to the
+# output root (its Copy condition keys off the build OSArchitecture), so this
+# assertion runs per Buildx platform leg. ELF e_machine: 0x3e = x86-64,
+# 0xb7 = AArch64. TARGETARCH is populated by BuildKit for `--platform` builds;
+# fall back to the Debian arch for a plain single-platform build.
 ARG TARGETARCH
 RUN set -eux; \
     arch="${TARGETARCH:-$(dpkg --print-architecture)}"; \
@@ -68,10 +90,41 @@ LABEL org.opencontainers.image.description="Sekiban WASM Runtime Host — OSS lo
 LABEL org.opencontainers.image.licenses="Elastic-2.0"
 
 ENV ASPNETCORE_URLS=http://0.0.0.0:8080
+# The runtime resolves the preview2 shim from this path first
+# (WasmtimePreview2ShimResolver checks WASMTIME_PREVIEW2_SHIM_PATH), and also finds
+# it next to the app via AppContext.BaseDirectory (/app).
+ENV WASMTIME_PREVIEW2_SHIM_PATH=/app/libwasmtime_preview2_shim.so
 
 RUN mkdir -p /app/config /app/modules
 
 COPY --from=build /app/publish .
+COPY --from=shim-build /out/libwasmtime_preview2_shim.so /app/libwasmtime_preview2_shim.so
+
+# Fail closed if either required native library is missing from the FINAL image or
+# built for the wrong architecture. Covers both libwasmtime.so and the preview2
+# shim, per Buildx platform leg, so a manifest list never ships an image variant
+# that would throw DllNotFoundException at runtime.
+ARG TARGETARCH
+RUN set -eux; \
+    arch="${TARGETARCH:-$(dpkg --print-architecture)}"; \
+    case "$arch" in \
+      amd64) want_machine=3e00 ;; \
+      arm64) want_machine=b700 ;; \
+      *) echo "unsupported target arch: $arch" >&2; exit 1 ;; \
+    esac; \
+    for lib in /app/libwasmtime.so /app/libwasmtime_preview2_shim.so; do \
+      if [ ! -f "$lib" ]; then \
+        echo "MISSING native library for $arch at $lib" >&2; \
+        ls -la /app; \
+        exit 1; \
+      fi; \
+      machine="$(od -An -tx1 -j18 -N2 "$lib" | tr -d ' ')"; \
+      if [ "$machine" != "$want_machine" ]; then \
+        echo "Native library arch mismatch for $arch: $lib e_machine=$machine want=$want_machine" >&2; \
+        exit 1; \
+      fi; \
+      echo "OK: $lib present and matches $arch (e_machine=$machine)"; \
+    done
 
 EXPOSE 8080
 

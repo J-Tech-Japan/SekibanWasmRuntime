@@ -10,6 +10,11 @@
 **/obj/
 artifacts/
 
+# Rust build outputs (e.g. a host-built wasmtime-preview2-shim target/). The
+# shim is rebuilt for the image's Linux target inside the Docker build, so a
+# host (macOS) target/ must not leak into the context.
+**/target/
+
 # Test / tooling output
 **/TestResults/
 

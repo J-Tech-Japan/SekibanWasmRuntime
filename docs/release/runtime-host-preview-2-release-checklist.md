@@ -17,19 +17,35 @@ The underlying multi-arch build/publish capability is
 release-readiness wrapper around it. Preparing this checklist does **not**
 publish preview 2.
 
-## Publish status (SWR-G042) — operator step, fail closed
+## Publish status (SWR-G042) — fail closed
 
-> **Preview 2 is NOT yet published and preview 2 readiness is NOT complete.**
-> A manual `push=true` dispatch (run `28137575387`) stalled because the workflow
-> built the slow `linux/arm64`-under-QEMU leg **twice** — a no-push validation
-> build before the publish build — with no timeout. That operability bug is
-> **fixed** (SWR-G042): the validation `build` job is now skipped on the publish
-> path, the `publish` job has no `needs: build`, both jobs have explicit
-> `timeout-minutes`, and they share a GitHub Actions build cache. See
-> [`ghcr-image-preview.md`](ghcr-image-preview.md#workflow).
+> **Preview 2 published, but it needs a re-publish: readiness is NOT complete.**
 >
-> **Remaining operator step (outward-facing, not run by automation):** trigger the
-> publish and verify the result —
+> The manual `push=true` dispatch (run `28137575387`) **succeeded** — the workflow
+> operability fix landed and `1.0.0-preview.2` + moving `preview` point at the same
+> digest (`sha256:11a8006f4e6c268231125744f5e93ab92dc06747c9820c377248eed88b5e9e11`),
+> a multi-arch manifest list with both `linux/amd64` and `linux/arm64`, and both
+> platform pulls succeed (Apple Silicon pulls without `DOCKER_DEFAULT_PLATFORM`).
+>
+> The sample smoke against `SAMPLE_RUNTIME_IMAGE_TAG=1.0.0-preview.2` confirmed
+> SWR-G041: `/health`, schema-aware `/ready`, runtime identity, commit, and
+> tag-state read all pass on fresh Postgres. **But `list-query` / projection
+> catch-up failed** with
+> `System.DllNotFoundException: Unable to load shared library 'wasmtime_preview2_shim'`:
+> the published image carried `/app/libwasmtime.so` but **not** the WASI preview2
+> shim.
+>
+> **Fix in this PR (SWR-G042):** the runtime-host image now compiles the Rust
+> `wasmtime-preview2-shim` for **both** platforms, ships it at
+> `/app/libwasmtime_preview2_shim.so`, sets `WASMTIME_PREVIEW2_SHIM_PATH`, and
+> **fails the build closed** if either `libwasmtime.so` or the shim is missing or
+> the wrong architecture (per Buildx leg). `scripts/release/verify-runtime-host-multiarch.sh`
+> now also fails closed on a missing/wrong-arch shim per platform. Verified
+> locally on `linux/arm64`: both libraries present and arch-correct, and `ldd`
+> resolves the shim's dependencies in the runtime image (so it loads).
+>
+> **Remaining operator step (outward-facing, not run by automation): re-publish**
+> preview 2 from this commit, then verify including `list-query` —
 >
 > ```bash
 > gh workflow run release-ghcr-image-preview --repo J-Tech-Japan/SekibanWasmRuntime \
@@ -37,14 +53,16 @@ publish preview 2.
 > gh run watch <run-id> --repo J-Tech-Japan/SekibanWasmRuntime --exit-status
 > IMAGE_TAG=1.0.0-preview.2 scripts/release/verify-runtime-host-multiarch.sh
 > bash src/samples/Sekiban.Dcb.WasmRuntime.PublicContainer.CsDecider/scripts/build-wasm.sh
-> bash src/samples/Sekiban.Dcb.WasmRuntime.PublicContainer.CsDecider/scripts/smoke.sh
+> SAMPLE_RUNTIME_IMAGE_TAG=1.0.0-preview.2 \
+>   bash src/samples/Sekiban.Dcb.WasmRuntime.PublicContainer.CsDecider/scripts/smoke.sh
 > ```
 >
-> Do **not** mark preview 2 readiness complete until the published `1.0.0-preview.2`
-> tag is a multi-arch manifest list (both platforms) **and** the public-container
-> sample smoke is green (`/ready` + commit + query against fresh Postgres) against
-> that tag. The current public preview 1 image predates the SWR-G041 schema fix,
-> so its live commit smoke is expected to fail until preview 2 is republished.
+> Do **not** mark preview 2 readiness complete until the re-published
+> `1.0.0-preview.2` tag passes the multi-arch + per-platform shim verification
+> **and** the sample smoke is green through **`list-query`** (not just commit /
+> tag-state read) against that tag. Because preview 2 is an immutable tag, a fixed
+> image may need a new immutable tag (e.g. `1.0.0-preview.3`) with `preview` moved
+> to it.
 
 ## Tag Contract
 
@@ -79,10 +97,11 @@ publish preview 2.
   validation, which builds **both** `linux/amd64` and `linux/arm64`
   (Buildx + QEMU, `push: false`). A red arm64 leg is release-blocking — PR
   validation must not pass while only amd64 builds.
-- [ ] The Dockerfile per-platform Wasmtime native-asset assertion passed for
-  both legs (`libwasmtime.so` present at the publish root with an ELF
-  `e_machine` matching the target arch: `0x3e` x86-64 / `0xb7` AArch64). A
-  missing or wrong-arch native asset fails the build.
+- [ ] The Dockerfile per-platform native-asset assertion passed for both legs:
+  **both** `/app/libwasmtime.so` **and** `/app/libwasmtime_preview2_shim.so`
+  present with an ELF `e_machine` matching the target arch (`0x3e` x86-64 /
+  `0xb7` AArch64). A missing or wrong-arch native asset (including the preview2
+  shim) fails the build.
 - [ ] No partial-platform publish is acceptable: if either architecture image
   fails to build, **do not** publish preview 2.
 
@@ -119,9 +138,19 @@ exits non-zero (fail closed) if any check below fails.
   docker pull ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.2
   ```
 
-- [ ] **Per-platform Wasmtime native asset** is present and arch-correct in each
-  image variant (the verification script checks `/app/libwasmtime.so` and its
-  ELF `e_machine` for each platform; fails closed on missing or mismatch).
+- [ ] **Per-platform native assets** are present and arch-correct in each image
+  variant — the verification script checks **both** `/app/libwasmtime.so` **and**
+  `/app/libwasmtime_preview2_shim.so` (ELF `e_machine`) for each platform and
+  fails closed on a missing or wrong-arch library, including the preview2 shim.
+- [ ] **Sample smoke is green through `list-query`** (not just commit / tag-state
+  read) against the tag — proves the preview2 shim loads:
+
+  ```bash
+  bash src/samples/Sekiban.Dcb.WasmRuntime.PublicContainer.CsDecider/scripts/build-wasm.sh
+  SAMPLE_RUNTIME_IMAGE_TAG=1.0.0-preview.2 \
+    bash src/samples/Sekiban.Dcb.WasmRuntime.PublicContainer.CsDecider/scripts/smoke.sh
+  ```
+
 - [ ] The verification report records `Result: **PASS**` for the preview 2 tag.
 
 ### Fail-closed conditions
@@ -131,8 +160,11 @@ as multi-arch until resolved:
 
 - [ ] The manifest list is missing `linux/amd64` or `linux/arm64`.
 - [ ] Either platform image fails to pull.
-- [ ] A platform image is missing `/app/libwasmtime.so` or it is built for the
-  wrong architecture.
+- [ ] A platform image is missing `/app/libwasmtime.so` **or**
+  `/app/libwasmtime_preview2_shim.so`, or either is built for the wrong
+  architecture.
+- [ ] The sample smoke fails at `list-query` (the preview2 shim does not load:
+  `DllNotFoundException: ... 'wasmtime_preview2_shim'`).
 - [ ] Only one architecture published (partial publication).
 - [ ] An unresolved smoke gate (see Known Limitations) is being hidden rather
   than disclosed.
