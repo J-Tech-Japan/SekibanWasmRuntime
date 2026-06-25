@@ -42,8 +42,10 @@ job has **no `needs: build`** and does its own multi-arch build + fail-closed
 manifest verification. This avoids building the slow `linux/arm64`-under-QEMU leg
 **twice** before publication, which previously left a manual `push=true` run stuck
 in a redundant no-push build (#193). Both jobs have explicit `timeout-minutes`
-and reuse a GitHub Actions build cache (`cache-from`/`cache-to: type=gha`) so
-re-runs are not cold rebuilds.
+and reuse a GitHub Actions build cache so re-runs are not cold rebuilds. The
+validation job exports cache (`cache-to: type=gha`); the publish job only reads
+that cache (`cache-from: type=gha`) so a release run does not keep running after
+the manifest has been pushed just to export large multi-arch cache layers.
 
 **The heavy multi-arch + per-platform native-library verification happens at the
 publish / manual gate, not on every PR.** Ordinary PR validation is a **fast
