@@ -244,11 +244,12 @@ docker buildx imagetools inspect ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:
 # Expect Manifests entries for both linux/amd64 and linux/arm64.
 ```
 
-Preview 2 (`1.0.0-preview.2`) is the first multi-arch runtime-host tag — once
-published, pull it directly on Apple Silicon with no override. Its release
-readiness, fail-closed gates, and verification (`scripts/release/verify-runtime-host-multiarch.sh`)
-are tracked in
-[`docs/release/runtime-host-preview-2-release-checklist.md`](../../docs/release/runtime-host-preview-2-release-checklist.md).
+Preview 2 (`1.0.0-preview.2`) is multi-arch but **shim-less** (it predates the
+WASI preview2 shim fix), so `list-query` / materialized-view paths fail against
+it — do not recommend it. The **corrected recommended public tag is
+`1.0.0-preview.3`** (multi-arch + preview2 shim); its publish plan, fail-closed
+gates, and verification (`scripts/release/verify-runtime-host-multiarch.sh`) are in
+[`docs/release/runtime-host-preview-3-release-metadata.md`](../../docs/release/runtime-host-preview-3-release-metadata.md).
 
 Older tags published before multi-arch support (e.g. `1.0.0-preview.1`) are
 **amd64 only**; on arm64 they fail with `no matching manifest for linux/arm64/v8`.
