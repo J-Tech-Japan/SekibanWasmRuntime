@@ -34,20 +34,41 @@ NuGet and image releases can be cut on independent cadences.
 
 [`.github/workflows/release-ghcr-image-preview.yml`](../../.github/workflows/release-ghcr-image-preview.yml)
 
-- **`pull_request`** (paths-filtered): builds the runtime host image from
-  `src/runtime/Sekiban.Dcb.WasmRuntime.Host/Dockerfile` for **both
-  `linux/amd64` and `linux/arm64`** (Buildx + QEMU) with `push: false` to
-  validate the build. It never publishes. Validating both legs means a change
-  that breaks the arm64 build fails the PR instead of silently shipping an
-  amd64-only image.
+The workflow has two jobs: a **validation** `build` job and a **`publish`** job.
+The validation job runs only when it adds value — on PRs and on an explicit
+no-push manual dispatch — and is **skipped on the publish path** (a
+`runtime-host-v*` tag push, or `workflow_dispatch` with `push=true`). The publish
+job has **no `needs: build`** and does its own multi-arch build + fail-closed
+manifest verification. This avoids building the slow `linux/arm64`-under-QEMU leg
+**twice** before publication, which previously left a manual `push=true` run stuck
+in a redundant no-push build (#193). Both jobs have explicit `timeout-minutes`
+and reuse a GitHub Actions build cache (`cache-from`/`cache-to: type=gha`) so
+re-runs are not cold rebuilds.
+
+**The heavy multi-arch + per-platform native-library verification happens at the
+publish / manual gate, not on every PR.** Ordinary PR validation is a **fast
+native `linux/amd64` build** — it still compiles the Rust `wasmtime-preview2-shim`
+and runs the Dockerfile fail-closed native-library assertion for amd64, so the
+packaging path is validated without a per-PR QEMU-backed arm64 build. The full
+`linux/amd64,linux/arm64` validation is opt-in via a no-push `workflow_dispatch`,
+and the `publish` job always builds + verifies both platforms.
+
+- **`pull_request`** (paths-filtered): the validation job builds the runtime host
+  image from `src/runtime/Sekiban.Dcb.WasmRuntime.Host/Dockerfile` for **native
+  `linux/amd64` only** (no QEMU) with `push: false`. It never publishes. This
+  keeps PR feedback fast; the arm64 build is exercised by the opt-in dispatch and
+  by every publish.
 - **`push` to a `runtime-host-v*` tag**: the runtime-host image release lane. The
-  image version is derived from the tag (`runtime-host-v1.0.0-preview.2` →
-  `1.0.0-preview.2`) and the moving `preview` tag is updated.
+  validation job is skipped; the publish job builds + pushes. The image version is
+  derived from the tag (`runtime-host-v1.0.0-preview.2` → `1.0.0-preview.2`) and
+  the moving `preview` tag is updated.
 - **`workflow_dispatch`**: manual run with inputs:
   - `image_tag` (required, default `1.0.0-preview.1`) — the explicit preview
     tag to build and, when pushing, publish.
-  - `push` (boolean, default `false`) — when `true`, the publish job runs and
-    pushes to GHCR. When `false`, the run is build-only validation.
+  - `push` (boolean, default `false`) — when `true`, the validation job is
+    skipped and the publish job builds + pushes to GHCR. When `false`, the run is
+    the opt-in **full `linux/amd64,linux/arm64` build-only validation** (heavier
+    than PR validation; use it to exercise the arm64 leg without publishing).
   - `update_moving_tag` (boolean, default `false`) — when `true`, also updates
     the moving `preview` tag (`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:preview`)
     to this build, in addition to the explicit `image_tag`.
@@ -101,12 +122,20 @@ docker pull ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:<tag>
 ```
 
 The runtime host Dockerfile is built once per platform by Buildx, so each leg
-downloads and packages its own Wasmtime native library
-(`runtimes/linux-x64/native/libwasmtime.so` on amd64,
-`runtimes/linux-arm64/native/libwasmtime.so` on arm64). The Dockerfile asserts
-the native asset for the target platform is present and **fails the build** if it
-is missing, so a manifest list never ships an image leg without its Wasmtime
-runtime.
+packages its own native libraries for the target architecture:
+
+- `/app/libwasmtime.so` — the Wasmtime C API (from wasmtime-dotnet).
+- `/app/libwasmtime_preview2_shim.so` — the WASI preview2 shim, compiled from the
+  Rust `wasmtime-preview2-shim` crate in a dedicated build stage. The runtime
+  DllImports it for `list-query` / projection catch-up; without it those paths
+  throw `DllNotFoundException: ... 'wasmtime_preview2_shim'` even though
+  `libwasmtime.so` is present and `/health` passes.
+
+The Dockerfile asserts **both** libraries are present **and** match the target
+architecture (ELF `e_machine`) and **fails the build** otherwise, per platform
+leg — so a manifest list never ships an image variant missing a native library.
+The image sets `WASMTIME_PREVIEW2_SHIM_PATH=/app/libwasmtime_preview2_shim.so` so
+the runtime resolves the shim deterministically.
 
 ### Manifest inspection (release evidence)
 

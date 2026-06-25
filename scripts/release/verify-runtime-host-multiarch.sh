@@ -94,8 +94,14 @@ for p in "${required_platforms[@]}"; do
   esac
 done
 
-# 2) Each required platform must be pullable, and (unless skipped) carry its own
-#    correct-arch libwasmtime.so.
+# Native libraries that must be present AND arch-correct in each image variant.
+# libwasmtime.so is the Wasmtime C API; libwasmtime_preview2_shim.so is the WASI
+# preview2 shim the runtime DllImports for list-query / projection catch-up
+# (missing it throws DllNotFoundException at runtime even though /health passes).
+required_libs=(/app/libwasmtime.so /app/libwasmtime_preview2_shim.so)
+
+# 2) Each required platform must be pullable, and (unless skipped) carry every
+#    required native library with the correct architecture.
 for p in "${required_platforms[@]}"; do
   if ! docker pull --platform "$p" "$image_ref" >"$work_dir/pull.log" 2>&1; then
     fail "$p pull failed: $(tail -n1 "$work_dir/pull.log")"
@@ -106,21 +112,22 @@ for p in "${required_platforms[@]}"; do
   [[ "${SKIP_NATIVE_ASSET_CHECK:-0}" == "1" ]] && continue
 
   cid="$(docker create --platform "$p" "$image_ref" 2>/dev/null || true)"
-  if [[ -z "$cid" ]]; then fail "$p: could not create a container to inspect the native asset"; continue; fi
-  lib="$work_dir/libwasmtime-${p//\//-}.so"
-  if ! docker cp "$cid:/app/libwasmtime.so" "$lib" >/dev/null 2>&1; then
-    fail "$p: /app/libwasmtime.so missing in the image"
-    docker rm "$cid" >/dev/null 2>&1 || true
-    continue
-  fi
-  docker rm "$cid" >/dev/null 2>&1 || true
-  machine="$(od -An -tx1 -j18 -N2 "$lib" | tr -d ' ')"
+  if [[ -z "$cid" ]]; then fail "$p: could not create a container to inspect native assets"; continue; fi
   want="$(want_machine_for "$p")"
-  if [[ "$machine" == "$want" ]]; then
-    ok "$p: libwasmtime.so present and arch-correct (e_machine=$machine)"
-  else
-    fail "$p: libwasmtime.so e_machine=$machine, expected $want"
-  fi
+  for path in "${required_libs[@]}"; do
+    local_copy="$work_dir/$(basename "$path")-${p//\//-}"
+    if ! docker cp "$cid:$path" "$local_copy" >/dev/null 2>&1; then
+      fail "$p: $path missing in the image"
+      continue
+    fi
+    machine="$(od -An -tx1 -j18 -N2 "$local_copy" | tr -d ' ')"
+    if [[ "$machine" == "$want" ]]; then
+      ok "$p: $path present and arch-correct (e_machine=$machine)"
+    else
+      fail "$p: $path e_machine=$machine, expected $want"
+    fi
+  done
+  docker rm "$cid" >/dev/null 2>&1 || true
 done
 
 finish

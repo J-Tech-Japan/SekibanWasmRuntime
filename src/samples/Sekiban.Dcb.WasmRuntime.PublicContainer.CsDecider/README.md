@@ -59,7 +59,10 @@ path through the **public** container:
 
 1. `POST /api/sekiban/serialized/commit` — a `WeatherForecastCreated` event;
 2. `POST /api/sekiban/serialized/tag-latest-sortable` — tag-state read back;
-3. `POST /api/sekiban/serialized/list-query` — `GetWeatherForecastListQuery`.
+3. `POST /api/sekiban/serialized/list-query` — `GetWeatherForecastListQuery`
+   (exercises projection catch-up, which loads the WASI **preview2 shim**; a
+   runtime image missing `libwasmtime_preview2_shim.so` fails here with
+   `DllNotFoundException: ... 'wasmtime_preview2_shim'`).
 
 It writes `reports/smoke/public-container-cs-decider-smoke.md` (`PASS` / `FAIL` /
 `SKIP`) and tears the stack down. On failure it captures the HTTP response body
@@ -83,7 +86,8 @@ for the root-cause classification and the preview 2 republish requirement.
   amd64 emulation workaround: `export DOCKER_DEFAULT_PLATFORM=linux/amd64` before
   `dotnet run`/`scripts/smoke.sh`. Once **preview 2** (`1.0.0-preview.2`, the
   first multi-arch runtime-host tag — `linux/amd64` + `linux/arm64`) is published,
-  repoint the AppHost `RuntimeImageTag` to it and drop the override; verify with
+  run against it without editing code by setting
+  `SAMPLE_RUNTIME_IMAGE_TAG=1.0.0-preview.2` and drop the override; verify with
   `docker buildx imagetools inspect <image>:<tag>`. See
   [`docs/release/runtime-host-preview-2-release-checklist.md`](../../../docs/release/runtime-host-preview-2-release-checklist.md).
 - **Port already in use** → the smoke picks a free host port; for a manual run,
