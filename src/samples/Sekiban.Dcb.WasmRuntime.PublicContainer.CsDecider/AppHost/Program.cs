@@ -5,7 +5,13 @@ using System.IO;
 // ghcr.io image, exactly as an external developer would consume it.
 
 const string RuntimeImage = "ghcr.io/j-tech-japan/sekiban-wasm-runtime-host";
-const string RuntimeImageTag = "1.0.0-preview.1";
+// Pinned to preview 1 by default. Once the preview 2 multi-arch tag is published,
+// run the sample/smoke against it without editing code by setting
+// SAMPLE_RUNTIME_IMAGE_TAG=1.0.0-preview.2 (preview 2 also drops the need for a
+// DOCKER_DEFAULT_PLATFORM=linux/amd64 override on Apple Silicon).
+var runtimeImageTag = Environment.GetEnvironmentVariable("SAMPLE_RUNTIME_IMAGE_TAG") is { Length: > 0 } tagOverride
+    ? tagOverride
+    : "1.0.0-preview.1";
 const string ModuleFileName = "public-container-cs-decider.wasm";
 
 var builder = DistributedApplication.CreateBuilder(args);
@@ -38,7 +44,7 @@ var sekibanDb = postgres.AddDatabase("SekibanDcb");
 // runtime container is ever created. WithReference still injects the connection
 // string; the runtime tolerates the DB coming up moments later.
 var runtime = builder
-    .AddContainer("runtime", RuntimeImage, RuntimeImageTag)
+    .AddContainer("runtime", RuntimeImage, runtimeImageTag)
     .WithReference(sekibanDb)
     .WithBindMount(configDir, "/app/config", isReadOnly: true)
     .WithBindMount(modulesDir, "/app/modules", isReadOnly: true)

@@ -34,20 +34,32 @@ NuGet and image releases can be cut on independent cadences.
 
 [`.github/workflows/release-ghcr-image-preview.yml`](../../.github/workflows/release-ghcr-image-preview.yml)
 
-- **`pull_request`** (paths-filtered): builds the runtime host image from
-  `src/runtime/Sekiban.Dcb.WasmRuntime.Host/Dockerfile` for **both
-  `linux/amd64` and `linux/arm64`** (Buildx + QEMU) with `push: false` to
-  validate the build. It never publishes. Validating both legs means a change
-  that breaks the arm64 build fails the PR instead of silently shipping an
-  amd64-only image.
+The workflow has two jobs: a **validation** `build` job and a **`publish`** job.
+The validation job runs only when it adds value — on PRs and on an explicit
+no-push manual dispatch — and is **skipped on the publish path** (a
+`runtime-host-v*` tag push, or `workflow_dispatch` with `push=true`). The publish
+job has **no `needs: build`** and does its own multi-arch build + fail-closed
+manifest verification. This avoids building the slow `linux/arm64`-under-QEMU leg
+**twice** before publication, which previously left a manual `push=true` run stuck
+in a redundant no-push build (#193). Both jobs have explicit `timeout-minutes`
+(validation 90, publish 120) and reuse a GitHub Actions build cache
+(`cache-from`/`cache-to: type=gha`) so re-runs are not cold rebuilds.
+
+- **`pull_request`** (paths-filtered): the validation job builds the runtime host
+  image from `src/runtime/Sekiban.Dcb.WasmRuntime.Host/Dockerfile` for **both
+  `linux/amd64` and `linux/arm64`** (Buildx + QEMU) with `push: false`. It never
+  publishes. Validating both legs means a change that breaks the arm64 build fails
+  the PR instead of silently shipping an amd64-only image.
 - **`push` to a `runtime-host-v*` tag**: the runtime-host image release lane. The
-  image version is derived from the tag (`runtime-host-v1.0.0-preview.2` →
-  `1.0.0-preview.2`) and the moving `preview` tag is updated.
+  validation job is skipped; the publish job builds + pushes. The image version is
+  derived from the tag (`runtime-host-v1.0.0-preview.2` → `1.0.0-preview.2`) and
+  the moving `preview` tag is updated.
 - **`workflow_dispatch`**: manual run with inputs:
   - `image_tag` (required, default `1.0.0-preview.1`) — the explicit preview
     tag to build and, when pushing, publish.
-  - `push` (boolean, default `false`) — when `true`, the publish job runs and
-    pushes to GHCR. When `false`, the run is build-only validation.
+  - `push` (boolean, default `false`) — when `true`, the validation job is
+    skipped and the publish job builds + pushes to GHCR. When `false`, the run is
+    build-only validation.
   - `update_moving_tag` (boolean, default `false`) — when `true`, also updates
     the moving `preview` tag (`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:preview`)
     to this build, in addition to the explicit `image_tag`.

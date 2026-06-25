@@ -17,6 +17,35 @@ The underlying multi-arch build/publish capability is
 release-readiness wrapper around it. Preparing this checklist does **not**
 publish preview 2.
 
+## Publish status (SWR-G042) — operator step, fail closed
+
+> **Preview 2 is NOT yet published and preview 2 readiness is NOT complete.**
+> A manual `push=true` dispatch (run `28137575387`) stalled because the workflow
+> built the slow `linux/arm64`-under-QEMU leg **twice** — a no-push validation
+> build before the publish build — with no timeout. That operability bug is
+> **fixed** (SWR-G042): the validation `build` job is now skipped on the publish
+> path, the `publish` job has no `needs: build`, both jobs have explicit
+> `timeout-minutes`, and they share a GitHub Actions build cache. See
+> [`ghcr-image-preview.md`](ghcr-image-preview.md#workflow).
+>
+> **Remaining operator step (outward-facing, not run by automation):** trigger the
+> publish and verify the result —
+>
+> ```bash
+> gh workflow run release-ghcr-image-preview --repo J-Tech-Japan/SekibanWasmRuntime \
+>   --ref main -f image_tag=1.0.0-preview.2 -f push=true -f update_moving_tag=true
+> gh run watch <run-id> --repo J-Tech-Japan/SekibanWasmRuntime --exit-status
+> IMAGE_TAG=1.0.0-preview.2 scripts/release/verify-runtime-host-multiarch.sh
+> bash src/samples/Sekiban.Dcb.WasmRuntime.PublicContainer.CsDecider/scripts/build-wasm.sh
+> bash src/samples/Sekiban.Dcb.WasmRuntime.PublicContainer.CsDecider/scripts/smoke.sh
+> ```
+>
+> Do **not** mark preview 2 readiness complete until the published `1.0.0-preview.2`
+> tag is a multi-arch manifest list (both platforms) **and** the public-container
+> sample smoke is green (`/ready` + commit + query against fresh Postgres) against
+> that tag. The current public preview 1 image predates the SWR-G041 schema fix,
+> so its live commit smoke is expected to fail until preview 2 is republished.
+
 ## Tag Contract
 
 - [ ] Immutable preview 2 tag is `1.0.0-preview.2`, published as

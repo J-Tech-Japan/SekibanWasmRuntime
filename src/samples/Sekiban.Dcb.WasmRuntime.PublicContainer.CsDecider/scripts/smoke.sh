@@ -46,7 +46,7 @@ write_report() {
     printf '# Public Container CS Decider Smoke (SWR-G036)\n\n'
     printf '%s\n' "- Result: **$result**"
     printf '%s\n' "- Detail: $detail"
-    printf '%s\n' "- Runtime image: \`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.1\`"
+    printf '%s\n' "- Runtime image: \`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:${SAMPLE_RUNTIME_IMAGE_TAG:-1.0.0-preview.1}\`"
     printf '%s\n' "- Runtime URL: \`${RUNTIME_URL:-unresolved}\`"
     printf '%s\n' "- Commit: \`$(git rev-parse HEAD 2>/dev/null || echo unknown)\`"
     if [[ -n "${LAST_HTTP_BODY:-}" ]]; then

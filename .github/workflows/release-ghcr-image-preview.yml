@@ -52,8 +52,20 @@ env:
 
 jobs:
   build:
-    name: build runtime image
+    name: build runtime image (validation)
+    # Validation-only build of BOTH platform shapes. It runs for PRs and for an
+    # explicit no-push manual dispatch. It is intentionally SKIPPED on the publish
+    # path (a `runtime-host-v*` tag push, or workflow_dispatch with push=true):
+    # the publish job already builds both platforms and fails closed on its
+    # manifest, so a separate no-push multi-arch build first would just double the
+    # slow arm64-under-QEMU build before publication — the cause of the stuck
+    # manual run (#193). With no redundant pre-build, a manual push=true dispatch
+    # goes straight to the publish job.
+    if: >-
+      github.event_name == 'pull_request'
+      || (github.event_name == 'workflow_dispatch' && github.event.inputs.push != 'true')
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     permissions:
       contents: read
     steps:
@@ -76,14 +88,23 @@ jobs:
           file: src/runtime/Sekiban.Dcb.WasmRuntime.Host/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: false
+          provenance: false
+          # Cache the slow arm64-under-QEMU layers so re-runs and the publish job
+          # (same cache scope) are much faster than a cold build.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           tags: ${{ env.IMAGE_NAME }}:${{ inputs.image_tag || '1.0.0-preview.1' }}
           labels: |
             org.opencontainers.image.revision=${{ github.sha }}
 
   publish:
     name: publish to GHCR
-    needs: build
+    # No `needs: build`: the validation build is skipped on the publish path, so a
+    # manual push=true dispatch does not wait for (or duplicate) a slow no-push
+    # multi-arch build first. This job does its own multi-arch build + fail-closed
+    # manifest verification, so validation is not lost.
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     # Publish only from the canonical repository, and only on the runtime-host
     # image release lane: a `runtime-host-v*` tag push, or an explicit manual
     # dispatch that opts in. Pull-request runs build but never publish.
@@ -143,6 +164,17 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
 
+      - name: Log publish plan
+        env:
+          TAGS: ${{ steps.tags.outputs.tags }}
+          VERSION: ${{ steps.tags.outputs.version }}
+        run: |
+          echo "::notice title=GHCR publish plan::version=${VERSION} platforms=linux/amd64,linux/arm64 push=true"
+          echo "Building and pushing multi-arch manifest list for tags:"
+          printf '%s\n' "${TAGS}"
+          echo "A cold linux/arm64 leg runs under QEMU and can take many minutes;"
+          echo "GitHub Actions cache (type=gha) is reused from the validation build when present."
+
       - name: Build and push runtime host image (multi-arch manifest list)
         uses: docker/build-push-action@v6
         with:
@@ -150,6 +182,11 @@ jobs:
           file: src/runtime/Sekiban.Dcb.WasmRuntime.Host/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
+          provenance: false
+          # Reuse the validation build's layer cache (same gha scope) so the
+          # publish build is not a full cold rebuild.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           tags: ${{ steps.tags.outputs.tags }}
           labels: |
             org.opencontainers.image.revision=${{ github.sha }}
