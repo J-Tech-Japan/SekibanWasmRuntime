@@ -181,16 +181,40 @@ log "list-query OK"
 # design; a caller reads MV state directly from DcbMaterializedViewPostgres. After commit,
 # the host's MV catch-up worker applies WeatherForecastCreated to the WASM MV projector,
 # which writes the row to the physical table named in sekiban_mv_registry. We locate the
-# Aspire Postgres container, resolve the MV database + physical table, and poll for the row.
+# Aspire Postgres container that backs THIS run, authenticate with its generated password,
+# resolve the MV database + physical table, and poll for the row.
 log "materialized-view read (DcbMaterializedViewPostgres)"
-pg_cid="$(docker ps --filter ancestor=postgres --format '{{.ID}}' 2>/dev/null | head -1)"
-[[ -n "$pg_cid" ]] || pg_cid="$(docker ps --format '{{.ID}} {{.Names}}' 2>/dev/null | awk '/ pg-/{print $1; exit}')"
-[[ -n "$pg_cid" ]] || fail "could not locate the Aspire Postgres container to verify the materialized view"
 
-MV_DB="$(docker exec "$pg_cid" psql -U postgres -tAc \
-  "SELECT datname FROM pg_database WHERE datname ILIKE 'dcbmaterializedview%' LIMIT 1;" 2>/dev/null | tr -d '[:space:]')"
-[[ -n "$MV_DB" ]] || fail "DcbMaterializedViewPostgres database was not created (MV runtime not provisioned)"
-psql_mv() { docker exec "$pg_cid" psql -U postgres -d "$MV_DB" -tAc "$1" 2>/dev/null; }
+# Aspire names the Postgres container from the "pg" resource (pg-<suffix>) and protects it
+# with a generated POSTGRES_PASSWORD, so psql needs PGPASSWORD even over the local socket.
+# Unrelated Postgres containers can run concurrently (e.g. another dev stack), so do NOT just
+# take the first `ancestor=postgres` match: probe candidates and keep the one whose server
+# actually exposes a DcbMaterializedViewPostgres database.
+pg_password_for() { docker exec "$1" printenv POSTGRES_PASSWORD 2>/dev/null | tr -d '\r\n'; }
+pg_mv_db_name() {
+  local cid="$1" pw; pw="$(pg_password_for "$cid")"
+  docker exec -e PGPASSWORD="$pw" "$cid" psql -U postgres -tAc \
+    "SELECT datname FROM pg_database WHERE datname ILIKE 'dcbmaterializedview%' LIMIT 1;" 2>/dev/null \
+    | tr -d '[:space:]'
+}
+
+pg_cid=""; MV_DB=""; PG_PW=""
+mv_db_deadline=$(( $(date +%s) + 60 ))
+while [[ $(date +%s) -lt $mv_db_deadline ]]; do
+  # Aspire pg-* containers first, then any postgres image; dedupe preserving order.
+  candidates="$( { docker ps --format '{{.Names}} {{.ID}}' 2>/dev/null | awk '$1 ~ /^pg-/ {print $2}'; \
+                   docker ps --filter ancestor=postgres --format '{{.ID}}' 2>/dev/null; } \
+                 | awk 'NF && !seen[$0]++' )"
+  for cid in $candidates; do
+    db="$(pg_mv_db_name "$cid")"
+    if [[ -n "$db" ]]; then pg_cid="$cid"; MV_DB="$db"; PG_PW="$(pg_password_for "$cid")"; break; fi
+  done
+  [[ -n "$pg_cid" ]] && break
+  sleep 2
+done
+[[ -n "$pg_cid" ]] || fail "could not locate an Aspire Postgres container exposing DcbMaterializedViewPostgres (MV runtime not provisioned)"
+log "materialized-view Postgres: container=$pg_cid db=$MV_DB"
+psql_mv() { docker exec -e PGPASSWORD="$PG_PW" "$pg_cid" psql -U postgres -d "$MV_DB" -tAc "$1" 2>/dev/null; }
 
 mv_found=0
 mv_detail=""

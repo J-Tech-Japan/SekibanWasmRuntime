@@ -5,6 +5,15 @@ through public artifacts: public NuGet for the domain, a WASM module exporting t
 MV ABI, and the public GHCR runtime-host image driving MV catch-up into
 `DcbMaterializedViewPostgres`.
 
+> **Blocker resolved (SWR-G045).** When this doc was written, live MV verification
+> was blocked on a published runtime image that carries the WASI preview2 shim. The
+> operator has since published **`1.0.0-preview.3`** (multi-arch + shim), and the
+> public-container smoke now passes end-to-end against that exact public tag through
+> Materialized View read/catch-up. See
+> [`runtime-host-preview-3-release-verification.md`](runtime-host-preview-3-release-verification.md)
+> for the verification evidence. The "build-verified" notes below are retained as the
+> SWR-G043 record.
+
 ## What is build-verified (this PR)
 
 - The WASM module exports `mv_metadata`, `mv_initialize`, `mv_apply_event`

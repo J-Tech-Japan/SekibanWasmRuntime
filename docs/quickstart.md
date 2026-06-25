@@ -169,11 +169,14 @@ platforms with
 `docker buildx imagetools inspect ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:<tag>`.
 Preview 2 (`1.0.0-preview.2`) is multi-arch but **shim-less** (it predates the
 WASI preview2 shim fix), so `list-query` / materialized-view paths fail against
-it. The corrected tag will be **`1.0.0-preview.3`**, but it is **not published or
-verified yet** — do not treat it as a working public tag until the publish +
-verification gate in
-[`docs/release/runtime-host-preview-3-release-metadata.md`](release/runtime-host-preview-3-release-metadata.md)
-passes. Until then, no published preview tag fully supports `list-query` / MV.
+it. **Use `1.0.0-preview.3` — the verified, recommended public runtime tag.** It
+is a published `linux/amd64` + `linux/arm64` manifest list
+(digest `sha256:8bdebccd…`) whose images both carry `/app/libwasmtime.so` **and**
+`/app/libwasmtime_preview2_shim.so`, the moving `preview` tag points at the same
+digest, and the public-container sample smoke passes end-to-end against it
+(`/health`, schema-aware `/ready`, command commit, tag-state read, `list-query`,
+and Materialized View catch-up). See the verification evidence in
+[`docs/release/runtime-host-preview-3-release-verification.md`](release/runtime-host-preview-3-release-verification.md).
 
 See [`docker/sekiban-wasm-runtime/README.md`](../docker/sekiban-wasm-runtime/README.md)
 for the public local runtime container contract: provided/non-goal behavior,
