@@ -185,3 +185,12 @@ Postgres via Aspire — see
 [`docs/samples/public-container-cs-decider.md`](samples/public-container-cs-decider.md)
 and the sample under
 [`src/samples/Sekiban.Dcb.WasmRuntime.PublicContainer.CsDecider`](../src/samples/Sekiban.Dcb.WasmRuntime.PublicContainer.CsDecider).
+
+The sample also demonstrates a **Materialized View** through the same public
+artifacts: the WASM module exports `mv_metadata` / `mv_initialize` /
+`mv_apply_event`, the manifest declares `materializedViews`, the AppHost wires a
+second Postgres `DcbMaterializedViewPostgres` and `SEKIBAN_PROJECTION_MODE=dual`,
+and the smoke reads the caught-up view **directly from Postgres** (MV reads are
+caller-owned — the runtime host has no MV read API). Live MV verification needs a
+runtime image carrying the WASI preview2 shim; see
+[`docs/release/runtime-host-mv-public-artifact-evidence.md`](release/runtime-host-mv-public-artifact-evidence.md).

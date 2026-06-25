@@ -105,7 +105,17 @@ cat > "$CONFIG_DIR/sekiban-manifest.json" <<JSON
     "GetWeatherForecastCountQuery": "WeatherForecastMultiProjection",
     "GetWeatherForecastListQuery": "WeatherForecastMultiProjection",
     "WeatherForecastListQuery": "WeatherForecastMultiProjection"
-  }
+  },
+  "materializedViews": [
+    {
+      "viewName": "WeatherForecast",
+      "viewVersion": 1,
+      "modulePath": "/app/modules/$MODULE_NAME",
+      "logicalTables": [
+        "weather_forecast"
+      ]
+    }
+  ]
 }
 JSON
 

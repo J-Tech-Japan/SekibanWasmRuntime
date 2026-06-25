@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using PublicContainerCsDecider.Domain;
 using PublicContainerCsDecider.Domain.Weather;
+using PublicContainerCsDecider.Wasm.MaterializedView;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
@@ -218,6 +219,56 @@ public static class WasmExports
                 break;
         }
     }
+
+    // ---- Materialized View ABI ---------------------------------------------------------------
+    // The runtime host calls these when the manifest declares materializedViews, projection mode
+    // is dual/materialized-view-only, and DcbMaterializedViewPostgres is configured. The projector
+    // emits SQL statements; the host executes them against the MV Postgres in the apply transaction.
+
+    [UnmanagedCallersOnly(EntryPoint = "mv_metadata")]
+    public static long MvMetadata() => WriteString(WasmMvRegistry.Metadata());
+
+    [UnmanagedCallersOnly(EntryPoint = "mv_initialize")]
+    public static long MvInitialize(
+        int viewNamePtr, int viewNameLen,
+        int viewVersion,
+        int tableBindingsPtr, int tableBindingsLen)
+    {
+        var viewName = ReadString(viewNamePtr, viewNameLen);
+        var bindingsJson = ReadString(tableBindingsPtr, tableBindingsLen);
+        try
+        {
+            return WriteString(WasmMvRegistry.Initialize(viewName, viewVersion, bindingsJson));
+        }
+        catch (Exception ex)
+        {
+            return WriteString(MvErrorJson(ex));
+        }
+    }
+
+    [UnmanagedCallersOnly(EntryPoint = "mv_apply_event")]
+    public static long MvApplyEvent(
+        int viewNamePtr, int viewNameLen,
+        int viewVersion,
+        int tableBindingsPtr, int tableBindingsLen,
+        int serializableEventPtr, int serializableEventLen)
+    {
+        var viewName = ReadString(viewNamePtr, viewNameLen);
+        var bindingsJson = ReadString(tableBindingsPtr, tableBindingsLen);
+        var eventJson = ReadString(serializableEventPtr, serializableEventLen);
+        try
+        {
+            return WriteString(
+                WasmMvRegistry.ApplyEvent(viewName, viewVersion, bindingsJson, eventJson, HostBackedMvQueryPort.Instance));
+        }
+        catch (Exception ex)
+        {
+            return WriteString(MvErrorJson(ex));
+        }
+    }
+
+    private static string MvErrorJson(Exception ex) =>
+        $"{{\"error\":{MvParamBuilder.EscapeJsonString(ex.Message)}}}";
 
     private static void ApplyEventInternal(ProjectorInstanceState instance, string eventType, string payloadJson)
     {
