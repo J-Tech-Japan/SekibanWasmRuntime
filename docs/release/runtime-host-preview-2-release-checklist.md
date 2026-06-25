@@ -1,5 +1,12 @@
 # Runtime Host Preview 2 Multi-Arch Release Checklist
 
+> **Superseded for the corrected release.** The published `1.0.0-preview.2`
+> digest is shim-less (it predates the SWR-G042 preview2-shim fix) and the tag is
+> immutable, so the corrected runtime-host image is released as **`1.0.0-preview.3`**.
+> Use [`runtime-host-preview-3-release-metadata.md`](runtime-host-preview-3-release-metadata.md)
+> for the corrected publish plan + verification gate. The multi-arch mechanics and
+> fail-closed checks below still apply.
+
 This checklist prepares **preview 2** of the public runtime-host GHCR image so it
 is released as **one coherent multi-arch tag** for both `linux/amd64` and
 `linux/arm64`. It is the runtime-host **image** lane checklist; it is separate

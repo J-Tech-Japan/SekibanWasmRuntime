@@ -48,14 +48,15 @@ but the image content predates the shim fix (built before `8381a5a`).
 
 **Required release follow-up (container lane), tracked, not hidden:**
 
-- Re-publish the runtime-host image **from `8381a5a` or later** so it carries the
-  preview2 shim for both platforms. GHCR run `28142753464` was started from
-  `8381a5a`; it must complete and the immutable tag must point at the shim-carrying
-  image. Because `1.0.0-preview.2` is immutable, a fixed image may need a new tag
-  (e.g. `1.0.0-preview.3`) with the moving `preview` tag advanced to it. Verify
-  with `scripts/release/verify-runtime-host-multiarch.sh` (it fails closed on a
-  missing per-platform shim) — see
-  [`runtime-host-preview-2-release-checklist.md`](runtime-host-preview-2-release-checklist.md).
+- Re-publish the runtime-host image so it carries the preview2 shim for both
+  platforms. Because `1.0.0-preview.2` is immutable and stale, the corrected
+  release is **`1.0.0-preview.3`** from `c7e63cd` (or later), with `preview` moved
+  only after exact-tag verification. The full release plan, the reconciliation of
+  the stuck run `28142753464`, the dispatch plan, and the fail-closed verification
+  gate are in
+  [`runtime-host-preview-3-release-metadata.md`](runtime-host-preview-3-release-metadata.md).
+  Verify with `scripts/release/verify-runtime-host-multiarch.sh` (it fails closed
+  on a missing per-platform shim).
 
 **Sample readiness is therefore NOT complete.** Per the issue, the sample default
 tag is **not** moved to a corrected image until one is published and verified; the

@@ -167,9 +167,13 @@ workaround for **older amd64-only preview tags** such as `1.0.0-preview.1`, whic
 fail on arm64 with `no matching manifest for linux/arm64/v8`. Verify a tag's
 platforms with
 `docker buildx imagetools inspect ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:<tag>`.
-Preview 2 (`1.0.0-preview.2`) is the first multi-arch runtime-host tag; its
-release readiness and verification are tracked in
-[`docs/release/runtime-host-preview-2-release-checklist.md`](release/runtime-host-preview-2-release-checklist.md).
+Preview 2 (`1.0.0-preview.2`) is multi-arch but **shim-less** (it predates the
+WASI preview2 shim fix), so `list-query` / materialized-view paths fail against
+it. The corrected tag will be **`1.0.0-preview.3`**, but it is **not published or
+verified yet** — do not treat it as a working public tag until the publish +
+verification gate in
+[`docs/release/runtime-host-preview-3-release-metadata.md`](release/runtime-host-preview-3-release-metadata.md)
+passes. Until then, no published preview tag fully supports `list-query` / MV.
 
 See [`docker/sekiban-wasm-runtime/README.md`](../docker/sekiban-wasm-runtime/README.md)
 for the public local runtime container contract: provided/non-goal behavior,
