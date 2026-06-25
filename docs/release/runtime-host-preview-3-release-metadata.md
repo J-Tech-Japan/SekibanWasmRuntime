@@ -1,14 +1,16 @@
 # Runtime Host Preview 3 Release Metadata (SWR-G044)
 
-The corrected public runtime-host preview image is **`1.0.0-preview.3`**, released
-from `main` at commit `c7e63cd` (or later). It carries the WASI preview2 shim
-(SWR-G042) and the materialized-view sample support (SWR-G043), which the stale
+The corrected public runtime-host preview image is planned as
+**`1.0.0-preview.3`**, to be published from `main` at commit `c7e63cd` (or later)
+after this metadata lands. It must carry the WASI preview2 shim (SWR-G042) and
+the materialized-view sample support (SWR-G043), which the stale
 `1.0.0-preview.2` image lacks.
 
-> This document is the **release plan + verification gate**. Publishing a public
-> image and moving the `preview` tag are operator/CI actions; they are NOT
-> performed by the child implementation loop. Do not claim release readiness until
-> the gate below passes.
+> This document is the **release metadata preparation plan**. Publishing a public
+> image and moving the `preview` tag are operator/CI actions after this PR lands
+> on `main`; they are NOT performed by the child implementation loop. The
+> post-publish public artifact verification belongs to SWR-G045. Do not claim
+> release readiness until that follow-up verification passes.
 
 ## Why preview 2 is stale and preview 3 is the corrected tag
 
@@ -23,9 +25,9 @@ from `main` at commit `c7e63cd` (or later). It carries the WASI preview2 shim
   SWR-G042 shim fix (`8381a5a`). Without the shim, `list-query` and Materialized
   View catch-up throw `DllNotFoundException: ... 'wasmtime_preview2_shim'`.
 - `1.0.0-preview.2` is an **immutable** tag, so it should not be re-pointed (it
-  already was, to another shim-less digest). The corrected, shim-carrying image is
-  published as the next immutable tag, **`1.0.0-preview.3`**, and `preview` is moved
-  only after the preview 3 exact-tag verification passes.
+  already was, to another shim-less digest). The corrected, shim-carrying image
+  should be published as the next immutable tag, **`1.0.0-preview.3`**, and
+  `preview` is moved only after the preview 3 exact-tag verification passes.
 
 ## Reconcile the stuck preview 2 publish run
 
@@ -73,7 +75,7 @@ its Dockerfile fails closed if either `libwasmtime.so` or
 (SWR-G042). With the validation/publish split (SWR-G042), a manual `push=true`
 dispatch goes straight to the publish job — no redundant pre-build.
 
-## Verification gate (fail closed — do not move `preview` until all pass)
+## Post-publish verification gate (SWR-G045; fail closed)
 
 ```bash
 # 1) Multi-arch + per-platform native libraries (libwasmtime.so AND the shim).
@@ -96,9 +98,12 @@ SAMPLE_RUNTIME_IMAGE_TAG=1.0.0-preview.3 \
 - The `verify-runtime-host-multiarch.sh` gate (SWR-G040) fails closed on a missing
   per-platform `libwasmtime_preview2_shim.so` — re-using exactly the check that
   catches the preview 2 defect.
-- `preview` must be moved to preview 3 **only after** steps 1–3 are green.
+- `preview` must point to preview 3 only after the exact-tag verification is
+  green.
 - **If GHCR publish or the sample smoke fails, record the blocker here and do NOT
   claim release readiness** — leave `preview` on its prior digest.
+- SWR-G045 owns recording the actual run URL/digest, verifying the public tag,
+  and changing docs/sample wording from planned to verified.
 
 ## Status
 
@@ -110,10 +115,12 @@ SAMPLE_RUNTIME_IMAGE_TAG=1.0.0-preview.3 \
   `1.0.0-preview.2` + `preview` moved to `sha256:0d5c4fe1…` (the immutable tag was
   re-pointed) but the new digest is **still shim-less** (verified), so it does not
   fix `list-query` / MV.
-- [ ] `1.0.0-preview.3` published from `c7e63cd` (or later) — run URL + digest
-  recorded. **(operator/CI — `workflow_dispatch push=true`)**
-- [ ] `verify-runtime-host-multiarch.sh` PASS (both platforms, both native libs).
-- [ ] `preview` digest == `1.0.0-preview.3` digest.
-- [ ] Public-container smoke PASS through list-query + Materialized View read.
-- [ ] Docs/sample default updated to recommend `1.0.0-preview.3` (this PR moves the
-      docs recommendation; the AppHost default tag flips once the tag is verified).
+- [ ] Operator publishes `1.0.0-preview.3` from merged `main` — run URL + digest
+  recorded by SWR-G045. **(operator/CI — `workflow_dispatch push=true`)**
+- [ ] SWR-G045 records `verify-runtime-host-multiarch.sh` PASS (both platforms,
+  both native libs).
+- [ ] SWR-G045 records `preview` digest == `1.0.0-preview.3` digest.
+- [ ] SWR-G045 records public-container smoke PASS through list-query +
+  Materialized View read.
+- [ ] SWR-G045 updates docs/sample default to recommend `1.0.0-preview.3` only
+  after the public tag is verified.
