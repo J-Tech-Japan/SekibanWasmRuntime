@@ -187,6 +187,7 @@ jobs:
           printf '%s\n' "${TAGS}"
           echo "A cold linux/arm64 leg runs under QEMU and can take many minutes;"
           echo "GitHub Actions cache (type=gha) is reused from the validation build when present."
+          echo "The publish job does not export cache; the pushed manifest is the release artifact."
 
       - name: Build and push runtime host image (multi-arch manifest list)
         uses: docker/build-push-action@v6
@@ -197,9 +198,13 @@ jobs:
           push: true
           provenance: false
           # Reuse the validation build's layer cache (same gha scope) so the
-          # publish build is not a full cold rebuild.
+          # publish build is not a full cold rebuild. Do not export cache from
+          # this release step: the preview.3 publish created the manifest but the
+          # build-push step did not finish before the job timeout, consistent
+          # with slow post-push cache export on a large multi-arch build. The
+          # release artifact is the pushed manifest; validation/PR runs keep the
+          # cache warm.
           cache-from: type=gha
-          cache-to: type=gha,mode=max
           tags: ${{ steps.tags.outputs.tags }}
           labels: |
             org.opencontainers.image.revision=${{ github.sha }}
