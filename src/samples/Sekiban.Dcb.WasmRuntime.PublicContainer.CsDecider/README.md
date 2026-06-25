@@ -103,14 +103,16 @@ artifacts. The WASM module exports `mv_metadata` / `mv_initialize` / `mv_apply_e
 > **Live MV verification requires a runtime image that carries the WASI preview2
 > shim.** The MV catch-up uses the same preview2 component path as `list-query`,
 > so it needs `libwasmtime_preview2_shim.so` (SWR-G042). The published
-> `1.0.0-preview.2` tag predates that fix and is shim-less, so the **corrected
-> public tag is `1.0.0-preview.3`** (SWR-G044). Once it is published and verified,
-> run the full smoke against it without editing code:
+> `1.0.0-preview.2` tag predates that fix and is shim-less. **The verified,
+> recommended public tag is `1.0.0-preview.3`** — a multi-arch, shim-carrying image
+> (digest `sha256:8bdebccd…`) that this sample now defaults to. The full smoke
+> passes end-to-end against it (`/health`, schema-aware `/ready`, command commit,
+> tag-state read, `list-query`, and Materialized View catch-up):
 > `SAMPLE_RUNTIME_IMAGE_TAG=1.0.0-preview.3 bash scripts/smoke.sh`. See
+> [`docs/release/runtime-host-preview-3-release-verification.md`](../../../docs/release/runtime-host-preview-3-release-verification.md)
+> (the public-artifact verification evidence) and
 > [`docs/release/runtime-host-preview-3-release-metadata.md`](../../../docs/release/runtime-host-preview-3-release-metadata.md)
-> (release plan + verification gate) and
-> [`docs/release/runtime-host-mv-public-artifact-evidence.md`](../../../docs/release/runtime-host-mv-public-artifact-evidence.md)
-> (the shim/container blocker).
+> (the release plan it verifies).
 
 ## Troubleshooting
 
@@ -120,16 +122,15 @@ artifacts. The WASM module exports `mv_metadata` / `mv_initialize` / `mv_apply_e
   `linux/amd64` + WASI SDK 29 (see `scripts/build-wasm.sh`). Ensure Docker is
   running; on Linux it can build natively with the WASI SDK on `PATH`.
 - **`docker pull` of the runtime image fails** → confirm
-  `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.1` is reachable.
-- **`no matching manifest for linux/arm64/v8`** on Apple Silicon → the pinned
-  `1.0.0-preview.1` tag is an **older amd64-only** image. Run the sample with the
-  amd64 emulation workaround: `export DOCKER_DEFAULT_PLATFORM=linux/amd64` before
-  `dotnet run`/`scripts/smoke.sh`. The **corrected public tag is `1.0.0-preview.3`**
-  (multi-arch + preview2 shim); `1.0.0-preview.2` is multi-arch but **shim-less**,
-  so list-query / MV fail against it. Once preview 3 is published and verified, run
-  against it without editing code: `SAMPLE_RUNTIME_IMAGE_TAG=1.0.0-preview.3`, and
-  drop the override; verify with `docker buildx imagetools inspect <image>:<tag>`.
-  See [`docs/release/runtime-host-preview-3-release-metadata.md`](../../../docs/release/runtime-host-preview-3-release-metadata.md).
+  `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3` is reachable.
+- **`no matching manifest for linux/arm64/v8`** on Apple Silicon → this only
+  affects **older amd64-only** tags such as `1.0.0-preview.1`. The sample now
+  defaults to **`1.0.0-preview.3`** — the verified multi-arch + preview2-shim tag —
+  so a plain pull works on arm64 with **no** `DOCKER_DEFAULT_PLATFORM=linux/amd64`
+  override. Avoid `1.0.0-preview.2` (multi-arch but **shim-less**, so list-query /
+  MV fail). Pin a specific published tag with `SAMPLE_RUNTIME_IMAGE_TAG=<tag>`;
+  verify a tag's platforms with `docker buildx imagetools inspect <image>:<tag>`.
+  See [`docs/release/runtime-host-preview-3-release-verification.md`](../../../docs/release/runtime-host-preview-3-release-verification.md).
 - **Port already in use** → the smoke picks a free host port; for a manual run,
   Aspire assigns one (see the dashboard), or set `SAMPLE_RUNTIME_HOST_PORT`.
 

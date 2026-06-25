@@ -107,20 +107,28 @@ SAMPLE_RUNTIME_IMAGE_TAG=1.0.0-preview.3 \
 
 ## Status
 
-> **Release readiness is NOT claimed.** `1.0.0-preview.3` is the *planned* corrected
-> tag; it is **not yet published**, so it is not a working public tag and docs must
-> not present it as a successful default until the gate below is green.
+> **Release readiness IS now claimed for `1.0.0-preview.3`.** The operator published
+> the corrected tag from merged `main`, and SWR-G045 verified the actual published
+> artifact (multi-arch + both native libraries, `preview` pointing at the same
+> digest, and the public-container smoke green through `list-query` + Materialized
+> View). Full evidence:
+> [`runtime-host-preview-3-release-verification.md`](runtime-host-preview-3-release-verification.md).
 
 - [x] Run `28142753464` reconciled — `completed` / `conclusion: failure`.
   `1.0.0-preview.2` + `preview` moved to `sha256:0d5c4fe1…` (the immutable tag was
   re-pointed) but the new digest is **still shim-less** (verified), so it does not
   fix `list-query` / MV.
-- [ ] Operator publishes `1.0.0-preview.3` from merged `main` — run URL + digest
-  recorded by SWR-G045. **(operator/CI — `workflow_dispatch push=true`)**
-- [ ] SWR-G045 records `verify-runtime-host-multiarch.sh` PASS (both platforms,
-  both native libs).
-- [ ] SWR-G045 records `preview` digest == `1.0.0-preview.3` digest.
-- [ ] SWR-G045 records public-container smoke PASS through list-query +
+- [x] Operator published `1.0.0-preview.3` from merged `main` (commit `9441260`) —
+  run [`28160428104`](https://github.com/J-Tech-Japan/SekibanWasmRuntime/actions/runs/28160428104),
+  digest `sha256:8bdebccd…`. The run is marked `failure` (build-step timeout on the
+  emulated arm64 leg) but the corrected multi-arch, shim-carrying bytes were pushed;
+  SWR-G045 verifies the bytes directly, not the run conclusion.
+- [x] SWR-G045 records `verify-runtime-host-multiarch.sh` PASS (both platforms,
+  both native libs including `libwasmtime_preview2_shim.so`).
+- [x] SWR-G045 records `preview` digest == `1.0.0-preview.3` digest
+  (`sha256:8bdebccd…`).
+- [x] SWR-G045 records public-container smoke PASS through `list-query` +
   Materialized View read.
-- [ ] SWR-G045 updates docs/sample default to recommend `1.0.0-preview.3` only
-  after the public tag is verified.
+- [x] SWR-G045 updates docs/sample default to recommend `1.0.0-preview.3` now that
+  the public tag is verified (this doc, `docs/quickstart.md`, the docker README, the
+  sample README, and the AppHost default tag).

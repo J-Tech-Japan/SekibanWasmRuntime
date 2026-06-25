@@ -10,12 +10,15 @@ What it demonstrates:
 
 - A C# Decider domain (`Sekiban.Dcb.WithoutResult`, the `10.2.x` contract line)
   compiled to a `wasi-wasm` module — using only the **public** package.
-- An Aspire AppHost that runs
-  `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.1` with
+- An Aspire AppHost that runs the verified public tag
+  `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3` with
   `AddContainer` (never `AddProject<...Host>`), mounts the generated `.wasm` and
-  manifest read-only, and wires a Postgres `ConnectionStrings__SekibanDcb`.
-- A smoke that commits an event and reads it back (tag-state + list-query)
-  through the running public container.
+  manifest read-only, and wires a Postgres `ConnectionStrings__SekibanDcb` (plus a
+  second `DcbMaterializedViewPostgres` for the materialized view).
+- A smoke that commits an event and reads it back (tag-state + list-query) and
+  confirms Materialized View catch-up — all through the running public container.
+  See the public-artifact verification evidence in
+  [`../release/runtime-host-preview-3-release-verification.md`](../release/runtime-host-preview-3-release-verification.md).
 
 Run it:
 

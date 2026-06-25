@@ -246,12 +246,15 @@ docker buildx imagetools inspect ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:
 
 Preview 2 (`1.0.0-preview.2`) is multi-arch but **shim-less** (it predates the
 WASI preview2 shim fix), so `list-query` / materialized-view paths fail against
-it — do not recommend it. The corrected tag will be **`1.0.0-preview.3`**
-(multi-arch + preview2 shim), but it is **not published or verified yet** — do not
-treat it as a working public tag until the publish plan + fail-closed verification
-gate (`scripts/release/verify-runtime-host-multiarch.sh`) in
-[`docs/release/runtime-host-preview-3-release-metadata.md`](../../docs/release/runtime-host-preview-3-release-metadata.md)
-passes.
+it — do not recommend it. **Use `1.0.0-preview.3` — the verified, recommended
+public runtime tag** (multi-arch + preview2 shim). It is published as a
+`linux/amd64` + `linux/arm64` manifest list (digest `sha256:8bdebccd…`), both
+images carry `/app/libwasmtime.so` **and** `/app/libwasmtime_preview2_shim.so`,
+and the moving `preview` tag points at the same digest. The fail-closed gate
+(`scripts/release/verify-runtime-host-multiarch.sh`) and the public-container
+sample smoke (through `list-query` and Materialized View catch-up) pass against
+it — see
+[`docs/release/runtime-host-preview-3-release-verification.md`](../../docs/release/runtime-host-preview-3-release-verification.md).
 
 Older tags published before multi-arch support (e.g. `1.0.0-preview.1`) are
 **amd64 only**; on arm64 they fail with `no matching manifest for linux/arm64/v8`.

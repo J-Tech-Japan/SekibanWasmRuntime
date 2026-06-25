@@ -5,13 +5,14 @@ using System.IO;
 // ghcr.io image, exactly as an external developer would consume it.
 
 const string RuntimeImage = "ghcr.io/j-tech-japan/sekiban-wasm-runtime-host";
-// Pinned to preview 1 by default. Once the preview 2 multi-arch tag is published,
-// run the sample/smoke against it without editing code by setting
-// SAMPLE_RUNTIME_IMAGE_TAG=1.0.0-preview.2 (preview 2 also drops the need for a
-// DOCKER_DEFAULT_PLATFORM=linux/amd64 override on Apple Silicon).
+// Defaults to 1.0.0-preview.3 — the verified, recommended public tag: a multi-arch
+// (linux/amd64 + linux/arm64) manifest list carrying both libwasmtime.so and the
+// WASI preview2 shim, so list-query and Materialized View catch-up work and no
+// DOCKER_DEFAULT_PLATFORM=linux/amd64 override is needed on Apple Silicon. Override
+// with SAMPLE_RUNTIME_IMAGE_TAG to pin a different published tag.
 var runtimeImageTag = Environment.GetEnvironmentVariable("SAMPLE_RUNTIME_IMAGE_TAG") is { Length: > 0 } tagOverride
     ? tagOverride
-    : "1.0.0-preview.1";
+    : "1.0.0-preview.3";
 const string ModuleFileName = "public-container-cs-decider.wasm";
 
 var builder = DistributedApplication.CreateBuilder(args);
