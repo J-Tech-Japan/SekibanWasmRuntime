@@ -53,21 +53,27 @@ env:
 jobs:
   build:
     name: build runtime image (validation)
-    # Validation-only build of BOTH platform shapes. It runs for PRs and for an
-    # explicit no-push manual dispatch. It is intentionally SKIPPED on the publish
-    # path (a `runtime-host-v*` tag push, or workflow_dispatch with push=true):
-    # the publish job already builds both platforms and fails closed on its
-    # manifest, so a separate no-push multi-arch build first would just double the
-    # slow arm64-under-QEMU build before publication — the cause of the stuck
-    # manual run (#193). With no redundant pre-build, a manual push=true dispatch
-    # goes straight to the publish job.
+    # Validation-only build. It is SKIPPED on the publish path (a `runtime-host-v*`
+    # tag push, or workflow_dispatch with push=true): the publish job already
+    # builds both platforms and fails closed on its manifest + per-platform native
+    # libraries, so a separate no-push multi-arch build first would just double the
+    # slow arm64-under-QEMU build before publication (the stuck manual run, #193).
+    #
+    # Platform scope is event-dependent so ordinary PR validation stays fast:
+    #   - pull_request  -> native `linux/amd64` only (no QEMU). This still compiles
+    #     the Rust wasmtime-preview2 shim and runs the Dockerfile fail-closed
+    #     native-library assertion for amd64, validating the packaging path without
+    #     a per-PR QEMU-backed arm64 build.
+    #   - workflow_dispatch (push=false) -> full `linux/amd64,linux/arm64`, an
+    #     opt-in heavy validation. The publish/manual gate is where both platforms
+    #     and the per-platform shim presence are verified fail-closed.
     if: >-
       github.event_name == 'pull_request'
       || (github.event_name == 'workflow_dispatch' && github.event.inputs.push != 'true')
     runs-on: ubuntu-latest
-    # Generous bound: the image now also compiles the Rust wasmtime-preview2 shim
-    # from source for both platforms (the linux/arm64 leg under QEMU is slow on a
-    # cold cache); the GitHub Actions layer cache makes unchanged re-runs fast.
+    # Generous bound for the opt-in full multi-arch dispatch (the linux/arm64 leg
+    # under QEMU also compiles the Rust shim); a PR amd64-only run finishes far
+    # sooner, and the GitHub Actions layer cache makes unchanged re-runs fast.
     timeout-minutes: 150
     permissions:
       contents: read
@@ -76,20 +82,22 @@ jobs:
         with:
           submodules: recursive
 
-      # QEMU lets the amd64 runner build the linux/arm64 image leg so PR
-      # validation exercises BOTH platform shapes, not amd64 only.
+      # QEMU is only needed for the opt-in full-validation arm64 leg; PR validation
+      # builds native amd64 and skips it.
       - uses: docker/setup-qemu-action@v3
+        if: github.event_name == 'workflow_dispatch'
         with:
           platforms: linux/amd64,linux/arm64
 
       - uses: docker/setup-buildx-action@v3
 
-      - name: Build runtime host image, both platforms (no push)
+      - name: Build runtime host image (no push)
         uses: docker/build-push-action@v6
         with:
           context: .
           file: src/runtime/Sekiban.Dcb.WasmRuntime.Host/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          # Fast PR path = native amd64; opt-in dispatch = full multi-arch.
+          platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
           push: false
           provenance: false
           # Cache the slow arm64-under-QEMU layers so re-runs and the publish job

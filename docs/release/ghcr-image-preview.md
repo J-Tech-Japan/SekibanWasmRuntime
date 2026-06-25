@@ -42,14 +42,22 @@ job has **no `needs: build`** and does its own multi-arch build + fail-closed
 manifest verification. This avoids building the slow `linux/arm64`-under-QEMU leg
 **twice** before publication, which previously left a manual `push=true` run stuck
 in a redundant no-push build (#193). Both jobs have explicit `timeout-minutes`
-(validation 90, publish 120) and reuse a GitHub Actions build cache
-(`cache-from`/`cache-to: type=gha`) so re-runs are not cold rebuilds.
+and reuse a GitHub Actions build cache (`cache-from`/`cache-to: type=gha`) so
+re-runs are not cold rebuilds.
+
+**The heavy multi-arch + per-platform native-library verification happens at the
+publish / manual gate, not on every PR.** Ordinary PR validation is a **fast
+native `linux/amd64` build** — it still compiles the Rust `wasmtime-preview2-shim`
+and runs the Dockerfile fail-closed native-library assertion for amd64, so the
+packaging path is validated without a per-PR QEMU-backed arm64 build. The full
+`linux/amd64,linux/arm64` validation is opt-in via a no-push `workflow_dispatch`,
+and the `publish` job always builds + verifies both platforms.
 
 - **`pull_request`** (paths-filtered): the validation job builds the runtime host
-  image from `src/runtime/Sekiban.Dcb.WasmRuntime.Host/Dockerfile` for **both
-  `linux/amd64` and `linux/arm64`** (Buildx + QEMU) with `push: false`. It never
-  publishes. Validating both legs means a change that breaks the arm64 build fails
-  the PR instead of silently shipping an amd64-only image.
+  image from `src/runtime/Sekiban.Dcb.WasmRuntime.Host/Dockerfile` for **native
+  `linux/amd64` only** (no QEMU) with `push: false`. It never publishes. This
+  keeps PR feedback fast; the arm64 build is exercised by the opt-in dispatch and
+  by every publish.
 - **`push` to a `runtime-host-v*` tag**: the runtime-host image release lane. The
   validation job is skipped; the publish job builds + pushes. The image version is
   derived from the tag (`runtime-host-v1.0.0-preview.2` → `1.0.0-preview.2`) and
@@ -59,7 +67,8 @@ in a redundant no-push build (#193). Both jobs have explicit `timeout-minutes`
     tag to build and, when pushing, publish.
   - `push` (boolean, default `false`) — when `true`, the validation job is
     skipped and the publish job builds + pushes to GHCR. When `false`, the run is
-    build-only validation.
+    the opt-in **full `linux/amd64,linux/arm64` build-only validation** (heavier
+    than PR validation; use it to exercise the arm64 leg without publishing).
   - `update_moving_tag` (boolean, default `false`) — when `true`, also updates
     the moving `preview` tag (`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:preview`)
     to this build, in addition to the explicit `image_tag`.

@@ -93,10 +93,11 @@ publish preview 2.
 
 ## Pre-Publish Build Gates (fail closed)
 
-- [ ] The PR that introduces preview 2 ran `release-ghcr-image-preview` PR
-  validation, which builds **both** `linux/amd64` and `linux/arm64`
-  (Buildx + QEMU, `push: false`). A red arm64 leg is release-blocking — PR
-  validation must not pass while only amd64 builds.
+- [ ] The full `linux/amd64` + `linux/arm64` build passed at the **publish /
+  manual gate** — either the `publish` job's own multi-arch build, or an opt-in
+  no-push `workflow_dispatch` full validation. (Ordinary `pull_request`
+  validation is a fast native-`amd64` build and does **not** exercise the arm64
+  leg, so a green PR alone is not sufficient evidence of a working arm64 image.)
 - [ ] The Dockerfile per-platform native-asset assertion passed for both legs:
   **both** `/app/libwasmtime.so` **and** `/app/libwasmtime_preview2_shim.so`
   present with an ELF `e_machine` matching the target arch (`0x3e` x86-64 /
