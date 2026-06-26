@@ -188,9 +188,11 @@ Rust support is currently in the **repo-local library phase**. The Rust crates
 under `src/wasm-projectors/rust` (`sekiban-core`, `sekiban-derive`,
 `sekiban-executor`, `sekiban-wasm`, and `sekiban-mv`) are candidates for a future
 crates.io release, but they are not public crates.io artifacts yet. Rust samples
-should keep using path dependencies until a release-prep packet adds package
-metadata, versioned inter-crate dependencies, and external-consumer smoke
-coverage. See the sample note
+should keep using path dependencies. The crates now carry release-prep metadata
+and exact versioned inter-crate dependencies, but dependent package dry-runs
+still require the upstream internal crates to exist on crates.io. External
+consumer smoke coverage belongs in a later publication-gate packet. See the
+sample note
 [`docs/samples/rust-repo-local-libraries.md`](samples/rust-repo-local-libraries.md)
 and the release inventory
 [`docs/release/rust-crate-preview-readiness.md`](release/rust-crate-preview-readiness.md)
