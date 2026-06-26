@@ -199,6 +199,16 @@ Postgres via Aspire — see
 and the sample under
 [`src/samples/Sekiban.Dcb.WasmRuntime.PublicContainer.CsDecider`](../src/samples/Sekiban.Dcb.WasmRuntime.PublicContainer.CsDecider).
 
+The Rust local-development equivalent is
+[`docs/samples/public-container-rs-decider.md`](samples/public-container-rs-decider.md)
+and
+[`src/samples/Sekiban.Dcb.WasmRuntime.PublicContainer.RsDecider`](../src/samples/Sekiban.Dcb.WasmRuntime.PublicContainer.RsDecider).
+It builds the Rust Decider WASM module from repo-local Rust crates, stages the
+module and manifest under `artifacts/samples/public-container-rs-decider`, runs
+the same public GHCR runtime host through Aspire `AddContainer`, and uses a
+typed Rust `RemoteSekibanExecutor` smoke client. crates.io publication remains
+deferred, so the Rust sample intentionally uses path dependencies for now.
+
 The sample also demonstrates a **Materialized View** through the same public
 artifacts: the WASM module exports `mv_metadata` / `mv_initialize` /
 `mv_apply_event`, the manifest declares `materializedViews`, the AppHost wires a

@@ -1,5 +1,6 @@
 pub mod commands;
 pub mod events;
+pub mod materialized_view;
 pub mod projectors;
 pub mod queries;
 pub mod states;
@@ -7,6 +8,7 @@ pub mod tags;
 
 pub use commands::*;
 pub use events::*;
+pub use materialized_view::*;
 pub use projectors::*;
 pub use queries::*;
 pub use states::*;
