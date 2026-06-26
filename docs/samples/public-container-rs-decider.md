@@ -32,4 +32,7 @@ are published to crates.io, this sample uses repository-local Rust path
 dependencies for the domain, WASM export, materialized-view boundary, and remote
 executor crates. The Rust crates now have release-prep metadata and exact
 versioned internal path dependencies, but this sample remains repo-local until a
-later publication-gate packet proves crates.io consumption.
+later approved publication packet publishes the crate train and a post-publish
+external consumer smoke proves crates.io consumption. The manual gate is
+documented in
+[`docs/release/rust-crates-publication-gate.md`](../release/rust-crates-publication-gate.md).

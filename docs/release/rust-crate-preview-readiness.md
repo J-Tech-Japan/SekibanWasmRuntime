@@ -16,6 +16,13 @@ crates now have package metadata, crate-local READMEs, crate-level preview API
 docs, and exact version requirements on internal path dependencies. No
 `cargo publish` command was run.
 
+SWR-G051 adds the manual crates.io publication gate in
+[`docs/release/rust-crates-publication-gate.md`](rust-crates-publication-gate.md).
+That gate defines the approval checklist, credential boundary, publish order,
+manual commands, partial-failure policy, and post-publication external consumer
+smoke plan. The crates remain unpublished until that gate is explicitly approved
+and executed in a later packet.
+
 ## Candidate Matrix
 
 | Crate | Classification | Purpose | Public API boundary | Dependency role | Sample/runtime relationship |
@@ -197,9 +204,7 @@ warning: function `ensure_command_success` is never used
 
 ## Recommended Next Packet
 
-Prepare the publication-gate packet: decide whether to actually publish the
-`0.1.0` Rust crate train, add any required human release approval and crates.io
-credential handling outside this repository, publish in dependency order, then
-run an external consumer smoke that depends on crates.io packages instead of
-repository-local paths. Do not add automated publishing until that release gate
-is explicitly approved.
+Use the publication-gate document to request explicit human approval for the
+`0.1.0` Rust crate train. Actual crates.io publication and the external consumer
+smoke remain separate future packets. Do not add automated publishing until the
+manual first-release gate has been approved and completed.
