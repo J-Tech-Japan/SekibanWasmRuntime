@@ -15,7 +15,7 @@
   <!--
     Public-consumer proof: the Decider domain depends ONLY on the public Sekiban DCB
     NuGet package, pinned to the same 10.2.2 contract line that the public runtime
-    image (1.0.0-preview.1) is built on. No repo-local runtime / internalUsages /
+    image (1.0.0-preview.3) is built on. No repo-local runtime / internalUsages /
     submodule-source references.
   -->
   <ItemGroup>

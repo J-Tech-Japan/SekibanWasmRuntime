@@ -24,7 +24,7 @@
       Condition="'$(RestoreConfigFile)' == ''">https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet10/nuget/v3/index.json;https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-experimental/nuget/v3/index.json</RestoreAdditionalProjectSources>
   </PropertyGroup>
 
-  <!-- WASM reactor ABI exported to the runtime host (1.0.0-preview.1 contract). -->
+  <!-- WASM reactor ABI exported to the runtime host (1.0.0-preview.3 contract). -->
   <ItemGroup>
     <LinkerArg Include="-mexec-model=reactor" />
     <LinkerArg Include="-Wl,--export,_initialize" />
