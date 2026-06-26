@@ -11,7 +11,7 @@ using Sekiban.Dcb.Tags;
 
 namespace PublicContainerCsDecider.Wasm;
 
-// WASM reactor module: implements the runtime-host ABI (1.0.0-preview.1) for a
+// WASM reactor module: implements the runtime-host ABI (1.0.0-preview.3) for a
 // minimal Weather Decider domain. The runtime container calls these exports to
 // project committed events and answer queries; this guest never talks to the DB.
 public static class WasmExports

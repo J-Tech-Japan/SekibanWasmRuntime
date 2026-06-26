@@ -6,8 +6,10 @@ It runs SekibanWasmRuntime exactly as an external developer would:
 - **public NuGet packages** for the Decider domain (`Sekiban.Dcb.WithoutResult`,
   the same `10.2.x` contract line the runtime image is built on) — **not**
   repo-local library project references;
-- the **public GHCR runtime container** `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.1`
-  via Aspire `AddContainer` — **not** `AddProject<...WasmRuntime.Host>`;
+- the **public GHCR runtime container** `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3`
+  (the latest verified runtime-host tag — distinct from the public NuGet package
+  versions, which are `1.0.0-preview.1`) via Aspire `AddContainer` — **not**
+  `AddProject<...WasmRuntime.Host>`;
 - a small **Decider-pattern** weather domain compiled to WASM;
 - **Postgres** as the external event DB;
 - an AppHost that mounts the generated `.wasm` and manifest into the runtime

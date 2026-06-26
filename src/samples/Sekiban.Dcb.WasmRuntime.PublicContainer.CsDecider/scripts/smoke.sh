@@ -46,7 +46,7 @@ write_report() {
     printf '# Public Container CS Decider Smoke (SWR-G036)\n\n'
     printf '%s\n' "- Result: **$result**"
     printf '%s\n' "- Detail: $detail"
-    printf '%s\n' "- Runtime image: \`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:${SAMPLE_RUNTIME_IMAGE_TAG:-1.0.0-preview.1}\`"
+    printf '%s\n' "- Runtime image: \`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:${SAMPLE_RUNTIME_IMAGE_TAG:-1.0.0-preview.3}\`"
     printf '%s\n' "- Runtime URL: \`${RUNTIME_URL:-unresolved}\`"
     printf '%s\n' "- Commit: \`$(git rev-parse HEAD 2>/dev/null || echo unknown)\`"
     if [[ -n "${LAST_HTTP_BODY:-}" ]]; then
@@ -229,7 +229,7 @@ done
 [[ "$mv_found" == "1" ]] || fail "materialized view did not catch up the committed forecast in DcbMaterializedViewPostgres within timeout (db=$MV_DB)"
 log "materialized-view read OK ($mv_detail)"
 
-IMAGE_TAG_USED="${SAMPLE_RUNTIME_IMAGE_TAG:-1.0.0-preview.1}"
+IMAGE_TAG_USED="${SAMPLE_RUNTIME_IMAGE_TAG:-1.0.0-preview.3}"
 log "PASS: commit + tag-state read + list-query + materialized-view read all succeeded through the public runtime container"
 write_report "PASS" "Committed WeatherForecastCreated (tag=$tag); read it back via tag-latest-sortable; saw it in GetWeatherForecastListQuery; and confirmed the WeatherForecast materialized view caught it up in DcbMaterializedViewPostgres ($mv_detail) — all through ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:${IMAGE_TAG_USED}."
 exit 0

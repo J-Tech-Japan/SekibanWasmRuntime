@@ -178,6 +178,12 @@ digest, and the public-container sample smoke passes end-to-end against it
 and Materialized View catch-up). See the verification evidence in
 [`docs/release/runtime-host-preview-3-release-verification.md`](release/runtime-host-preview-3-release-verification.md).
 
+The GHCR runtime-host **container** tag and the **NuGet** package versions are
+independent lanes and move on their own cadence: the latest verified runtime-host
+container tag is **`1.0.0-preview.3`**, while the latest public NuGet packages
+(`Sekiban.Dcb.WasmRuntime`, `…Remote`, `…Wasmtime`) are **`1.0.0-preview.1`**. Do
+not assume the two share a version number.
+
 See [`docker/sekiban-wasm-runtime/README.md`](../docker/sekiban-wasm-runtime/README.md)
 for the public local runtime container contract: provided/non-goal behavior,
 ports, volumes, required and optional environment variables, storage-provider
