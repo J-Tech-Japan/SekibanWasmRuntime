@@ -184,6 +184,18 @@ container tag is **`1.0.0-preview.3`**, while the latest public NuGet packages
 (`Sekiban.Dcb.WasmRuntime`, `…Remote`, `…Wasmtime`) are **`1.0.0-preview.1`**. Do
 not assume the two share a version number.
 
+Rust support is currently in the **repo-local library phase**. The Rust crates
+under `src/wasm-projectors/rust` (`sekiban-core`, `sekiban-derive`,
+`sekiban-executor`, `sekiban-wasm`, and `sekiban-mv`) are candidates for a future
+crates.io release, but they are not public crates.io artifacts yet. Rust samples
+should keep using path dependencies until a release-prep packet adds package
+metadata, versioned inter-crate dependencies, and external-consumer smoke
+coverage. See the sample note
+[`docs/samples/rust-repo-local-libraries.md`](samples/rust-repo-local-libraries.md)
+and the release inventory
+[`docs/release/rust-crate-preview-readiness.md`](release/rust-crate-preview-readiness.md)
+for the current status and blockers.
+
 See [`docker/sekiban-wasm-runtime/README.md`](../docker/sekiban-wasm-runtime/README.md)
 for the public local runtime container contract: provided/non-goal behavior,
 ports, volumes, required and optional environment variables, storage-provider
