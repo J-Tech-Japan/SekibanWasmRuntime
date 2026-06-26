@@ -1,5 +1,11 @@
 //! Rust companion to the C# `Sekiban.Dcb.WasmRuntime.Host.MaterializedView` boundary contracts.
 //!
+//! This crate is a preview, repo-local release candidate. Its public boundary is the
+//! materialized-view DTOs, [`WasmMvProjector`], [`MvParamBuilder`], [`MvQueryPort`], and
+//! [`export_mv!`] macro used by Rust WASM modules that expose materialized views. Host
+//! ABI details remain preview-stable only within this repository until crates.io
+//! publication is explicitly approved.
+//!
 //! Provides:
 //! * [`dto`] — serde DTOs byte-compatible with the host wire format.
 //! * [`projector::WasmMvProjector`] — trait every MV projector implements.

@@ -9,8 +9,12 @@ add release automation.
 The Rust crates are still in the repo-local library phase. Samples may depend on
 them through path dependencies, and the public runtime host container remains an
 independent artifact lane. A crates.io release should be a later packet after the
-metadata, version pinning, README, and dependency-transition blockers below are
-closed.
+external-consumer smoke and actual publication gates below are closed.
+
+SWR-G050 completed the metadata-only release-prep step. The five candidate
+crates now have package metadata, crate-local READMEs, crate-level preview API
+docs, and exact version requirements on internal path dependencies. No
+`cargo publish` command was run.
 
 ## Candidate Matrix
 
@@ -33,14 +37,33 @@ Use the same metadata strategy for every publishable crate:
 | Field | Proposed value / policy |
 | --- | --- |
 | `package.name` | Keep the current crate names: `sekiban-core`, `sekiban-derive`, `sekiban-executor`, `sekiban-wasm`, `sekiban-mv`. |
-| `package.version` | Release all five together on a coordinated `0.1.0-preview.1` or `0.1.0` line. Prefer one synchronized first public version so inter-crate dependency pins are simple. |
-| `license` | Add the repository-approved SPDX license after confirming the root repository license policy. Do not guess this before release. |
-| `description` | Add crate-specific one-line descriptions matching the candidate matrix purpose column. |
+| `package.version` | Release all five together on the synchronized `0.1.0` line so inter-crate dependency pins are simple. |
+| `license` | Use SPDX `Elastic-2.0`, matching the repository root Elastic License 2.0 policy. |
+| `description` | Use crate-specific one-line descriptions matching the candidate matrix purpose column. |
 | `repository` | `https://github.com/J-Tech-Japan/SekibanWasmRuntime` |
-| `readme` | Add crate-local `README.md` files or use a stable workspace-relative README strategy. crates.io renders package-relative README paths, so crate-local READMEs are the least fragile option. |
+| `readme` | Use crate-local `README.md` files because crates.io renders package-relative README paths. |
 | `documentation` | Add docs.rs URLs after names and versions are final, or omit until the first release exists. |
-| `include` / `exclude` | Prefer explicit `include = [\"Cargo.toml\", \"README.md\", \"src/**\", \"LICENSE*\"]` after crate-local READMEs/licenses exist. Avoid packaging samples, generated `target/`, and runtime artifacts. |
-| Public API docs | Add module-level crate docs before publish. The first release should explain which traits/macros are stable preview contract versus internal implementation detail. |
+| `include` / `exclude` | Use explicit `include = [\"Cargo.toml\", \"README.md\", \"src/**\"]`; license metadata is expressed through SPDX `license`. |
+| Public API docs | Use module-level crate docs that explain which traits/macros are preview public boundary versus internal implementation detail. |
+
+## Applied Release-Prep Metadata
+
+SWR-G050 applies one synchronized first public version strategy across all five
+candidate crates:
+
+- Version line: `0.1.0`
+- Internal dependency pins: exact `=0.1.0` requirements while retaining local
+  `path` entries for repository development
+- Repository metadata: `https://github.com/J-Tech-Japan/SekibanWasmRuntime`
+- License metadata: SPDX `Elastic-2.0`, matching the repository root Elastic
+  License 2.0 policy
+- README strategy: crate-local `README.md` files for every candidate crate
+- Include policy: package only `Cargo.toml`, crate-local `README.md`, and
+  `src/**`
+
+The dependency pins are intentionally exact so a future release train can
+publish upstream crates first, then package dependent crates with the same
+version line.
 
 ## Publish Order
 
@@ -104,6 +127,51 @@ all dependencies must have a version requirement specified when packaging.
 dependency `<crate>` does not specify a version
 ```
 
+### SWR-G050 Package Dry-Run Evidence
+
+Commands were run from the repository root on June 26, 2026 after metadata,
+crate-local READMEs, crate-level docs, and exact versioned path dependencies
+were added.
+
+| Crate | `cargo package --list` | `cargo package --no-verify` | Result |
+| --- | --- | --- | --- |
+| `sekiban-core` | Passed; listed 15 package files including `Cargo.toml`, `README.md`, and `src/**`. | Passed; packaged 15 files, 31.6 KiB. | Ready for a future first publish gate. |
+| `sekiban-derive` | Passed; listed 11 package files including `Cargo.toml`, `README.md`, and `src/**`. | Failed. | Blocked until `sekiban-core = 0.1.0` exists on crates.io. |
+| `sekiban-wasm` | Passed; listed 13 package files including `Cargo.toml`, `README.md`, and `src/**`. | Failed. | Blocked until `sekiban-core = 0.1.0` exists on crates.io. |
+| `sekiban-mv` | Passed; listed 11 package files including `Cargo.toml`, `README.md`, and `src/**`. | Failed. | Blocked until `sekiban-wasm = 0.1.0` exists on crates.io. |
+| `sekiban-executor` | Passed; listed 6 package files including `Cargo.toml`, `README.md`, and `src/lib.rs`. | Failed. | Blocked until `sekiban-core = 0.1.0` exists on crates.io. |
+
+The dependent-crate `cargo package --no-verify` failures are now different from
+the earlier path-only manifest error. Versioned path dependencies are present,
+so Cargo strips the local `path` entry from the packaged manifest and tries to
+resolve the exact version from crates.io. Because this packet deliberately does
+not publish crates, dependent crates report the expected unpublished-upstream
+blocker:
+
+```text
+no matching package named `sekiban-core` found
+location searched: crates.io index
+required by package `sekiban-derive v0.1.0`
+```
+
+```text
+no matching package named `sekiban-core` found
+location searched: crates.io index
+required by package `sekiban-wasm v0.1.0`
+```
+
+```text
+no matching package named `sekiban-wasm` found
+location searched: crates.io index
+required by package `sekiban-mv v0.1.0`
+```
+
+```text
+no matching package named `sekiban-core` found
+location searched: crates.io index
+required by package `sekiban-executor v0.1.0`
+```
+
 ## Verification Evidence
 
 The following checks passed:
@@ -121,17 +189,17 @@ warning: function `ensure_command_success` is never used
 
 ## Blockers
 
-- Confirm and add the repository-approved SPDX license metadata for Rust crates.
-- Add descriptions, repository metadata, README strategy, and include/exclude
-  policy to each candidate manifest.
-- Add crate-level docs that state preview stability and public API boundaries.
-- Add exact inter-crate version requirements before packaging dependent crates.
-- Decide whether the first Rust crate line is `0.1.0-preview.1` or `0.1.0`.
+- Publish is still deferred; no crates.io credentials, tokens, release
+  automation, or `cargo publish` command have been added or run.
+- Dependent crates cannot complete `cargo package --no-verify` until their
+  upstream internal crates exist on crates.io at exact version `0.1.0`.
 - Add a future external Rust consumer smoke after crates are actually published.
 
 ## Recommended Next Packet
 
-Prepare a metadata-only Rust crate release-prep PR: add crate-local READMEs,
-crate-level docs, SPDX license metadata, repository/description/include fields,
-and versioned path dependencies. Re-run `cargo package --no-verify` for all five
-crates. Do not add credentials or run `cargo publish` until that PR is reviewed.
+Prepare the publication-gate packet: decide whether to actually publish the
+`0.1.0` Rust crate train, add any required human release approval and crates.io
+credential handling outside this repository, publish in dependency order, then
+run an external consumer smoke that depends on crates.io packages instead of
+repository-local paths. Do not add automated publishing until that release gate
+is explicitly approved.

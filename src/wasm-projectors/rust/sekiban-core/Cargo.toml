@@ -2,6 +2,11 @@
 name = "sekiban-core"
 version = "0.1.0"
 edition = "2021"
+description = "Core Sekiban Rust domain traits, DTOs, registries, and projection contracts."
+repository = "https://github.com/J-Tech-Japan/SekibanWasmRuntime"
+license = "Elastic-2.0"
+readme = "README.md"
+include = ["Cargo.toml", "README.md", "src/**"]
 
 [dependencies]
 async-trait = "0.1"

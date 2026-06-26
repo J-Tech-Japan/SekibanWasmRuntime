@@ -30,4 +30,6 @@ env -u SAMPLE_RUNTIME_IMAGE_TAG bash src/samples/Sekiban.Dcb.WasmRuntime.PublicC
 The Rust package publication lane is intentionally deferred. Until these crates
 are published to crates.io, this sample uses repository-local Rust path
 dependencies for the domain, WASM export, materialized-view boundary, and remote
-executor crates.
+executor crates. The Rust crates now have release-prep metadata and exact
+versioned internal path dependencies, but this sample remains repo-local until a
+later publication-gate packet proves crates.io consumption.

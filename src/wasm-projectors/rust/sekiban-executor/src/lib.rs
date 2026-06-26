@@ -1,3 +1,10 @@
+//! Remote executor client for serialized Sekiban runtime endpoints.
+//!
+//! This crate is a preview, repo-local release candidate. Its public boundary is the
+//! typed HTTP executor, command context, resolver, request/response DTOs, and error
+//! surface used by Rust clients that call a running Sekiban WASM runtime host. Transport
+//! internals remain subject to change until crates.io publication is explicitly approved.
+
 use std::{collections::HashMap, collections::HashSet, sync::Arc, sync::Mutex, time::Duration};
 
 use anyhow::{anyhow, Context};

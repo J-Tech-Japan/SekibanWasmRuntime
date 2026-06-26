@@ -1,3 +1,11 @@
+//! Procedural macros for declaring Sekiban Rust domain types.
+//!
+//! This crate is a preview, repo-local release candidate. Its public boundary is the
+//! derive macro set exported from this module: [`Event`], [`State`], [`Tag`],
+//! [`TagProjector`], [`MultiProjector`], and [`Command`]. Generated implementation
+//! details and helper modules are not stability commitments before the first crates.io
+//! release.
+
 mod command;
 mod event;
 mod projector;
