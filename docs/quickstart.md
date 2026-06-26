@@ -190,13 +190,16 @@ under `src/wasm-projectors/rust` (`sekiban-core`, `sekiban-derive`,
 crates.io release, but they are not public crates.io artifacts yet. Rust samples
 should keep using path dependencies. The crates now carry release-prep metadata
 and exact versioned inter-crate dependencies, but dependent package dry-runs
-still require the upstream internal crates to exist on crates.io. External
-consumer smoke coverage belongs in a later publication-gate packet. See the
-sample note
-[`docs/samples/rust-repo-local-libraries.md`](samples/rust-repo-local-libraries.md)
-and the release inventory
-[`docs/release/rust-crate-preview-readiness.md`](release/rust-crate-preview-readiness.md)
-for the current status and blockers.
+still require the upstream internal crates to exist on crates.io. The manual
+publication gate is documented, but it has not been executed. External consumer
+smoke coverage must run after publication from outside this repository, using
+crates.io dependencies only. See the sample note
+[`docs/samples/rust-repo-local-libraries.md`](samples/rust-repo-local-libraries.md),
+the release inventory
+[`docs/release/rust-crate-preview-readiness.md`](release/rust-crate-preview-readiness.md),
+and the gate
+[`docs/release/rust-crates-publication-gate.md`](release/rust-crates-publication-gate.md)
+for the current status, blockers, and manual approval boundary.
 
 See [`docker/sekiban-wasm-runtime/README.md`](../docker/sekiban-wasm-runtime/README.md)
 for the public local runtime container contract: provided/non-goal behavior,
@@ -221,7 +224,8 @@ It builds the Rust Decider WASM module from repo-local Rust crates, stages the
 module and manifest under `artifacts/samples/public-container-rs-decider`, runs
 the same public GHCR runtime host through Aspire `AddContainer`, and uses a
 typed Rust `RemoteSekibanExecutor` smoke client. crates.io publication remains
-deferred, so the Rust sample intentionally uses path dependencies for now.
+deferred until the manual publication gate is approved and executed, so the Rust
+sample intentionally uses path dependencies for now.
 
 The sample also demonstrates a **Materialized View** through the same public
 artifacts: the WASM module exports `mv_metadata` / `mv_initialize` /
