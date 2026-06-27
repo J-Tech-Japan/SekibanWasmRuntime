@@ -11,8 +11,9 @@ Rust crates under `src/wasm-projectors/rust`:
 
 Those crates are public-release candidates, but they have not been published to
 crates.io. Treat Rust sample `Cargo.toml` path dependencies as intentional until
-the manual publication gate is approved, the internal crate train is published,
-and a post-publish external-consumer smoke uses crates.io dependencies.
+the protected GitHub Actions first-publish gate is approved, the internal crate
+train is published, and a post-publish external-consumer smoke uses crates.io
+dependencies.
 
 The crates now include release-prep metadata, crate-local READMEs, crate-level
 preview API docs, and exact versioned internal path dependencies. Dependent
@@ -22,6 +23,6 @@ entries, and the upstream internal crates are not published yet.
 
 The readiness inventory is maintained in
 [`../release/rust-crate-preview-readiness.md`](../release/rust-crate-preview-readiness.md).
-The manual approval, credential, publish-order, partial-failure, and external
-consumer smoke gate is maintained in
+The manual approval, protected environment credential, publish-order,
+partial-failure, and external consumer smoke gate is maintained in
 [`../release/rust-crates-publication-gate.md`](../release/rust-crates-publication-gate.md).

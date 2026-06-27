@@ -16,12 +16,15 @@ crates now have package metadata, crate-local READMEs, crate-level preview API
 docs, and exact version requirements on internal path dependencies. No
 `cargo publish` command was run.
 
-SWR-G051 adds the manual crates.io publication gate in
+SWR-G051 added the crates.io publication gate in
 [`docs/release/rust-crates-publication-gate.md`](rust-crates-publication-gate.md).
-That gate defines the approval checklist, credential boundary, publish order,
-manual commands, partial-failure policy, and post-publication external consumer
-smoke plan. The crates remain unpublished until that gate is explicitly approved
-and executed in a later packet.
+SWR-G052 supersedes the local-token/manual-publication direction with the
+manual-only GitHub Actions workflow
+`.github/workflows/release-rust-crates-first-publish.yml`. That gate defines the
+approval checklist, protected `crates-io-release` environment, `publish: true`
+switch, dependency publish order, partial-failure policy, and post-publication
+external consumer smoke plan. The crates remain unpublished until that workflow
+is explicitly approved and dispatched in publish mode.
 
 ## Candidate Matrix
 
@@ -196,15 +199,17 @@ warning: function `ensure_command_success` is never used
 
 ## Blockers
 
-- Publish is still deferred; no crates.io credentials, tokens, release
-  automation, or `cargo publish` command have been added or run.
+- Publish is still deferred; no crates.io credential value has been stored, no
+  workflow has been dispatched in publish mode, and no `cargo publish` command
+  has been run from this packet.
 - Dependent crates cannot complete `cargo package --no-verify` until their
   upstream internal crates exist on crates.io at exact version `0.1.0`.
 - Add a future external Rust consumer smoke after crates are actually published.
 
 ## Recommended Next Packet
 
-Use the publication-gate document to request explicit human approval for the
-`0.1.0` Rust crate train. Actual crates.io publication and the external consumer
-smoke remain separate future packets. Do not add automated publishing until the
-manual first-release gate has been approved and completed.
+Use the publication-gate document to request explicit human approval for a
+`release-rust-crates-first-publish` workflow dispatch with `publish: true`.
+Actual crates.io publication and the external consumer smoke remain separate
+future packets. Do not add automatic publish-on-tag behavior until the protected
+first-release workflow gate has been approved and completed.

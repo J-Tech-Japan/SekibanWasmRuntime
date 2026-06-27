@@ -1,0 +1,111 @@
+name: release-rust-crates-first-publish
+
+# First-publish lane for the Rust crates.io 0.1.0 train.
+#
+# This workflow is intentionally manual-only. It never runs from push,
+# pull_request, release, or tag events, and publish mode still requires approval
+# through the protected `crates-io-release` GitHub environment.
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_version:
+        description: 'Synchronized Rust crate version to validate/publish'
+        required: true
+        default: '0.1.0'
+      publish:
+        description: 'Publish to crates.io after checks and dry-runs'
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_CRATE_VERSION: ${{ inputs.expected_version || '0.1.0' }}
+
+jobs:
+  first-publish:
+    name: Rust crates.io first-publish gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment: crates-io-release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust stable
+        run: |
+          set -euo pipefail
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          cargo --version
+          rustc --version
+
+      - name: Validate synchronized crate versions
+        run: |
+          set -euo pipefail
+          crates=(sekiban-core sekiban-derive sekiban-wasm sekiban-mv sekiban-executor)
+          for crate in "${crates[@]}"; do
+            manifest="src/wasm-projectors/rust/${crate}/Cargo.toml"
+            version="$(cargo metadata --no-deps --format-version 1 --manifest-path "${manifest}" \
+              | jq -r --arg crate "${crate}" '.packages[] | select(.name == $crate) | .version')"
+            if [ "${version}" != "${RUST_CRATE_VERSION}" ]; then
+              echo "ERROR: ${crate} version ${version} does not match ${RUST_CRATE_VERSION}" >&2
+              exit 1
+            fi
+            echo "${crate} ${version}"
+          done
+
+      - name: Rust workspace tests
+        run: cargo test --manifest-path src/wasm-projectors/rust/Cargo.toml --workspace
+
+      - name: Rust sample check
+        run: cargo check --manifest-path src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Rs/Cargo.toml --workspace
+
+      - name: Package file inventory
+        run: |
+          set -euo pipefail
+          for crate in sekiban-core sekiban-derive sekiban-wasm sekiban-mv sekiban-executor; do
+            echo "::group::cargo package --list ${crate}"
+            cargo package --list --manifest-path "src/wasm-projectors/rust/${crate}/Cargo.toml"
+            echo "::endgroup::"
+          done
+
+      - name: First crate dry-run check
+        if: ${{ inputs.publish != true }}
+        run: |
+          set -euo pipefail
+          cargo publish --dry-run --manifest-path src/wasm-projectors/rust/sekiban-core/Cargo.toml
+          echo "Dry-run check mode stops after sekiban-core because dependent crates need upstream ${RUST_CRATE_VERSION} crates to exist on crates.io."
+
+      - name: Publish crates in dependency order
+        if: ${{ inputs.publish == true && github.repository == 'J-Tech-Japan/SekibanWasmRuntime' }}
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CARGO_REGISTRY_TOKEN:-}" ]; then
+            echo "ERROR: crates-io-release environment secret CARGO_REGISTRY_TOKEN is required for publish mode." >&2
+            exit 1
+          fi
+
+          publish_crate() {
+            local crate="$1"
+            local manifest="src/wasm-projectors/rust/${crate}/Cargo.toml"
+            echo "::group::${crate} dry-run"
+            cargo publish --dry-run --manifest-path "${manifest}"
+            echo "::endgroup::"
+            echo "::group::${crate} publish"
+            cargo publish --manifest-path "${manifest}"
+            echo "::endgroup::"
+          }
+
+          publish_crate sekiban-core
+          publish_crate sekiban-derive
+          publish_crate sekiban-wasm
+          publish_crate sekiban-mv
+          publish_crate sekiban-executor
