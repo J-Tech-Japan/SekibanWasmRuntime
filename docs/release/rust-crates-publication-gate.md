@@ -2,7 +2,13 @@
 
 This gate defines the manual approval and execution plan for the first Rust
 crates.io release train. It makes publication executable later, but it does not
-publish crates, configure credentials, store tokens, or add release automation.
+publish crates, configure credentials, store tokens, or run release automation.
+
+SWR-G052 supersedes the earlier local-token/manual-publication direction. The
+accepted first-release path is the protected GitHub Actions workflow
+`.github/workflows/release-rust-crates-first-publish.yml`. Do not use local
+`cargo login`, local token files, or local `CARGO_REGISTRY_TOKEN` for this first
+release.
 
 ## Release Train
 
@@ -26,7 +32,7 @@ runtime endpoint contract and upstream crate visibility are final.
 
 - Do not run `cargo publish` in this packet.
 - Do not create, store, print, configure, or document any real crates.io token.
-- Do not add an automated crates.io publishing workflow for the first release.
+- Do not run the GitHub Actions workflow in publish mode from this packet.
 - Do not change crate APIs or version numbers unless a later approval gate
   explicitly identifies a blocker.
 - Do not publish a GHCR runtime image or change NuGet packaging.
@@ -59,20 +65,41 @@ Required approval checklist:
 - Confirm no sample or documentation claims the crates are published before the
   publication gate actually runs.
 
-## Credential Boundary
+## GitHub Actions First-Publish Boundary
 
-crates.io credentials are outside repository scope. Tokens must be created,
-stored, and revoked through the publisher's approved local secret-management
-process. They must not be committed, printed in logs, added to GitHub Actions,
-or stored in repository files.
+The first release must be dispatched from GitHub Actions, not a maintainer
+machine. The workflow is manual-only:
 
-Before publishing, the release owner should validate authentication locally with
-crates.io tooling that does not expose the token value. If authentication fails,
-stop before running any publish command.
+- Workflow: `release-rust-crates-first-publish`
+- Trigger: `workflow_dispatch` only
+- Protected environment: `crates-io-release`
+- Publish switch: input `publish: true`
+- Expected version input: `expected_version: 0.1.0`
+
+The `crates-io-release` environment must be configured in GitHub before publish
+mode is used:
+
+- Add required reviewers for the release owners.
+- Add an environment secret named `CARGO_REGISTRY_TOKEN`.
+- Scope the crates.io token to the intended publish operation and revoke/rotate
+  it after the first release according to the publisher's secret policy.
+- Do not create, store, print, or commit the token in this repository.
+
+The workflow reads `CARGO_REGISTRY_TOKEN` only inside the publish step. Check mode
+does not read the secret. GitHub masks secret values in logs, and the workflow
+does not echo the token.
+
+Trusted Publishing is not the selected first-release strategy for this packet.
+The crates.io Trusted Publishing flow currently still requires a publisher setup
+that is not suitable as the bootstrap path for these brand-new crates in this
+repo. After the five crates exist on crates.io, a later packet may replace the
+environment secret with Trusted Publishing/OIDC if crates.io and the repository
+publisher configuration support it.
 
 ## Pre-Publish Verification
 
-Run these checks from the repository root before publication approval is granted:
+Run these checks from the repository root before publication approval is granted,
+or run the workflow with `publish: false` for the GitHub-hosted check path:
 
 ```bash
 cargo test --manifest-path src/wasm-projectors/rust/Cargo.toml --workspace
@@ -87,45 +114,29 @@ package named sekiban-core found` or `no matching package named sekiban-wasm
 found`. Treat that as expected pre-publication evidence, not a reason to remove
 version pins or publish out of order.
 
-## Manual Publish Sequence
+## GitHub Actions Publish Sequence
 
-Run the publish commands manually, one crate at a time. Do not script the first
-release train.
+The first release is launched by manually dispatching
+`release-rust-crates-first-publish` from the GitHub Actions UI:
 
-```bash
-cargo publish --dry-run --manifest-path src/wasm-projectors/rust/sekiban-core/Cargo.toml
-cargo publish --manifest-path src/wasm-projectors/rust/sekiban-core/Cargo.toml
-```
+1. Select branch `main`.
+2. Set `expected_version` to `0.1.0`.
+3. First run with `publish: false` to execute tests, sample check, package file
+   inventory, and the `sekiban-core` dry-run.
+4. Review the run logs and confirm no sample or document claims crates are
+   already published.
+5. Re-run with `publish: true`.
+6. Approve the `crates-io-release` environment when GitHub prompts reviewers.
 
-After `sekiban-core` is visible on crates.io, verify the package page, owner
-metadata, rendered README, license metadata, and docs.rs build status if
-available. Then continue:
+In publish mode, the workflow stops immediately on the first failure. For each
+crate it runs `cargo publish --dry-run` and then `cargo publish`, in dependency
+order:
 
-```bash
-cargo publish --dry-run --manifest-path src/wasm-projectors/rust/sekiban-derive/Cargo.toml
-cargo publish --manifest-path src/wasm-projectors/rust/sekiban-derive/Cargo.toml
-```
-
-Verify `sekiban-derive` visibility and metadata before continuing:
-
-```bash
-cargo publish --dry-run --manifest-path src/wasm-projectors/rust/sekiban-wasm/Cargo.toml
-cargo publish --manifest-path src/wasm-projectors/rust/sekiban-wasm/Cargo.toml
-```
-
-Verify `sekiban-wasm` visibility and metadata before continuing:
-
-```bash
-cargo publish --dry-run --manifest-path src/wasm-projectors/rust/sekiban-mv/Cargo.toml
-cargo publish --manifest-path src/wasm-projectors/rust/sekiban-mv/Cargo.toml
-```
-
-Verify `sekiban-mv` visibility and metadata before continuing:
-
-```bash
-cargo publish --dry-run --manifest-path src/wasm-projectors/rust/sekiban-executor/Cargo.toml
-cargo publish --manifest-path src/wasm-projectors/rust/sekiban-executor/Cargo.toml
-```
+1. `sekiban-core`
+2. `sekiban-derive`
+3. `sekiban-wasm`
+4. `sekiban-mv`
+5. `sekiban-executor`
 
 After each publish:
 
@@ -136,6 +147,10 @@ After each publish:
 - Confirm the license is shown as `Elastic-2.0`.
 - Confirm dependent crate dry-runs are unblocked only by the upstream crate that
   just became visible.
+
+Do not run any local `cargo publish` command unless a future emergency recovery
+packet explicitly authorizes it. The normal first-release lane is GitHub Actions
+plus the protected environment approval.
 
 ## Partial Publication Failure Policy
 
@@ -199,8 +214,10 @@ runtime host image.
 
 ## Future Packet Boundaries
 
-Actual publish execution should be a separate, explicitly approved packet. That
-packet may run the manual commands above and record exact publication evidence.
+Actual publish execution should be a separate, explicitly approved dispatch of
+the GitHub Actions workflow above. That packet should record the workflow run,
+environment approval, exact crate versions, crates.io package URLs, and whether
+each crate was accepted.
 
 Post-publish external consumer smoke may be separate from publish execution if
 the release owner wants a smaller irreversible publication packet. If split, the
@@ -210,7 +227,7 @@ can use only crates.io dependencies and the public GHCR runtime image.
 ## Closeout Writeback
 
 This gate is complete when the release owner can follow the approval checklist,
-manual command sequence, stop policy, and external smoke plan without consulting
-repository-local intent metadata. The next packet should either perform approved
-manual publish execution for the `0.1.0` train or run the post-publish external
-consumer smoke after publication has completed.
+GitHub Actions dispatch sequence, stop policy, and external smoke plan without
+consulting repository-local intent metadata. The next packet should either
+perform approved workflow dispatch for the `0.1.0` train or run the post-publish
+external consumer smoke after publication has completed.
