@@ -184,24 +184,27 @@ container tag is **`1.0.0-preview.3`**, while the latest public NuGet packages
 (`Sekiban.Dcb.WasmRuntime`, `…Remote`, `…Wasmtime`) are **`1.0.0-preview.1`**. Do
 not assume the two share a version number.
 
-Rust support is currently in the **repo-local library phase**. The Rust crates
-under `src/wasm-projectors/rust` (`sekiban-core`, `sekiban-derive`,
-`sekiban-executor`, `sekiban-wasm`, and `sekiban-mv`) are candidates for a future
-crates.io release, but they are not public crates.io artifacts yet. Rust samples
-should keep using path dependencies. The crates now carry release-prep metadata
-and exact versioned inter-crate dependencies, but dependent package dry-runs
-still require the upstream internal crates to exist on crates.io. The accepted
-first-publish path is the manual-only GitHub Actions workflow
-`release-rust-crates-first-publish`, protected by the `crates-io-release`
-environment; it has not been dispatched in publish mode. External consumer smoke
-coverage must run after publication from outside this repository, using
-crates.io dependencies only. See the sample note
-[`docs/samples/rust-repo-local-libraries.md`](samples/rust-repo-local-libraries.md),
-the release inventory
-[`docs/release/rust-crate-preview-readiness.md`](release/rust-crate-preview-readiness.md),
-and the gate
-[`docs/release/rust-crates-publication-gate.md`](release/rust-crates-publication-gate.md)
-for the current status, blockers, and manual approval boundary.
+Rust support now has two lanes. Existing repo-development samples continue to
+use local path dependencies under `src/wasm-projectors/rust`, while the
+crates.io consumer sample uses the published Rust crates at exact `=0.1.0`
+versions:
+
+```toml
+sekiban-core = "=0.1.0"
+sekiban-derive = "=0.1.0"
+sekiban-wasm = "=0.1.0"
+sekiban-mv = "=0.1.0"
+sekiban-executor = "=0.1.0"
+```
+
+Use
+[`src/samples/Sekiban.Dcb.WasmRuntime.CratesIo.RsDecider`](../src/samples/Sekiban.Dcb.WasmRuntime.CratesIo.RsDecider)
+when checking the external Rust package boundary. Its verification script runs
+`cargo metadata`, `cargo check --workspace`, and a guard that fails if the sample
+uses repository-local Sekiban crate paths or the unpublished
+`sekiban-wasm-domain` helper. See
+[`docs/release/rust-crates-io-consumer-sample.md`](release/rust-crates-io-consumer-sample.md)
+for the release evidence and commands.
 
 See [`docker/sekiban-wasm-runtime/README.md`](../docker/sekiban-wasm-runtime/README.md)
 for the public local runtime container contract: provided/non-goal behavior,

@@ -1,0 +1,15 @@
+[package]
+name = "crates-io-rs-decider-wasm"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+crates-io-rs-decider-domain = { path = "../Domain" }
+sekiban-core = "=0.1.0"
+sekiban-mv = "=0.1.0"
+sekiban-wasm = "=0.1.0"
+serde_json = "1"
