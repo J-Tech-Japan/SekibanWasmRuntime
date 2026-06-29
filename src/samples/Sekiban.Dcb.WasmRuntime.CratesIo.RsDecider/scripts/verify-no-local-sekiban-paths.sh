@@ -15,4 +15,3 @@ cargo metadata --manifest-path "$SAMPLE_DIR/Cargo.toml" --format-version 1 >/dev
 cargo check --manifest-path "$SAMPLE_DIR/Cargo.toml" --workspace
 
 echo "crates.io Rust sample dependency guard passed"
-

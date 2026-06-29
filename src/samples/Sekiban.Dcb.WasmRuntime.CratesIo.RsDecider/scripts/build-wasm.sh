@@ -68,4 +68,3 @@ JSON
 
 echo "[build-wasm] manifest: $ARTIFACT_DIR/config/sekiban-manifest.json"
 echo "[build-wasm] OK"
-

@@ -49,4 +49,3 @@ projection module, materialized-view boundary, and typed HTTP client. The sample
 still needs a running runtime host for end-to-end execution, but the compile and
 metadata checks prove the Rust package boundary no longer depends on this
 repository's local Rust crate paths.
-

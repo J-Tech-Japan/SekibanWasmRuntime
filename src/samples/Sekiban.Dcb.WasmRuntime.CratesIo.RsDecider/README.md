@@ -50,4 +50,3 @@ RUNTIME_URL=http://localhost:8080 \
 
 The client creates a forecast, updates its location, reads tag state, executes a
 list query, executes a count query, and prints JSON smoke evidence.
-
