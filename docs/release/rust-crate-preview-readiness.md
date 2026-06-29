@@ -274,3 +274,20 @@ artifacts end to end. Unlike `PublicContainer.RsDecider` (which builds from
 repository-local Rust paths), this sample is an external published-package
 consumer proof. The smoke skips gracefully when Docker, the .NET SDK, cargo, or
 the `wasm32-wasip1` target are unavailable.
+
+## SWR-G054 Ongoing GitHub Release Driven Lane
+
+After the manual first publish, SWR-G054 added the recurring release lane
+`.github/workflows/release-rust-crates.yml`, triggered by GitHub Release
+`published` events (with a `workflow_dispatch` check/emergency fallback). It
+resolves the crate version from the release tag (stripping a leading `v`),
+validates all five public crates share that version
+(`scripts/release/check-rust-crate-versions.sh`), runs a crates.io
+duplicate-version guard before any publish
+(`scripts/release/check-rust-crates-unpublished.sh`), and publishes in dependency
+order using the protected `crates-io-release` environment and its
+`CARGO_REGISTRY_TOKEN` secret. The historical first-publish workflow is retained.
+
+The decision record, tag convention, duplicate-version guard, and NuGet/Rust
+coordination guidance are in
+[`rust-crates-publication-gate.md`](rust-crates-publication-gate.md).

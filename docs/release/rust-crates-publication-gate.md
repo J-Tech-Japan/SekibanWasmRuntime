@@ -224,10 +224,75 @@ the release owner wants a smaller irreversible publication packet. If split, the
 publish packet must leave the release in a state where the external smoke packet
 can use only crates.io dependencies and the public GHCR runtime image.
 
+## ADR: Ongoing Rust Release Lane (SWR-G054)
+
+Status: accepted. Supersedes the manual-only model for releases *after* the first
+`0.1.0` train (the first-publish lane stays documented as historical).
+
+### Context
+
+The first publish was deliberately manual-only through
+`release-rust-crates-first-publish` and `workflow_dispatch`. That was the right
+bootstrap for brand-new crates. Now that `0.1.0` is live, ongoing releases should
+match the NuGet model already in `.github/workflows/release-nuget-preview.yml`: a
+published GitHub Release defines the release moment, the release tag defines the
+version, and a protected environment still gates the actual publish.
+
+### Decision
+
+Add a recurring lane `.github/workflows/release-rust-crates.yml`:
+
+- **Trigger:** GitHub Release `published` events, plus a `workflow_dispatch`
+  escape hatch for check/dry-run and emergency manual publish (`publish: true`).
+- **Version source:** the release tag (`github.event.release.tag_name`), or the
+  `expected_version` dispatch input as fallback. A leading `v` is stripped, so
+  tag `v0.2.0` and tag `0.2.0` both resolve to crate version `0.2.0`.
+- **Tag convention:** the GitHub Release tag must be the synchronized crate
+  version, optionally prefixed with `v` (e.g. `v0.2.0`). All five public crates
+  must already declare that exact version in their manifests.
+- **Version validation:** `scripts/release/check-rust-crate-versions.sh` asserts
+  every public crate declares the resolved version before any publish.
+- **Duplicate-version guard:** `scripts/release/check-rust-crates-unpublished.sh`
+  queries crates.io for each crate at the target version and fails *before* any
+  publish if a version already exists. crates.io versions are immutable, so a
+  re-run of an existing tag fails fast with a clear message instead of producing
+  partial duplicate-release noise.
+- **Publish order:** dependency order — `sekiban-core`, `sekiban-derive`,
+  `sekiban-wasm`, `sekiban-mv`, `sekiban-executor`.
+- **Credentials:** the protected `crates-io-release` environment and its
+  `CARGO_REGISTRY_TOKEN` secret only, read inside the publish step. No local
+  `cargo login`, local token files, or local `CARGO_REGISTRY_TOKEN`. The check
+  job never reads the secret.
+
+### Relationship to the NuGet lane
+
+The Rust lane mirrors the NuGet lane's release-driven shape (tag → version, strip
+leading `v`, protected-environment publish gate, `workflow_dispatch` fallback).
+They differ in credential mechanism: NuGet uses Trusted Publishing (OIDC) while
+the Rust lane keeps the `crates-io-release` environment secret
+`CARGO_REGISTRY_TOKEN`. crates.io Trusted Publishing remains a future replacement
+candidate; until it is verified and documented, the environment secret stays.
+
+To cut a coordinated release, publish the NuGet packages and the Rust crates from
+their own GitHub Releases/tags; the Rust crate version line (`0.x`) and the NuGet
+package version line (`1.0.0-preview.x`) are independent by design.
+
+### Consequences
+
+- Ongoing releases no longer need a manual `workflow_dispatch` with
+  `publish: true`; publishing a GitHub Release is the normal path.
+- The first-publish workflow is retained as the historical/first-release-only
+  lane and is not removed.
+- A new release requires bumping all five crate manifests to the new version in a
+  reviewed change before the release tag is published (the version-validation
+  step enforces this).
+
 ## Closeout Writeback
 
 This gate is complete when the release owner can follow the approval checklist,
 GitHub Actions dispatch sequence, stop policy, and external smoke plan without
-consulting repository-local intent metadata. The next packet should either
-perform approved workflow dispatch for the `0.1.0` train or run the post-publish
-external consumer smoke after publication has completed.
+consulting repository-local intent metadata. For ongoing releases after `0.1.0`,
+the release owner publishes a GitHub Release whose tag is the new synchronized
+crate version (optionally `v`-prefixed); `release-rust-crates` then validates the
+version, runs the duplicate-version guard, and publishes in dependency order
+after `crates-io-release` environment approval.
