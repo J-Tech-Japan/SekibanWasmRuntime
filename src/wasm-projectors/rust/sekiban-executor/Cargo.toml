@@ -1,12 +1,17 @@
 [package]
 name = "sekiban-executor"
 version = "0.1.0"
-edition = "2021"
 description = "HTTP executor client for serialized Sekiban WASM runtime endpoints."
-repository = "https://github.com/J-Tech-Japan/SekibanWasmRuntime"
-license = "Elastic-2.0"
+documentation = "https://docs.rs/sekiban-executor"
+categories = ["web-programming::http-client", "api-bindings"]
 readme = "README.md"
 include = ["Cargo.toml", "README.md", "src/**"]
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
 
 [dependencies]
 anyhow = "1"

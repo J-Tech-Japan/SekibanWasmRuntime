@@ -2,6 +2,8 @@
 name = "sekiban-wasm-domain"
 version = "0.1.0"
 edition = "2021"
+description = "Internal sample/reference Sekiban Rust domain; not a public crates.io artifact."
+publish = false
 
 [lib]
 name = "sekiban_wasm_domain"
