@@ -9,3 +9,17 @@ members = [
   "wasm-projector",
 ]
 resolver = "2"
+
+# Shared package metadata for the public Sekiban Rust crate train
+# (sekiban-core, sekiban-derive, sekiban-wasm, sekiban-mv, sekiban-executor).
+# These fields are inherited via `<field>.workspace = true` so the public
+# release metadata stays consistent and drift-free across the crates. Internal
+# crates (domain, wasm-projector) set `publish = false` and intentionally do not
+# inherit this public metadata. See docs/release/rust-crate-metadata-policy.md.
+[workspace.package]
+authors = ["J-Tech Japan, Inc."]
+edition = "2021"
+license = "Elastic-2.0"
+homepage = "https://github.com/J-Tech-Japan/SekibanWasmRuntime"
+repository = "https://github.com/J-Tech-Japan/SekibanWasmRuntime"
+keywords = ["sekiban", "dcb", "event-sourcing", "wasm", "wasi"]

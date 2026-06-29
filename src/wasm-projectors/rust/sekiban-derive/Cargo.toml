@@ -1,12 +1,17 @@
 [package]
 name = "sekiban-derive"
 version = "0.1.0"
-edition = "2021"
 description = "Procedural derive macros for Sekiban Rust domain declarations."
-repository = "https://github.com/J-Tech-Japan/SekibanWasmRuntime"
-license = "Elastic-2.0"
+documentation = "https://docs.rs/sekiban-derive"
+categories = ["development-tools::procedural-macro-helpers", "rust-patterns"]
 readme = "README.md"
 include = ["Cargo.toml", "README.md", "src/**"]
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
 
 [lib]
 proc-macro = true

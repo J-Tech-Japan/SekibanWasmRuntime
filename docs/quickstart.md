@@ -197,6 +197,17 @@ sekiban-mv = "=0.1.0"
 sekiban-executor = "=0.1.0"
 ```
 
+The public Rust distribution crates are exactly those five
+(`sekiban-core`, `sekiban-derive`, `sekiban-wasm`, `sekiban-mv`,
+`sekiban-executor`). The other workspace crates under `src/wasm-projectors/rust`
+(`sekiban-wasm-domain`, `sekiban-wasm-projector`) are internal sample/reference
+crates marked `publish = false`. Shared package metadata (authors, license,
+homepage, repository, keywords) is centralized in `[workspace.package]` and
+inherited by each public crate, mirroring how NuGet centralizes metadata in
+`Directory.Build.props`. See
+[`docs/release/rust-crate-metadata-policy.md`](release/rust-crate-metadata-policy.md)
+for the full public/internal crate set and the Cargo/NuGet metadata policy.
+
 Use
 [`src/samples/Sekiban.Dcb.WasmRuntime.CratesIo.RsDecider`](../src/samples/Sekiban.Dcb.WasmRuntime.CratesIo.RsDecider)
 when checking the external Rust package boundary. Its verification script runs

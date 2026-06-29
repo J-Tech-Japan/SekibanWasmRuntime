@@ -1,12 +1,17 @@
 [package]
 name = "sekiban-core"
 version = "0.1.0"
-edition = "2021"
 description = "Core Sekiban Rust domain traits, DTOs, registries, and projection contracts."
-repository = "https://github.com/J-Tech-Japan/SekibanWasmRuntime"
-license = "Elastic-2.0"
+documentation = "https://docs.rs/sekiban-core"
+categories = ["data-structures", "wasm"]
 readme = "README.md"
 include = ["Cargo.toml", "README.md", "src/**"]
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
 
 [dependencies]
 async-trait = "0.1"

@@ -233,3 +233,18 @@ bash src/samples/Sekiban.Dcb.WasmRuntime.CratesIo.RsDecider/scripts/verify-no-lo
 See
 [`rust-crates-io-consumer-sample.md`](rust-crates-io-consumer-sample.md)
 for the consumer sample details and closeout note.
+
+## SWR-G053 Post-First-Publish Metadata Hardening
+
+After the first publish, SWR-G053 aligned the public Rust crate metadata with the
+public-package baseline without bumping versions or republishing. Shared metadata
+(`authors`, `edition`, `license`, `homepage`, `repository`, `keywords`) is now
+centralized in `[workspace.package]` in `src/wasm-projectors/rust/Cargo.toml` and
+inherited by the five public crates, while crate-specific `description`,
+`documentation` (docs.rs URLs), `categories`, `readme`, and `include` stay in
+each manifest. The two internal crates (`sekiban-wasm-domain`,
+`sekiban-wasm-projector`) are marked `publish = false`.
+
+The full public/internal crate set, the shared/per-crate metadata split, and the
+intentional Cargo vs NuGet differences are recorded in
+[`rust-crate-metadata-policy.md`](rust-crate-metadata-policy.md).
