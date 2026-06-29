@@ -213,3 +213,23 @@ Use the publication-gate document to request explicit human approval for a
 Actual crates.io publication and the external consumer smoke remain separate
 future packets. Do not add automatic publish-on-tag behavior until the protected
 first-release workflow gate has been approved and completed.
+
+## SWR-G055 crates.io Consumer Sample
+
+After the first publish completed, SWR-G055 added
+`src/samples/Sekiban.Dcb.WasmRuntime.CratesIo.RsDecider` as the external Rust
+consumer sample. It consumes `sekiban-core`, `sekiban-derive`, `sekiban-wasm`,
+`sekiban-mv`, and `sekiban-executor` from crates.io at exact `=0.1.0`
+requirements, owns its domain code in the sample, and avoids both repository
+local `src/wasm-projectors/rust/sekiban-*` paths and the unpublished
+`sekiban-wasm-domain` helper crate.
+
+Run the sample boundary check with:
+
+```bash
+bash src/samples/Sekiban.Dcb.WasmRuntime.CratesIo.RsDecider/scripts/verify-no-local-sekiban-paths.sh
+```
+
+See
+[`rust-crates-io-consumer-sample.md`](rust-crates-io-consumer-sample.md)
+for the consumer sample details and closeout note.

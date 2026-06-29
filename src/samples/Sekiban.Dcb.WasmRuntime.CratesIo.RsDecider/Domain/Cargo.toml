@@ -1,0 +1,15 @@
+[package]
+name = "crates-io-rs-decider-domain"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+async-trait = "0.1"
+chrono = { version = "0.4", features = ["serde"] }
+sekiban-core = "=0.1.0"
+sekiban-derive = "=0.1.0"
+sekiban-mv = "=0.1.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["serde", "v7"] }
