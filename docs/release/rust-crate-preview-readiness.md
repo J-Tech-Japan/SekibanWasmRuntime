@@ -248,3 +248,29 @@ each manifest. The two internal crates (`sekiban-wasm-domain`,
 The full public/internal crate set, the shared/per-crate metadata split, and the
 intentional Cargo vs NuGet differences are recorded in
 [`rust-crate-metadata-policy.md`](rust-crate-metadata-policy.md).
+
+## SWR-G056 crates.io Sample Against the Public GHCR Runtime
+
+SWR-G056 added a full end-to-end smoke to
+`src/samples/Sekiban.Dcb.WasmRuntime.CratesIo.RsDecider` that proves the
+published crates.io Sekiban crates against the public GHCR runtime container
+together. A sample-owned Aspire AppHost
+(`AppHost/CratesIoRsDecider.AppHost.csproj`) provisions Postgres and the public
+image `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host` (default
+`1.0.0-preview.3`, `SAMPLE_RUNTIME_IMAGE_TAG` override), and
+`scripts/smoke.sh` runs the typed Rust client and validates command execution,
+tag-state readback, in-memory projection queries, and materialized-view catch-up
+in `DcbMaterializedViewPostgres`.
+
+```bash
+bash src/samples/Sekiban.Dcb.WasmRuntime.CratesIo.RsDecider/scripts/verify-no-local-sekiban-paths.sh
+bash src/samples/Sekiban.Dcb.WasmRuntime.CratesIo.RsDecider/scripts/build-wasm.sh
+env -u SAMPLE_RUNTIME_IMAGE_TAG bash src/samples/Sekiban.Dcb.WasmRuntime.CratesIo.RsDecider/scripts/smoke.sh
+```
+
+The smoke uses crates.io `=0.1.0` dependencies only; the dependency guard now
+also asserts the AppHost targets the public GHCR image so the path proves public
+artifacts end to end. Unlike `PublicContainer.RsDecider` (which builds from
+repository-local Rust paths), this sample is an external published-package
+consumer proof. The smoke skips gracefully when Docker, the .NET SDK, cargo, or
+the `wasm32-wasip1` target are unavailable.
