@@ -217,6 +217,24 @@ uses repository-local Sekiban crate paths or the unpublished
 [`docs/release/rust-crates-io-consumer-sample.md`](release/rust-crates-io-consumer-sample.md)
 for the release evidence and commands.
 
+That same sample now has a full end-to-end smoke that runs the published-crate
+client against the **public GHCR runtime container** through a sample-owned
+Aspire AppHost:
+
+```bash
+env -u SAMPLE_RUNTIME_IMAGE_TAG \
+  bash src/samples/Sekiban.Dcb.WasmRuntime.CratesIo.RsDecider/scripts/smoke.sh
+```
+
+It validates command execution, tag-state readback, in-memory projection
+queries, and materialized-view catch-up using only crates.io `=0.1.0` Sekiban
+dependencies and the public runtime image (default `1.0.0-preview.3`, override
+with `SAMPLE_RUNTIME_IMAGE_TAG`). This is the published-package counterpart to
+the local path-based `PublicContainer.RsDecider` sample below: same public
+runtime container, but consuming the published crates instead of repository-local
+Rust paths. The smoke skips gracefully when Docker, the .NET SDK, cargo, or the
+`wasm32-wasip1` target are unavailable.
+
 See [`docker/sekiban-wasm-runtime/README.md`](../docker/sekiban-wasm-runtime/README.md)
 for the public local runtime container contract: provided/non-goal behavior,
 ports, volumes, required and optional environment variables, storage-provider

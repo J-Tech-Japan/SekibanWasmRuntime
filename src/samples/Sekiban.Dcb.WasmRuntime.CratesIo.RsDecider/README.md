@@ -50,3 +50,45 @@ RUNTIME_URL=http://localhost:8080 \
 
 The client creates a forecast, updates its location, reads tag state, executes a
 list query, executes a count query, and prints JSON smoke evidence.
+
+## End-to-end smoke against the public GHCR runtime
+
+`scripts/smoke.sh` runs the full public-artifact end-to-end path: it builds the
+WASM module (if needed), starts an Aspire AppHost that provisions Postgres and
+the **public GHCR runtime container**
+(`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host`, default `1.0.0-preview.3`,
+override with `SAMPLE_RUNTIME_IMAGE_TAG`), runs the typed Rust client, and then
+confirms the materialized view caught up in `DcbMaterializedViewPostgres`.
+
+```bash
+env -u SAMPLE_RUNTIME_IMAGE_TAG \
+  bash src/samples/Sekiban.Dcb.WasmRuntime.CratesIo.RsDecider/scripts/smoke.sh
+```
+
+The smoke validates, end to end, using only crates.io `=0.1.0` Sekiban
+dependencies and the public runtime image:
+
+- command execution (`CreateWeatherForecast` + `UpdateWeatherForecastLocation`),
+- tag-state readback,
+- in-memory projection queries (`GetWeatherForecastListQuery`,
+  `GetWeatherForecastCountQuery`),
+- materialized-view catch-up/read in `DcbMaterializedViewPostgres`.
+
+It writes a report to `reports/smoke/crates-io-rs-decider-smoke.md` and skips
+gracefully (exit 0, `Result: SKIP`) when Docker, the .NET SDK, cargo, or the
+`wasm32-wasip1` target are unavailable.
+
+### How this differs from `PublicContainer.RsDecider`
+
+Both samples drive the same public GHCR runtime container, but they prove
+different boundaries:
+
+- This sample (`CratesIo.RsDecider`) consumes the **published crates.io** Sekiban
+  crates at exact `=0.1.0` and owns its domain code, so it is an external
+  public-package consumer proof. The `verify-no-local-sekiban-paths.sh` guard
+  fails if a local `src/wasm-projectors/rust/sekiban-*` path or the unpublished
+  `sekiban-wasm-domain` helper is reintroduced, and also asserts the AppHost
+  targets the public GHCR image.
+- `PublicContainer.RsDecider` proves the public runtime container can execute
+  Rust command/query/MV behavior, but it still builds from repository-local Rust
+  path dependencies, so it is not an external public-package consumer proof.
