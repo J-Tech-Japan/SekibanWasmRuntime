@@ -1,40 +1,8 @@
 import { JSON } from "json-as/assembly";
+import { readStr, writeStr, applyPaging } from "@sekiban/as-wasm/assembly";
 import * as C from "./domain/constants";
+export { alloc, dealloc } from "@sekiban/as-wasm/assembly";
 export { mv_metadata, mv_initialize, mv_apply_event } from "./materialized_view";
-
-// ---------------------------------------------------------------------------
-// Memory management - keep allocated buffers alive
-// ---------------------------------------------------------------------------
-
-const _pinned: usize[] = [];
-
-export function alloc(size: u32): u32 {
-  const ptr = __new(size as i32, 0);
-  __pin(ptr);
-  _pinned.push(ptr);
-  return ptr as u32;
-}
-
-export function dealloc(ptr: u32, size: u32): void {
-  __unpin(ptr as usize);
-}
-
-// ---------------------------------------------------------------------------
-// String helpers
-// ---------------------------------------------------------------------------
-
-function readStr(ptr: u32, len: u32): string {
-  return String.UTF8.decodeUnsafe(ptr as usize, len as i32);
-}
-
-function writeStr(value: string): u64 {
-  const buf = String.UTF8.encode(value);
-  const p = changetype<usize>(buf);
-  __pin(p);
-  _pinned.push(p);
-  const byteLen = buf.byteLength;
-  return (u64(p) << 32) | u64(byteLen);
-}
 
 // ---------------------------------------------------------------------------
 // Projector instance storage
@@ -822,15 +790,6 @@ export function restore_state(instanceId: i32, statePtr: u32, stateLen: u32): vo
 @json class UserAccessListQuery { activeOnly: bool = false; roleFilter: string = ""; pageSize: i32 = 0; pageNumber: i32 = 0; }
 
 @json class CountResult { count: i32 = 0; }
-
-function applyPaging<T>(items: T[], pageSize: i32, pageNumber: i32): T[] {
-  if (pageSize <= 0) return items;
-  const page = pageNumber > 0 ? pageNumber : 1;
-  const start = (page - 1) * pageSize;
-  if (start >= items.length) return [];
-  const end = start + pageSize > items.length ? items.length : start + pageSize;
-  return items.slice(start, end);
-}
 
 function executeWeatherListQuery(inst: Instance, paramsJson: string): string {
   const q = JSON.parse<WeatherListQuery>(paramsJson);

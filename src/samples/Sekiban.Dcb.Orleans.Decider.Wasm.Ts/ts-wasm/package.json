@@ -6,11 +6,17 @@
     "asbuild": "asc assembly/index.ts --outFile ../modules/ts-weather.wasm --optimize --exportStart _initialize --runtime incremental --exportRuntime --use abort=",
     "build": "npm run asbuild"
   },
+  "dependencies": {
+    "@sekiban/as-wasm": "file:../../../lib/sekiban-as-wasm",
+    "visitor-as": "^0.11.4"
+  },
   "devDependencies": {
     "assemblyscript": "^0.27.32",
     "json-as": "^0.9.28"
   },
-  "dependencies": {
-    "visitor-as": "^0.11.4"
+  "overrides": {
+    "visitor-as": {
+      "assemblyscript": "$assemblyscript"
+    }
   }
 }
