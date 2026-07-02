@@ -1,0 +1,68 @@
+name: release-go-sdk
+
+# Go SDK release lane for the monorepo subdirectory module
+# github.com/J-Tech-Japan/SekibanWasmRuntime/src/lib/sekiban-go.
+#
+# Publication IS the tag: Go modules are served straight from the public
+# repository through proxy.golang.org, so this lane needs no registry
+# credentials, no protected environment, and no publish step. The workflow is
+# the release gate that runs on the mandatory subdirectory tags
+# (`src/lib/sekiban-go/vX.Y.Z`); `workflow_dispatch` provides the same checks
+# as a pre-tag dry run.
+#
+# See docs/release/go-sdk-release-lane.md for the tag convention and the
+# post-tag GOPROXY verification procedure.
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'src/lib/sekiban-go/v*'
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: Go SDK release gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: src/lib/sekiban-go
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: src/lib/sekiban-go/go.mod
+
+      - name: Validate tag matches the subdirectory module convention
+        if: github.ref_type == 'tag'
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          if [[ ! "$tag" =~ ^src/lib/sekiban-go/v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Tag '$tag' does not match src/lib/sekiban-go/vX.Y.Z" >&2
+            exit 1
+          fi
+          echo "Release tag: $tag (module version ${tag#src/lib/sekiban-go/})"
+
+      - name: Verify module path
+        run: |
+          set -euo pipefail
+          expected="module github.com/J-Tech-Japan/SekibanWasmRuntime/src/lib/sekiban-go"
+          if ! head -n1 go.mod | grep -qxF "$expected"; then
+            echo "go.mod module path does not match the repository subdirectory:" >&2
+            head -n1 go.mod >&2
+            exit 1
+          fi
+
+      - name: go build
+        run: go build ./...
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test ./...
