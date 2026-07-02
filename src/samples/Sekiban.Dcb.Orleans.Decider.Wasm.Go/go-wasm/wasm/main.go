@@ -8,8 +8,8 @@ import (
 
 	"sekiban-dcb-decider-go/domain"
 
-	"github.com/J-Tech-Japan/sekiban-go/mv"
-	"github.com/J-Tech-Japan/sekiban-go/wasm"
+	"github.com/J-Tech-Japan/SekibanWasmRuntime/src/lib/sekiban-go/mv"
+	"github.com/J-Tech-Japan/SekibanWasmRuntime/src/lib/sekiban-go/wasm"
 )
 
 // ---------------------------------------------------------------------------

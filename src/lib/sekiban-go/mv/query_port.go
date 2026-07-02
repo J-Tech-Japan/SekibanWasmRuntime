@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/J-Tech-Japan/sekiban-go/wasm"
+	"github.com/J-Tech-Japan/SekibanWasmRuntime/src/lib/sekiban-go/wasm"
 )
 
 // HostBackedQueryPort routes QueryRows / QuerySingleRow through the `env.mv_host_query_rows`

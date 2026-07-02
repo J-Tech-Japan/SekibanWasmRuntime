@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/J-Tech-Japan/sekiban-go/mv"
+	"github.com/J-Tech-Japan/SekibanWasmRuntime/src/lib/sekiban-go/mv"
 )
 
 // Logical table names for the ClassRoomEnrollment view. Kept as exported constants so the

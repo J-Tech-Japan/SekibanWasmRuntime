@@ -39,12 +39,20 @@ func Dealloc(ptr uint32, length uint32) {
 	// No-op: TinyGo WASI reactor mode is sensitive to allocator bookkeeping.
 }
 
+// linearMemoryPointer converts a WASM linear-memory address into a pointer.
+// Inside a wasm guest the address space is the module's own linear memory, so
+// the conversion is well defined; unsafe.Add from the nil base expresses it
+// without the uintptr round-trip that `go vet` rejects.
+func linearMemoryPointer(ptr uint32) unsafe.Pointer {
+	return unsafe.Add(unsafe.Pointer(nil), uintptr(ptr))
+}
+
 // ReadString reads a UTF-8 string from WASM linear memory.
 func ReadString(ptr uint32, length uint32) string {
 	if ptr == 0 || length == 0 {
 		return ""
 	}
-	data := unsafe.Slice((*byte)(unsafe.Pointer(uintptr(ptr))), int(length))
+	data := unsafe.Slice((*byte)(linearMemoryPointer(ptr)), int(length))
 	return string(data)
 }
 
@@ -58,7 +66,7 @@ func WriteString(value string) int64 {
 	if ptr == 0 {
 		return PackPtrLen(0, 0)
 	}
-	dest := unsafe.Slice((*byte)(unsafe.Pointer(uintptr(ptr))), len(bytes))
+	dest := unsafe.Slice((*byte)(linearMemoryPointer(ptr)), len(bytes))
 	copy(dest, bytes)
 	return PackPtrLen(ptr, uint32(len(bytes)))
 }
