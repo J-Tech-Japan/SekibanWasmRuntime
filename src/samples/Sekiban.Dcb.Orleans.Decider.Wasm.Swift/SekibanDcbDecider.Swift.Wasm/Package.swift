@@ -14,16 +14,15 @@ import PackageDescription
 let package = Package(
     name: "SekibanDcbDeciderSwiftWasm",
     dependencies: [
-        .package(path: "../../../wasm-projectors/swift/sekiban-wasm"),
-        .package(path: "../../../wasm-projectors/swift/sekiban-mv"),
+        .package(name: "sekiban-swift", path: "../../../wasm-projectors/swift"),
         .package(path: "../SekibanDcbDecider.Swift.EventSource"),
     ],
     targets: [
         .executableTarget(
             name: "SekibanDcbDeciderSwiftWasm",
             dependencies: [
-                .product(name: "SekibanWasm", package: "sekiban-wasm"),
-                .product(name: "SekibanMv", package: "sekiban-mv"),
+                .product(name: "SekibanWasm", package: "sekiban-swift"),
+                .product(name: "SekibanMv", package: "sekiban-swift"),
                 .product(name: "SekibanDcbDeciderSwiftEventSource",
                          package: "SekibanDcbDecider.Swift.EventSource"),
             ],

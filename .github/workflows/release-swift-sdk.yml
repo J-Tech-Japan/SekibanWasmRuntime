@@ -1,0 +1,81 @@
+name: release-swift-sdk
+
+# Swift SDK release lane for the sekiban-swift mirror repository.
+#
+# SwiftPM resolves packages from a repository root, so the Swift SDK publishes
+# through github.com/J-Tech-Japan/sekiban-swift, synced from
+# src/wasm-projectors/swift by scripts/release/sync-sekiban-swift-mirror.sh.
+# Repo tags `swift-vX.Y.Z` drive the lane; the mirror receives plain `vX.Y.Z`.
+#
+# The gate job (build + test + dry-run sync with the path-leakage guard) runs
+# on every swift-v* tag and on workflow_dispatch. The mirror-push job is gated
+# behind the `swift-mirror-release` protected environment and is BLOCKED on
+# human prerequisites (mirror repository creation + SEKIBAN_SWIFT_MIRROR_TOKEN
+# secret); until those exist it fails fast with an explicit message.
+#
+# See docs/release/swift-sdk-release-lane.md.
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'swift-v*'
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: Swift SDK release gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container:
+      image: swift:6.1-noble
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate tag format
+        if: github.ref_type == 'tag'
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          if [[ ! "$tag" =~ ^swift-v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Tag '$tag' does not match swift-vX.Y.Z" >&2
+            exit 1
+          fi
+          echo "Release tag: $tag (mirror tag v${tag#swift-v})"
+
+      - name: swift build
+        run: swift build --package-path src/wasm-projectors/swift
+
+      - name: swift test
+        run: swift test --package-path src/wasm-projectors/swift
+
+      - name: Mirror dry-run sync (staged tree + path-leakage guard)
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          bash scripts/release/sync-sekiban-swift-mirror.sh --dry-run
+
+  mirror-push:
+    name: Push to sekiban-swift mirror (blocked on human prerequisites)
+    needs: gate
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container:
+      image: swift:6.1-noble
+    environment: swift-mirror-release
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync mirror and tag
+        env:
+          SEKIBAN_SWIFT_MIRROR_TOKEN: ${{ secrets.SEKIBAN_SWIFT_MIRROR_TOKEN }}
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          version="${GITHUB_REF_NAME#swift-v}"
+          # Fails fast with an explicit message while the mirror repository and
+          # its token are still human-gated prerequisites.
+          bash scripts/release/sync-sekiban-swift-mirror.sh --push --version "$version"

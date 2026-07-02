@@ -8,6 +8,7 @@ import SekibanWasm
 // the implicit error slot) which wasm-ld records as the import signature. wasmtime then refuses
 // to link because the host declares `(i32 i32 i32 i32 i32) -> i64`. `@_extern(c, ...)` forces
 // the C ABI so the signatures match.
+#if arch(wasm32)
 @_extern(wasm, module: "env", name: "mv_host_query_rows")
 @_extern(c)
 func host_mv_host_query_rows(
@@ -15,6 +16,16 @@ func host_mv_host_query_rows(
     _ paramsPtr: Int32, _ paramsLen: Int32,
     _ rowLimit: Int32
 ) -> Int64
+#else
+// Native builds (unit tests, host-side tooling) have no wasm host to satisfy the
+// import; report "no result" so the port degrades to empty rows instead of
+// failing at link time.
+func host_mv_host_query_rows(
+    _ sqlPtr: Int32, _ sqlLen: Int32,
+    _ paramsPtr: Int32, _ paramsLen: Int32,
+    _ rowLimit: Int32
+) -> Int64 { 0 }
+#endif
 
 /// Default query port that routes through the `env.mv_host_query_rows` host import.
 /// The sample's `ClassRoomEnrollmentMvV1` doesn't query mid-apply so this exists primarily to
