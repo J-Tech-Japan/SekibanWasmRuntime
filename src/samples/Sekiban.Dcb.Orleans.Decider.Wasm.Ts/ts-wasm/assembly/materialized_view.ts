@@ -1,74 +1,26 @@
 import { JSON } from "json-as/assembly";
+import {
+  readStr,
+  writeStr,
+  WasmMvSqlStatementDto,
+  WasmMvTableBindingsDto,
+  WasmMvMetadataDto,
+  WasmMvSerializableEventDto,
+  errorPayload,
+  statementBatchPayload,
+  statement,
+  tableName,
+  guidParam,
+  stringParam,
+  int32Param,
+  buildIndexName,
+} from "@sekiban/as-wasm/assembly";
 
 const VIEW_NAME = "ClassRoomEnrollment";
 const VIEW_VERSION: i32 = 1;
 const CLASSROOMS_LOGICAL = "classrooms";
 const STUDENTS_LOGICAL = "students";
 const ENROLLMENTS_LOGICAL = "enrollments";
-
-const PARAM_KIND_STRING: i32 = 1;
-const PARAM_KIND_INT32: i32 = 2;
-const PARAM_KIND_GUID: i32 = 5;
-
-function readStr(ptr: u32, len: u32): string {
-  return String.UTF8.decodeUnsafe(ptr as usize, len as i32);
-}
-
-function writeStr(value: string): u64 {
-  const buf = String.UTF8.encode(value);
-  const p = changetype<usize>(buf);
-  __pin(p);
-  return (u64(p) << 32) | u64(buf.byteLength);
-}
-
-@json
-class WasmMvParam {
-  name: string = "";
-  kind: i32 = 0;
-  valueJson: string | null = null;
-}
-
-@json
-class WasmMvSqlStatementDto {
-  sql: string = "";
-  parameters: WasmMvParam[] = [];
-}
-
-@json
-class WasmMvTableBindingEntry {
-  logical: string = "";
-  physical: string = "";
-}
-
-@json
-class WasmMvTableBindingsDto {
-  bindings: WasmMvTableBindingEntry[] = [];
-}
-
-@json
-class WasmMvMetadataDto {
-  viewName: string = "";
-  viewVersion: i32 = 0;
-  logicalTables: string[] = [];
-}
-
-@json
-class WasmMvSerializableEventDto {
-  eventType: string = "";
-  payloadJson: string = "";
-  sortableUniqueId: string = "";
-  tags: string[] = [];
-}
-
-@json
-class WasmMvStatementBatchDto {
-  statements: WasmMvSqlStatementDto[] = [];
-}
-
-@json
-class WasmMvErrorDto {
-  error: string = "";
-}
 
 @json
 class ClassRoomCreatedEv {
@@ -96,22 +48,6 @@ class StudentDroppedEv {
   classRoomId: string = "";
 }
 
-function errorPayload(message: string): string {
-  const error = new WasmMvErrorDto();
-  error.error = message;
-  return JSON.stringify<WasmMvErrorDto>(error);
-}
-
-function jsonString(value: string): string {
-  return JSON.stringify<string>(value);
-}
-
-function statementBatchPayload(statements: WasmMvSqlStatementDto[]): string {
-  const batch = new WasmMvStatementBatchDto();
-  batch.statements = statements;
-  return JSON.stringify<WasmMvStatementBatchDto>(batch);
-}
-
 function missingBinding(bindings: WasmMvTableBindingsDto): string | null {
   if (tableName(bindings, CLASSROOMS_LOGICAL) == "") {
     return CLASSROOMS_LOGICAL;
@@ -123,53 +59,6 @@ function missingBinding(bindings: WasmMvTableBindingsDto): string | null {
     return ENROLLMENTS_LOGICAL;
   }
   return null;
-}
-
-function tableName(bindings: WasmMvTableBindingsDto, logical: string): string {
-  for (let i = 0; i < bindings.bindings.length; i++) {
-    if (bindings.bindings[i].logical == logical) {
-      return bindings.bindings[i].physical;
-    }
-  }
-  return "";
-}
-
-function sqlParam(name: string, kind: i32, valueJson: string): WasmMvParam {
-  const param = new WasmMvParam();
-  param.name = name;
-  param.kind = kind;
-  param.valueJson = valueJson;
-  return param;
-}
-
-function guidParam(name: string, value: string): WasmMvParam {
-  return sqlParam(name, PARAM_KIND_GUID, jsonString(value));
-}
-
-function stringParam(name: string, value: string): WasmMvParam {
-  return sqlParam(name, PARAM_KIND_STRING, jsonString(value));
-}
-
-function int32Param(name: string, value: i32): WasmMvParam {
-  return sqlParam(name, PARAM_KIND_INT32, value.toString());
-}
-
-function statement(sql: string, parameters: WasmMvParam[] = []): WasmMvSqlStatementDto {
-  const dto = new WasmMvSqlStatementDto();
-  dto.sql = sql;
-  dto.parameters = parameters;
-  return dto;
-}
-
-function buildIndexName(physicalTable: string, suffix: string): string {
-  const maxIdentifierLength = 63;
-  const prefix = "idx_";
-  const tail = "_" + suffix;
-  const available = maxIdentifierLength - prefix.length - tail.length;
-  if (physicalTable.length <= available) {
-    return prefix + physicalTable + tail;
-  }
-  return prefix + physicalTable.substring(0, available) + tail;
 }
 
 function initializeStatements(bindings: WasmMvTableBindingsDto): WasmMvSqlStatementDto[] {

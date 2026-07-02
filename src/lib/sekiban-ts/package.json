@@ -1,13 +1,41 @@
 {
   "name": "@sekiban/ts",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
+  "description": "TypeScript host SDK for the Sekiban WASM Runtime: typed commands, tag-state reads, and serialized queries over the runtime HTTP contract.",
+  "keywords": [
+    "sekiban",
+    "dcb",
+    "event-sourcing",
+    "wasm",
+    "cqrs"
+  ],
+  "homepage": "https://github.com/J-Tech-Japan/SekibanWasmRuntime",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/J-Tech-Japan/SekibanWasmRuntime.git",
+    "directory": "src/lib/sekiban-ts"
+  },
+  "license": "Elastic-2.0",
+  "author": "J-Tech Japan, Inc.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "tsc",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "prepack": "npm run build"
   },
   "dependencies": {},
   "devDependencies": {
