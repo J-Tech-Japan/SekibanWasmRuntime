@@ -6,11 +6,12 @@ existing public repository. There is no separate Go repository, no mirror, no
 sync tooling, and no registry credentials: proxy.golang.org serves tagged
 versions straight from the public SekibanWasmRuntime repository.
 
-This retires the earlier mirror-repository plan (a dedicated
-`github.com/J-Tech-Japan/sekiban-go` repository kept in sync from the
+This retires the earlier mirror-repository plan (a dedicated `sekiban-go`
+repository under the J-Tech-Japan organization kept in sync from the
 monorepo). The corrected decision is recorded in the 2026-07-02 grill record;
-the retired module path `github.com/J-Tech-Japan/sekiban-go` must not appear
-anywhere in the repository, and no sync scripts or sync tokens exist.
+the retired short module path (organization + `sekiban-go`, without the
+`SekibanWasmRuntime/src/lib` segment) must not appear anywhere in the
+repository, and no sync scripts or sync tokens exist.
 
 ## Module Path
 
