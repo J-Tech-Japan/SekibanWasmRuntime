@@ -19,8 +19,8 @@ import (
 
 	"sekiban-dcb-decider-go/domain"
 
-	"github.com/J-Tech-Japan/sekiban-go/client"
-	sekiban "github.com/J-Tech-Japan/sekiban-go/domain"
+	"github.com/J-Tech-Japan/SekibanWasmRuntime/src/lib/sekiban-go/client"
+	sekiban "github.com/J-Tech-Japan/SekibanWasmRuntime/src/lib/sekiban-go/domain"
 )
 
 // ---------------------------------------------------------------------------
