@@ -1,0 +1,43 @@
+{
+  "name": "@sekiban/as-wasm",
+  "version": "0.1.0",
+  "description": "AssemblyScript projector SDK for the Sekiban WASM Runtime: pinned-buffer memory management, string marshalling, the materialized-view SQL statement protocol, and paging helpers for building Sekiban DCB projector modules.",
+  "keywords": [
+    "sekiban",
+    "dcb",
+    "event-sourcing",
+    "wasm",
+    "assemblyscript"
+  ],
+  "homepage": "https://github.com/J-Tech-Japan/SekibanWasmRuntime",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/J-Tech-Japan/SekibanWasmRuntime.git",
+    "directory": "src/lib/sekiban-as-wasm"
+  },
+  "license": "Elastic-2.0",
+  "author": "J-Tech Japan, Inc.",
+  "ascMain": "assembly/index.ts",
+  "main": "assembly/index.ts",
+  "types": "assembly/index.ts",
+  "files": [
+    "assembly"
+  ],
+  "scripts": {
+    "build": "asc assembly/index.ts --outFile build/sekiban-as-wasm-check.wasm --optimize --exportStart _initialize --runtime incremental --exportRuntime --use abort= --transform json-as/transform"
+  },
+  "peerDependencies": {
+    "assemblyscript": "^0.27.32",
+    "json-as": "^0.9.28"
+  },
+  "devDependencies": {
+    "assemblyscript": "^0.27.32",
+    "json-as": "^0.9.28",
+    "visitor-as": "^0.11.4"
+  },
+  "overrides": {
+    "visitor-as": {
+      "assemblyscript": "$assemblyscript"
+    }
+  }
+}
