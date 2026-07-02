@@ -1,6 +1,17 @@
 {
   "name": "sekiban/sekiban-client",
   "version": "0.1.0",
+  "description": "MoonBit host-side client SDK for the Sekiban WASM Runtime: typed commands, tag-state reads, and serialized queries over the runtime HTTP contract (native target).",
+  "repository": "https://github.com/J-Tech-Japan/SekibanWasmRuntime",
+  "license": "Elastic-2.0",
+  "keywords": [
+    "sekiban",
+    "dcb",
+    "event-sourcing",
+    "wasm",
+    "client"
+  ],
+  "readme": "README.md",
   "preferred-target": "native",
   "deps": {
     "moonbitlang/async": "0.6.4",

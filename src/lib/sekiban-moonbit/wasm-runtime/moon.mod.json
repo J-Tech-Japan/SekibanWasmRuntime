@@ -1,5 +1,16 @@
 {
   "name": "sekiban/sekiban-wasm-runtime",
   "version": "0.1.0",
+  "description": "MoonBit projector SDK for the Sekiban WASM Runtime: linear-memory FFI, string marshalling, and the C-ABI export plumbing for building Sekiban DCB projector modules compiled to WebAssembly.",
+  "repository": "https://github.com/J-Tech-Japan/SekibanWasmRuntime",
+  "license": "Elastic-2.0",
+  "keywords": [
+    "sekiban",
+    "dcb",
+    "event-sourcing",
+    "wasm",
+    "projector"
+  ],
+  "readme": "README.md",
   "preferred-target": "wasm"
 }
