@@ -6,9 +6,9 @@ build Sekiban DCB projector modules in Swift and compile them to WebAssembly
 
 This is **one SPM package with two products**. SwiftPM resolves packages from a
 repository root, so the package is published through the mirror repository
-`github.com/J-Tech-Japan/sekiban-swift`, whose content is synced from
-`src/wasm-projectors/swift` in the SekibanWasmRuntime monorepo (the monorepo is
-the source of truth; do not commit to the mirror directly).
+`github.com/J-Tech-Japan/sekiban-swift`, whose content is synced from the
+[Swift SDK directory of the SekibanWasmRuntime monorepo](https://github.com/J-Tech-Japan/SekibanWasmRuntime/tree/main/src/wasm-projectors/swift)
+(the monorepo is the source of truth; do not commit to the mirror directly).
 
 ```swift
 // Package.swift of your projector module
@@ -41,7 +41,8 @@ targets: [
   the Rust `sekiban-mv` crate.
 
 Target, product, and import names are public API, fixed before the first
-publish — see `docs/release/swift-sdk-release-lane.md` in the monorepo.
+publish — see the
+[Swift SDK release lane doc](https://github.com/J-Tech-Japan/SekibanWasmRuntime/blob/main/docs/release/swift-sdk-release-lane.md).
 
 ## Building a module
 
@@ -51,10 +52,11 @@ Compile with a Swift WebAssembly SDK (swift-tools 6.0+, WASI reactor model):
 swift build --swift-sdk <your-wasm-sdk> -c release
 ```
 
-A complete projector built on this package lives in the monorepo at
-`src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Swift` (see
-`build/scripts/build-swift-wasm.sh` for the exact toolchain invocation and the
-linker flags required for the reactor exec-model and C-ABI export list).
+A complete projector built on this package lives in the monorepo:
+[Sekiban.Dcb.Orleans.Decider.Wasm.Swift sample](https://github.com/J-Tech-Japan/SekibanWasmRuntime/tree/main/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Swift)
+(its [build script](https://github.com/J-Tech-Japan/SekibanWasmRuntime/blob/main/build/scripts/build-swift-wasm.sh)
+shows the exact toolchain invocation and the linker flags required for the
+reactor exec-model and C-ABI export list).
 
 ## Runtime pairing
 

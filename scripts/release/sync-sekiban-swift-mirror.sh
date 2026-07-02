@@ -64,20 +64,27 @@ log "staged mirror tree at ${STAGE_DIR#"$ROOT"/}"
 
 # ---------------------------------------------------------------------------
 # 2. Guard: the staged tree must be self-contained. Any host-repo relative
-#    path reference (path-based package dependencies, parent-directory
-#    escapes, monorepo paths in the manifest) would break the mirror.
+#    path reference — path-based package dependencies, parent-directory
+#    escapes, or monorepo-relative paths in ANY copied file (manifest, README,
+#    sources, tests) — would break or mislead external mirror consumers.
+#    Absolute https:// links into the monorepo are fine; URLs are stripped
+#    before scanning.
 # ---------------------------------------------------------------------------
 
 leaks="$(grep -RnE '\.package\(\s*(name:[^,]+,\s*)?path:' "$STAGE_DIR" --include='Package.swift' || true)"
 [[ -z "$leaks" ]] || fail "staged Package.swift declares path-based dependencies: $leaks"
 
-leaks="$(grep -Rn '\.\./' "$STAGE_DIR/Package.swift" || true)"
-[[ -z "$leaks" ]] || fail "staged Package.swift references parent directories: $leaks"
+leak_report=""
+while IFS= read -r -d '' file; do
+  rel="${file#"$STAGE_DIR"/}"
+  hits="$(sed -E 's#https?://[^ )"'\''<>]*##g' "$file" \
+    | grep -nE '\.\./|(^|[^/A-Za-z0-9_.$-])(src|build|docs|scripts|samples|intents)/' \
+    | sed "s#^#$rel:#" || true)"
+  [[ -z "$hits" ]] || leak_report+="$hits"$'\n'
+done < <(find "$STAGE_DIR" -type f -print0)
+[[ -z "$leak_report" ]] || fail "staged mirror content references host-repo relative paths (rewrite to absolute links or self-contained wording): ${leak_report}"
 
-leaks="$(grep -RnE 'src/(wasm-projectors|samples|lib|runtime)/' "$STAGE_DIR/Package.swift" || true)"
-[[ -z "$leaks" ]] || fail "staged Package.swift references monorepo paths: $leaks"
-
-log "guard OK: no host-repo relative path references in the staged manifest"
+log "guard OK: no host-repo relative path references anywhere in the staged tree"
 
 # ---------------------------------------------------------------------------
 # 3. Validate: the staged tree must build and test standalone, exactly as an
