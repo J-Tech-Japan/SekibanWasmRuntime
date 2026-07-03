@@ -1,0 +1,139 @@
+name: release-templates-preview
+
+# Release lane for the Sekiban.Dcb.WasmRuntime.Templates package.
+#
+# A published GitHub Release with a `templates-v*` tag defines the release
+# moment and the package version (the `templates-v` prefix is stripped).
+# Releases with other tags are skipped so this lane never fires for the
+# runtime/SDK lanes. The actual NuGet publish is gated behind the protected
+# `templates-release` environment and is not exercised until the human-gated
+# first-publish prerequisites are met.
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/release-templates-preview.yml'
+      - 'templates/**'
+      - 'scripts/templates/**'
+      - 'docs/nuget/templates-package-readme.md'
+      - 'docs/templates/**'
+  workflow_dispatch:
+    inputs:
+      package_version:
+        description: 'Templates package version to validate (and publish when publish=true)'
+        required: true
+        default: '1.0.0-preview.1'
+      publish:
+        description: 'Emergency manual publish to NuGet after checks (normally publish via a templates-v* GitHub Release)'
+        type: boolean
+        required: true
+        default: false
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+env:
+  # templates-v* release tag wins; workflow_dispatch input is the fallback.
+  RAW_PACKAGE_VERSION: ${{ github.event.release.tag_name || inputs.package_version || '1.0.0-preview.1' }}
+
+jobs:
+  validate:
+    name: template pack / generate / build checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # Skip releases from other lanes (nuget v*, rust-v*, ts-v*, ...) early.
+    if: github.event_name != 'release' || startsWith(github.event.release.tag_name, 'templates-v')
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          dotnet-quality: 'preview'
+
+      - name: Resolve package version
+        run: |
+          set -euo pipefail
+          version="${RAW_PACKAGE_VERSION#templates-v}"
+          echo "TEMPLATE_PACKAGE_VERSION=${version}" >> "$GITHUB_ENV"
+          echo "Using TEMPLATE_PACKAGE_VERSION=${version}"
+
+      - name: Pack templates package
+        run: |
+          set -euo pipefail
+          dotnet pack templates/Sekiban.Dcb.WasmRuntime.Templates/Sekiban.Dcb.WasmRuntime.Templates.csproj \
+            -c Release -o artifacts/packages "-p:Version=${TEMPLATE_PACKAGE_VERSION}"
+
+      - name: Generation test (pack, install, generate, build, residue check)
+        env:
+          TEMPLATE_TEST_PACKAGE_VERSION: ${{ env.TEMPLATE_PACKAGE_VERSION }}
+        run: bash scripts/templates/test-sekiban-wasm-decider.sh
+
+      - name: Whitespace check
+        run: git diff --check
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: templates-preview-${{ env.TEMPLATE_PACKAGE_VERSION }}
+          path: artifacts/packages/*.nupkg
+          if-no-files-found: error
+
+  publish:
+    name: publish templates package to NuGet
+    runs-on: ubuntu-latest
+    needs: validate
+    # Publish on a published templates-v* GitHub Release, or on an explicit
+    # emergency manual dispatch. The protected `templates-release` environment
+    # still gates this job; it stays un-exercised until the human-gated
+    # first-publish prerequisites are met.
+    if: >-
+      github.repository == 'J-Tech-Japan/SekibanWasmRuntime' &&
+      ((github.event_name == 'release' && startsWith(github.event.release.tag_name, 'templates-v')) ||
+       (github.event_name == 'workflow_dispatch' && inputs.publish == true))
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    environment: templates-release
+    steps:
+      # Self-contained on a clean runner: checkout and re-pack rather than
+      # trusting artifacts from another job.
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          dotnet-quality: 'preview'
+
+      - name: Resolve package version
+        run: |
+          set -euo pipefail
+          version="${RAW_PACKAGE_VERSION#templates-v}"
+          echo "TEMPLATE_PACKAGE_VERSION=${version}" >> "$GITHUB_ENV"
+          echo "Using TEMPLATE_PACKAGE_VERSION=${version}"
+
+      - name: Pack templates package
+        run: |
+          set -euo pipefail
+          dotnet pack templates/Sekiban.Dcb.WasmRuntime.Templates/Sekiban.Dcb.WasmRuntime.Templates.csproj \
+            -c Release -o artifacts/publish "-p:Version=${TEMPLATE_PACKAGE_VERSION}"
+
+      - name: NuGet login via Trusted Publishing
+        id: nuget-login
+        uses: NuGet/login@v1
+        with:
+          user: tomohisa_takaoka
+
+      - name: Publish package
+        run: |
+          set -euo pipefail
+          dotnet nuget push "artifacts/publish/Sekiban.Dcb.WasmRuntime.Templates.${TEMPLATE_PACKAGE_VERSION}.nupkg" \
+            --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}" \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate

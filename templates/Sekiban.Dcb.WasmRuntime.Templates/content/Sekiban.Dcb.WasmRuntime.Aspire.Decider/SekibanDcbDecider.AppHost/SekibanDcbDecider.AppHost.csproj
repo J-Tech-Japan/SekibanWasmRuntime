@@ -1,0 +1,24 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.2.0">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsAspireHost>true</IsAspireHost>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>SekibanDcbDecider.AppHost</RootNamespace>
+    <AssemblyName>SekibanDcbDecider.AppHost</AssemblyName>
+  </PropertyGroup>
+
+  <!--
+    This AppHost runs the PUBLIC runtime container image through the
+    Sekiban.Dcb.WasmRuntime.Aspire package's AddSekibanWasmRuntime call, plus a
+    Postgres event DB, via Aspire.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting" Version="13.2.2" />
+    <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="13.2.2" />
+    <PackageReference Include="Sekiban.Dcb.WasmRuntime.Aspire" Version="1.0.0-preview.1" />
+  </ItemGroup>
+
+</Project>

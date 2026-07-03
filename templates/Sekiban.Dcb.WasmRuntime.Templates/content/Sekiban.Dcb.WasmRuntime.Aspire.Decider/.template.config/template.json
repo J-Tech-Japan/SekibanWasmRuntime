@@ -1,0 +1,34 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "J-Tech Japan, Inc.",
+  "classifications": ["Sekiban", "Event Sourcing", "WASM", "Aspire"],
+  "identity": "Sekiban.Dcb.WasmRuntime.Aspire.Decider",
+  "name": "Sekiban WASM Runtime Decider (Aspire + public container + Postgres)",
+  "shortName": "sekiban-wasm-decider",
+  "description": "An Aspire solution hosting the public Sekiban WASM runtime container with a Postgres event store: a Decider-pattern domain compiled to a WASM projector module, AddSekibanWasmRuntime AppHost wiring, sample commands/queries, and a smoke script.",
+  "sourceName": "SekibanDcbDecider",
+  "preferNameDirectory": true,
+  "tags": {
+    "language": "C#",
+    "type": "solution"
+  },
+  "symbols": {
+    "IncludeTests": {
+      "type": "parameter",
+      "datatype": "bool",
+      "defaultValue": "true",
+      "displayName": "Include tests",
+      "description": "Include the xUnit domain test project."
+    }
+  },
+  "sources": [
+    {
+      "modifiers": [
+        {
+          "condition": "(!IncludeTests)",
+          "exclude": ["SekibanDcbDecider.Domain.Tests/**"]
+        }
+      ]
+    }
+  ]
+}
