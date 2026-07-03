@@ -76,7 +76,7 @@ pub async fn finalize_command(
     let payload_bytes = @encoding/utf8.encode(ev.payload[:])
     event_candidates.push({
       eventPayloadName: ev.eventType,
-      payloadBase64: @base64.encode(payload_bytes[:]),
+      payload: @base64.encode(payload_bytes[:]),
       tags: output.tags,
     })
   }

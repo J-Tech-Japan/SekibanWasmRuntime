@@ -1,0 +1,8 @@
+{
+  "name": "sekiban/mooncakes-mb-decider-wasm",
+  "version": "0.0.0",
+  "preferred-target": "wasm",
+  "deps": {
+    "sekiban/sekiban-wasm-runtime": "0.1.0"
+  }
+}

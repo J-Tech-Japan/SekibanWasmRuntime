@@ -247,6 +247,17 @@ replace-free published-module run (`smoke.sh`, `GOWORK=off`) is the recorded
 follow-up once the tag exists. See the sample README for the two-stage
 verification.
 
+The MoonBit equivalent is
+[`src/samples/Sekiban.Dcb.WasmRuntime.Mooncakes.MbDecider`](../src/samples/Sekiban.Dcb.WasmRuntime.Mooncakes.MbDecider):
+its committed manifests declare `sekiban/sekiban-wasm-runtime` and
+`sekiban/sekiban-client` as mooncakes.io registry dependencies with no local
+path resolution (guarded), exercising both packages (projector wasm module +
+typed client) with the same four checks against the public runtime container.
+Until the packages are published, run the clearly-labeled pre-publish dry-run
+(`smoke.sh --local-packages`, building a staged copy with path deps on
+`src/lib/sekiban-moonbit`); the registry-resolved run (`smoke.sh`) is the
+recorded follow-up. See the sample README for the two-stage verification.
+
 The Swift equivalent is
 [`src/samples/Sekiban.Dcb.WasmRuntime.PublicSpm.SwiftDecider`](../src/samples/Sekiban.Dcb.WasmRuntime.PublicSpm.SwiftDecider):
 its committed `Package.swift` depends on the public

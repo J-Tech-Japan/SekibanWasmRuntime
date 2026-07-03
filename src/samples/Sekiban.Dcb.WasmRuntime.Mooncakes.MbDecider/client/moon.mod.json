@@ -1,0 +1,10 @@
+{
+  "name": "sekiban/mooncakes-mb-decider-client",
+  "version": "0.0.0",
+  "preferred-target": "native",
+  "deps": {
+    "sekiban/sekiban-client": "0.1.0",
+    "moonbitlang/async": "0.6.4",
+    "moonbitlang/x": "0.4.41"
+  }
+}

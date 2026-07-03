@@ -1,0 +1,29 @@
+{
+  "warn-list": "-44",
+  "supported-targets": "wasm",
+  "import": [
+    { "path": "moonbitlang/core/json", "alias": "json" },
+    { "path": "sekiban/sekiban-wasm-runtime/core", "alias": "core" },
+    { "path": "sekiban/sekiban-wasm-runtime/projector", "alias": "projector" }
+  ],
+  "link": {
+    "wasm": {
+      "exports": [
+        "alloc:alloc",
+        "dealloc:dealloc",
+        "create_instance:create_instance",
+        "apply_event:apply_event",
+        "apply_event_with_metadata:apply_event_with_metadata",
+        "execute_query:execute_query",
+        "execute_list_query:execute_list_query",
+        "serialize_state:serialize_state",
+        "restore_state:restore_state",
+        "mv_metadata:mv_metadata",
+        "mv_initialize:mv_initialize",
+        "mv_apply_event:mv_apply_event"
+      ],
+      "export-memory-name": "memory",
+      "heap-start-address": 16
+    }
+  }
+}

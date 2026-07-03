@@ -76,10 +76,40 @@ moon add sekiban/sekiban-client
   `repository`, `license` (SPDX `Elastic-2.0`), `keywords`, `readme` — no
   additional required fields surfaced at packaging time.
 
+## Consumer Proof (SWR-G065)
+
+[`src/samples/Sekiban.Dcb.WasmRuntime.Mooncakes.MbDecider`](../../src/samples/Sekiban.Dcb.WasmRuntime.Mooncakes.MbDecider)
+is the external-consumer proof for this lane: its committed manifests declare
+both sekiban packages as mooncakes.io registry dependencies (guard:
+`scripts/verify-no-local-sekiban-paths.sh`), it exercises **both** packages
+(projector wasm module from `sekiban/sekiban-wasm-runtime`, typed client from
+`sekiban/sekiban-client`), and its smoke validates command execution,
+tag-state readback, in-memory projection queries, and materialized-view
+catch-up against the public GHCR runtime container.
+
+Two-stage verification:
+
+- **Pre-publish dry-run** (demonstrated now, NOT release evidence):
+  `smoke.sh --local-packages` builds a staged copy of the sample under
+  `artifacts/` whose manifests are rewritten to path dependencies on
+  `src/lib/sekiban-moonbit` — the committed manifests stay registry-only
+  (MoonBit has no workspace/mirror overlay, so the staged copy is the
+  redirection boundary).
+- **Registry-resolved run** (release evidence, after the packages are
+  published): `smoke.sh` builds the committed sample from mooncakes.io; this
+  is the recorded follow-up once the human account/scope + publish batch
+  completes.
+
+Consumer-surfaced fix (SWR-G065): the `sekiban-client` commit DTO serialized
+its event bytes under a `payloadBase64` key, but the host binds
+`SerializableEventCandidate` from the camelCase `payload` key — commits from
+the MoonBit client could never succeed. The field is renamed to `payload` in
+`src/lib/sekiban-moonbit/client/http/types.mbt` (and `executor.mbt`).
+
 ## Compatibility
 
 MoonBit SDK 0.1.x pairs with runtime image
 `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3` and speaks
 the same guest ABI (wasm-runtime) and serialized HTTP contract (client) as
 the Rust 0.1.0 crates — see `sdk-runtime-compatibility.md`. The MoonBit
-consumer sample against the public container is SWR-G065.
+consumer sample against the public container is SWR-G065 (above).
