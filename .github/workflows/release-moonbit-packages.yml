@@ -1,0 +1,96 @@
+name: release-moonbit-packages
+
+# MoonBit packages release lane for mooncakes.io
+# (sekiban/sekiban-wasm-runtime + sekiban/sekiban-client under
+# src/lib/sekiban-moonbit).
+#
+# Repo tags `moonbit-vX.Y.Z` drive the lane. The gate job validates
+# tag/version consistency across both packages, runs moon check + moon test,
+# and packages both modules (`moon package` — the publish payload zip) as the
+# dry-run boundary. The live `moon publish` job is gated behind the
+# `mooncakes-release` protected environment and is BLOCKED on human
+# prerequisites (mooncakes.io account + `sekiban` scope registration +
+# publish credentials); until those exist it fails fast with an explicit
+# message and publishes nothing.
+#
+# See docs/release/moonbit-package-release-lane.md.
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'moonbit-v*'
+
+permissions:
+  contents: read
+
+env:
+  MOONBIT_PACKAGES: |
+    src/lib/sekiban-moonbit/wasm-runtime
+    src/lib/sekiban-moonbit/client
+
+jobs:
+  gate:
+    name: MoonBit packages release gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install MoonBit toolchain
+        run: |
+          set -euo pipefail
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+
+      - name: Validate metadata and tag/version consistency
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            bash scripts/release/verify-moonbit-package-metadata.sh "${GITHUB_REF_NAME}"
+          else
+            bash scripts/release/verify-moonbit-package-metadata.sh
+          fi
+
+      - name: moon check + moon test (both packages)
+        run: |
+          set -euo pipefail
+          while IFS= read -r pkg; do
+            [[ -n "$pkg" ]] || continue
+            echo "== $pkg =="
+            (cd "$pkg" && moon check && moon test)
+          done <<< "$MOONBIT_PACKAGES"
+
+      - name: Packaging dry-run (moon package)
+        run: |
+          set -euo pipefail
+          while IFS= read -r pkg; do
+            [[ -n "$pkg" ]] || continue
+            echo "== $pkg =="
+            (cd "$pkg" && moon package)
+            ls -la "$pkg/_build/publish"
+          done <<< "$MOONBIT_PACKAGES"
+
+  publish:
+    name: Publish to mooncakes.io (blocked on human prerequisites)
+    needs: gate
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: mooncakes-release
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Blocked — mooncakes.io account and sekiban scope are human prerequisites
+        run: |
+          set -euo pipefail
+          cat >&2 <<'MSG'
+          Live mooncakes.io publish is BLOCKED on human prerequisites:
+            1. Register the mooncakes.io account and the `sekiban` scope.
+            2. Provision publish credentials for this repository.
+            3. Replace this step with the authenticated `moon publish` flow
+               (publish order: sekiban/sekiban-wasm-runtime first, then
+               sekiban/sekiban-client).
+          See docs/release/moonbit-package-release-lane.md.
+          MSG
+          exit 1
