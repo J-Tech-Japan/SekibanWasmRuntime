@@ -1,0 +1,21 @@
+{
+  "name": "sekiban-npm-ts-decider-wasm",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build": "asc assembly/index.ts --outFile build/npm-ts-decider.wasm --optimize --exportStart _initialize --runtime incremental --exportRuntime --use abort= --transform json-as/transform"
+  },
+  "dependencies": {
+    "@sekiban/as-wasm": "0.1.0",
+    "visitor-as": "^0.11.4"
+  },
+  "devDependencies": {
+    "assemblyscript": "^0.27.32",
+    "json-as": "^0.9.28"
+  },
+  "overrides": {
+    "visitor-as": {
+      "assemblyscript": "$assemblyscript"
+    }
+  }
+}

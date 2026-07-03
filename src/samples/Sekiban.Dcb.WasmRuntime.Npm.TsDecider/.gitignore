@@ -1,0 +1,8 @@
+/AppHost/bin/
+/AppHost/obj/
+/Wasm/node_modules/
+/Wasm/build/
+/Wasm/package-lock.json
+/Client/node_modules/
+/Client/dist/
+/Client/package-lock.json

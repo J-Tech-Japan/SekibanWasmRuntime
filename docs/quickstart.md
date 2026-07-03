@@ -270,6 +270,20 @@ mirror-resolved run (`smoke.sh`) is the recorded follow-up. Its
 `linux-build-check.sh` records whether the package builds with Swift in a
 Linux container (see `docs/release/swift-sdk-release-lane.md`).
 
+The TypeScript equivalent is
+[`src/samples/Sekiban.Dcb.WasmRuntime.Npm.TsDecider`](../src/samples/Sekiban.Dcb.WasmRuntime.Npm.TsDecider):
+its committed `Wasm/package.json` and `Client/package.json` depend on
+`@sekiban/as-wasm`/`@sekiban/ts` at exact npm `0.1.0` versions with no
+`file:`/`link:`/relative-path references (guarded), and its smoke runs the
+same four checks against the public runtime container. Until the packages
+are published (SWR-G058), run the clearly-labeled pre-publish dry-run
+(`SEKIBAN_NPM_MODE=tarball`, packing local tarballs via `npm pack`); the
+registry-resolved run (`SEKIBAN_NPM_MODE=registry`, the default) is the
+recorded follow-up and reports `SKIP` today since the packages 404. See the
+sample README for the two-stage verification and a documented `@sekiban/ts`
+API gap (no host-side wait-for-sortable-id on queries, unlike the Go SDK)
+found while writing the smoke client.
+
 See [`docker/sekiban-wasm-runtime/README.md`](../docker/sekiban-wasm-runtime/README.md)
 for the public local runtime container contract: provided/non-goal behavior,
 ports, volumes, required and optional environment variables, storage-provider
