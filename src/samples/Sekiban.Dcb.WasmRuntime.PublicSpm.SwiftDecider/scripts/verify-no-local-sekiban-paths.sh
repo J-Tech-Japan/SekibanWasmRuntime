@@ -18,18 +18,28 @@ if rg -n '\.package\(\s*(name:[^,]+,\s*)?path:' "$MANIFEST"; then
   exit 1
 fi
 
+# Local URL schemes are the same boundary violation as path dependencies: a
+# `.package(url: "file:///…")` (or a bare absolute/relative filesystem URL)
+# would consume a local checkout while still looking like a URL dependency.
+if rg -n 'file://' "$MANIFEST"; then
+  echo "forbidden local file:// dependency URL found in committed Package.swift" >&2
+  exit 1
+fi
+if rg -n '\.package\(\s*url:\s*"(/|\.)' "$MANIFEST"; then
+  echo "forbidden filesystem dependency URL found in committed Package.swift" >&2
+  exit 1
+fi
+
 if rg -n 'wasm-projectors/swift|\.\./' "$MANIFEST"; then
   echo "forbidden local Sekiban path reference found in committed Package.swift" >&2
   exit 1
 fi
 
-if ! rg -q 'https://github\.com/J-Tech-Japan/sekiban-swift' "$MANIFEST"; then
-  echo "Package.swift must depend on the public mirror https://github.com/J-Tech-Japan/sekiban-swift" >&2
-  exit 1
-fi
-
-if ! rg -q 'exact:\s*"' "$MANIFEST"; then
-  echo "Package.swift must pin the sekiban-swift dependency to an exact version" >&2
+# The exact-version pin must sit on the sekiban-swift dependency declaration
+# itself (a `from:`/`branch:` drift there must fail even if some other
+# dependency happens to use `exact:`).
+if ! rg -Uq '\.package\(\s*url:\s*"https://github\.com/J-Tech-Japan/sekiban-swift"\s*,\s*exact:\s*"[0-9]+\.[0-9]+\.[0-9]+[0-9A-Za-z.+-]*"\s*\)' "$MANIFEST"; then
+  echo "Package.swift must depend on https://github.com/J-Tech-Japan/sekiban-swift pinned with exact: \"X.Y.Z\" on that dependency declaration" >&2
   exit 1
 fi
 
