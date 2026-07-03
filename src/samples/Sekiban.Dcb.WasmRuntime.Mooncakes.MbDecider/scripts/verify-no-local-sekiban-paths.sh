@@ -32,6 +32,13 @@ if ! rg -q '"sekiban/sekiban-client"\s*:\s*"[0-9]+\.[0-9]+\.[0-9]+"' "$SAMPLE_DI
   exit 1
 fi
 
+# The root workspace file must only reference the sample's own module
+# subdirectories, never the in-repo SDK.
+if [[ -f "$SAMPLE_DIR/moon.work.json" ]] && rg -n 'sekiban-moonbit|\.\./' "$SAMPLE_DIR/moon.work.json"; then
+  echo "forbidden local Sekiban reference found in moon.work.json" >&2
+  exit 1
+fi
+
 # The end-to-end smoke must target the public GHCR runtime image, not a locally
 # built runtime, so the sample proves published artifacts only.
 APPHOST_PROGRAM="$SAMPLE_DIR/AppHost/Program.cs"

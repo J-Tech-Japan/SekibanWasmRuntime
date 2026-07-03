@@ -53,9 +53,12 @@ default mode builds the committed sample directly from mooncakes.io:
 bash src/samples/Sekiban.Dcb.WasmRuntime.Mooncakes.MbDecider/scripts/smoke.sh
 ```
 
-Note: `moon check` against the committed sample also requires the published
-packages (registry resolution has no pre-publish overlay); pre-publish, the
-staged-copy build inside `smoke.sh --local-packages` is the runnable
-equivalent.
+Note: `moon.work.json` at the sample root makes
+`(cd <sample> && moon check)` a valid workspace command covering both
+modules. Pre-publish it fails with `module was not found in the registry`
+(registry resolution has no overlay) — the documented acceptable limitation;
+the staged-copy build inside `smoke.sh --local-packages` is the runnable
+equivalent, and after the mooncakes publish the same root command becomes the
+registry-resolved follow-up check.
 
 Prerequisites: Docker, .NET SDK (AppHost), the `moon` toolchain.

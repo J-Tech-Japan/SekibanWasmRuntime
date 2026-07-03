@@ -100,11 +100,17 @@ Two-stage verification:
   is the recorded follow-up once the human account/scope + publish batch
   completes.
 
-Consumer-surfaced fix (SWR-G065): the `sekiban-client` commit DTO serialized
-its event bytes under a `payloadBase64` key, but the host binds
-`SerializableEventCandidate` from the camelCase `payload` key — commits from
-the MoonBit client could never succeed. The field is renamed to `payload` in
-`src/lib/sekiban-moonbit/client/http/types.mbt` (and `executor.mbt`).
+Consumer-surfaced fixes (SWR-G065), both in
+`src/lib/sekiban-moonbit/client/http/types.mbt`:
+
+- the commit DTO serialized its event bytes under a `payloadBase64` key, but
+  the host binds `SerializableEventCandidate` from the camelCase `payload`
+  key — commits from the MoonBit client could never succeed; renamed to
+  `payload` (plus the `executor.mbt` usage).
+- `TagStateResponse` required a `lastSortableUniqueId` field, but the host
+  serializes `SerializableTagState` with `lastSortedUniqueId`; the missing
+  field failed the whole response parse, so every tag-state read errored;
+  renamed to the wire name.
 
 ## Compatibility
 
