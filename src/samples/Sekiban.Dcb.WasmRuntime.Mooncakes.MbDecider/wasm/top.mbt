@@ -202,7 +202,10 @@ fn restore_instance_state(inst : Instance, state_json : String) -> Instance {
   }
 }
 
-fn weather_items(state : WeatherForecastListState, query : WeatherListQuery) -> Array[WeatherForecastState] {
+// Filtering + deterministic ordering WITHOUT paging: the count query must
+// report the filtered total, never a page-limited count (mirrors the
+// Rust/Go/Swift sample semantics).
+fn weather_filtered(state : WeatherForecastListState, query : WeatherListQuery) -> Array[WeatherForecastState] {
   let items : Array[WeatherForecastState] = []
   for kv in state.items.iter() {
     let (_k, v) = kv
@@ -216,7 +219,11 @@ fn weather_items(state : WeatherForecastListState, query : WeatherListQuery) -> 
     items.push(v)
   }
   items.sort_by((left, right) => right.createdAt.compare(left.createdAt))
-  @projector.apply_paging(items, query.pageNumber, query.pageSize)
+  items
+}
+
+fn weather_items(state : WeatherForecastListState, query : WeatherListQuery) -> Array[WeatherForecastState] {
+  @projector.apply_paging(weather_filtered(state, query), query.pageNumber, query.pageSize)
 }
 
 fn execute_query_json(inst : Instance, query_type : String, params_json : String) -> String {
@@ -228,7 +235,7 @@ fn execute_query_json(inst : Instance, query_type : String, params_json : String
       pageNumber: None,
       pageSize: None,
     })
-    let items = weather_items(inst.weatherList, query)
+    let items = weather_filtered(inst.weatherList, query)
     return json_stringify(CountResult::{ count: items.length() }.to_json())
   }
   "null"

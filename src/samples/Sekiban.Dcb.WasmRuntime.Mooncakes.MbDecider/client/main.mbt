@@ -203,6 +203,26 @@ async fn run_smoke() -> Unit raise {
     fail("count-query returned \{count}, expected >= 1")
   }
 
+  // Regression: count semantics must ignore paging parameters — a pageSize/
+  // pageNumber that would empty the page must not change the filtered total.
+  let paged_params : Json = { "pageSize": Json::number(1), "pageNumber": Json::number(9) }
+  let paged_count_response = client.execute_query("GetWeatherForecastCountQuery", paged_params.stringify(), None)
+  let paged_count = match paged_count_response.value {
+    Some(result) => {
+      let parsed : CountResult = try {
+        let envelope : QueryEnvelope = @json.from_json(@json.parse(result[:]))
+        @json.from_json(@json.parse(envelope.resultJson[:]))
+      } catch {
+        _ => CountResult::{ count: -1 }
+      }
+      parsed.count
+    }
+    None => -1
+  }
+  if paged_count != count {
+    fail("count-query with paging params returned \{paged_count}, expected the unpaged total \{count}")
+  }
+
   let evidence : Json = {
     "forecastId": forecast_id.to_json(),
     "originalLocation": original_location.to_json(),
@@ -210,6 +230,7 @@ async fn run_smoke() -> Unit raise {
     "tagStateVersion": Json::number(tag_state_version.to_double()),
     "tagStateLocation": tag_state_location.to_json(),
     "countQueryCount": Json::number(count.to_double()),
+    "countQueryCountWithPaging": Json::number(paged_count.to_double()),
     "foundInListQuery": Json::boolean(true),
   }
   println(evidence.stringify())
