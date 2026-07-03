@@ -1,0 +1,45 @@
+{
+  "name": "@sekiban/aspire",
+  "version": "0.1.0",
+  "description": "Thin helper for Aspire TypeScript AppHosts that registers the public Sekiban WASM Runtime container (ghcr.io/j-tech-japan/sekiban-wasm-runtime-host) with its wasm/manifest bind mounts, Postgres references, environment contract, and endpoint.",
+  "keywords": [
+    "sekiban",
+    "dcb",
+    "event-sourcing",
+    "wasm",
+    "aspire"
+  ],
+  "homepage": "https://github.com/J-Tech-Japan/SekibanWasmRuntime",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/J-Tech-Japan/SekibanWasmRuntime.git",
+    "directory": "src/lib/sekiban-aspire-ts"
+  },
+  "license": "Elastic-2.0",
+  "author": "J-Tech Japan, Inc.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "prepack": "npm run build"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "@types/node": "^22.10.5"
+  }
+}

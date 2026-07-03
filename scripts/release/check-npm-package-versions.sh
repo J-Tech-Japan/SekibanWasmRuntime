@@ -21,6 +21,7 @@ fi
 PACKAGES=(
   "src/lib/sekiban-ts"
   "src/lib/sekiban-as-wasm"
+  "src/lib/sekiban-aspire-ts"
 )
 mismatch=0
 

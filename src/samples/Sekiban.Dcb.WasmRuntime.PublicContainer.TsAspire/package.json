@@ -1,0 +1,24 @@
+{
+  "name": "sekiban-public-container-ts-aspire",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "^20.19.0 || ^22.13.0 || >=24"
+  },
+  "scripts": {
+    "aspire:start": "aspire run",
+    "aspire:build": "tsc -p tsconfig.apphost.json",
+    "dev": "npm run aspire:start",
+    "build": "npm run aspire:build"
+  },
+  "dependencies": {
+    "@sekiban/aspire": "file:../../lib/sekiban-aspire-ts",
+    "vscode-jsonrpc": "^8.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
