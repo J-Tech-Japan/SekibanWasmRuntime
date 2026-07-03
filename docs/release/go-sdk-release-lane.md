@@ -85,6 +85,27 @@ The first request after tagging may take a few minutes while the proxy fetches
 and caches the version. `https://pkg.go.dev/github.com/J-Tech-Japan/SekibanWasmRuntime/src/lib/sekiban-go`
 appears after the proxy has served the module at least once.
 
+## Consumer Proof (SWR-G061)
+
+[`src/samples/Sekiban.Dcb.WasmRuntime.GoModule.GoDecider`](../../src/samples/Sekiban.Dcb.WasmRuntime.GoModule.GoDecider)
+is the external-consumer proof for this lane: its committed `go.mod` requires
+the published module with no replace directives (guard:
+`scripts/verify-no-local-sekiban-paths.sh`), and its smoke validates command
+execution, tag-state readback, in-memory projection queries, and
+materialized-view catch-up against the public GHCR runtime container.
+
+Two-stage verification:
+
+- **Pre-publish dry-run** (available now, NOT release evidence):
+  `bash src/samples/Sekiban.Dcb.WasmRuntime.GoModule.GoDecider/scripts/smoke.sh --local-module`
+  — builds through the sample's committed `go.work` overlay against the in-repo
+  SDK without touching `go.mod`.
+- **Published-module run** (release evidence, after `src/lib/sekiban-go/v0.1.0`
+  is pushed): `bash src/samples/Sekiban.Dcb.WasmRuntime.GoModule.GoDecider/scripts/smoke.sh`
+  — runs with `GOWORK=off` so the SDK resolves only from the published tag;
+  first run `GOWORK=off go mod tidy` once in the sample and commit the
+  `go.sum` update.
+
 ## Compatibility
 
 `sekiban-go` 0.1.x pairs with runtime image

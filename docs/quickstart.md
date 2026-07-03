@@ -235,6 +235,18 @@ runtime container, but consuming the published crates instead of repository-loca
 Rust paths. The smoke skips gracefully when Docker, the .NET SDK, cargo, or the
 `wasm32-wasip1` target are unavailable.
 
+The Go equivalent is
+[`src/samples/Sekiban.Dcb.WasmRuntime.GoModule.GoDecider`](../src/samples/Sekiban.Dcb.WasmRuntime.GoModule.GoDecider):
+its committed `go.mod` requires the published subdirectory module
+`github.com/J-Tech-Japan/SekibanWasmRuntime/src/lib/sekiban-go` with no replace
+directives (guarded by its `verify-no-local-sekiban-paths.sh`), and its smoke
+runs the same four checks against the public runtime container. Until the
+`src/lib/sekiban-go/v0.1.0` tag is published, run the clearly-labeled
+pre-publish dry-run (`smoke.sh --local-module`, via the `go.work` overlay); the
+replace-free published-module run (`smoke.sh`, `GOWORK=off`) is the recorded
+follow-up once the tag exists. See the sample README for the two-stage
+verification.
+
 See [`docker/sekiban-wasm-runtime/README.md`](../docker/sekiban-wasm-runtime/README.md)
 for the public local runtime container contract: provided/non-goal behavior,
 ports, volumes, required and optional environment variables, storage-provider
