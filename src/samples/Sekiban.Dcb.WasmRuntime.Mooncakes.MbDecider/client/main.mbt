@@ -39,6 +39,17 @@ struct CountResult {
   count : Int
 } derive(ToJson, @json.FromJson, Show)
 
+// The serialized query endpoints wrap results in envelopes: list-query returns
+// {"itemsJson": "<json array string>", ...} and query returns
+// {"resultJson": "<json string>", ...}.
+struct ListQueryEnvelope {
+  itemsJson : String
+} derive(ToJson, @json.FromJson, Show)
+
+struct QueryEnvelope {
+  resultJson : String
+} derive(ToJson, @json.FromJson, Show)
+
 async fn run_smoke() -> Unit raise {
   let base_url = env_or("RUNTIME_URL", "http://localhost:8080")
   let forecast_id = env_or("SAMPLE_FORECAST_ID", "00000000-0000-0000-0000-0000000000aa")
@@ -152,7 +163,8 @@ async fn run_smoke() -> Unit raise {
       Some(result) => {
         list_result = result
         let items : Array[ListItem] = try {
-          @json.from_json(@json.parse(result[:]))
+          let envelope : ListQueryEnvelope = @json.from_json(@json.parse(result[:]))
+          @json.from_json(@json.parse(envelope.itemsJson[:]))
         } catch {
           _ => []
         }
@@ -178,7 +190,8 @@ async fn run_smoke() -> Unit raise {
   let count = match count_response.value {
     Some(result) => {
       let parsed : CountResult = try {
-        @json.from_json(@json.parse(result[:]))
+        let envelope : QueryEnvelope = @json.from_json(@json.parse(result[:]))
+        @json.from_json(@json.parse(envelope.resultJson[:]))
       } catch {
         _ => CountResult::{ count: -1 }
       }
