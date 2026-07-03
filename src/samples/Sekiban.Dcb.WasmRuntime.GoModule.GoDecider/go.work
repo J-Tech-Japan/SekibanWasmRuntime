@@ -1,0 +1,11 @@
+// Dev-time workspace overlay: lets this sample build against the in-repo SDK
+// before src/lib/sekiban-go/v0.1.0 is published, WITHOUT touching go.mod (the
+// replace lives here, in the workspace file, never in the committed module
+// file). The published-module proof runs with GOWORK=off (scripts/smoke.sh
+// default mode), which ignores this file entirely; external consumers never
+// need it.
+go 1.22
+
+use .
+
+replace github.com/J-Tech-Japan/SekibanWasmRuntime/src/lib/sekiban-go => ../../lib/sekiban-go
