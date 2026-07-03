@@ -20,6 +20,12 @@ in-process with Wasmtime. This package is part of the initial preview matrix and
 may carry preview Wasmtime dependency behavior while the host integration is
 stabilized.
 
+Install `Sekiban.Dcb.WasmRuntime.Aspire` when an Aspire AppHost should run the
+public runtime container (`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host`); its
+`AddSekibanWasmRuntime` call wires the image, wasm/manifest bind mounts,
+Postgres references, environment contract, endpoint, and health check. That
+package ships its own README with the full options table.
+
 ### Wasmtime Preview Caveat
 
 `Sekiban.Dcb.WasmRuntime.Wasmtime` is a preview-only package in this release

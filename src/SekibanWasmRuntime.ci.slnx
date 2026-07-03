@@ -17,6 +17,7 @@
     <Project Path="internalUsages/rust/SekibanWasm.Rust.Web/SekibanWasm.Rust.Web.csproj" />
   </Folder>
   <Folder Name="/lib/">
+    <Project Path="lib/Sekiban.Dcb.WasmRuntime.Aspire/Sekiban.Dcb.WasmRuntime.Aspire.csproj" />
     <Project Path="lib/Sekiban.Dcb.WasmRuntime.Remote/Sekiban.Dcb.WasmRuntime.Remote.csproj" />
     <Project Path="lib/Sekiban.Dcb.WasmRuntime.Wasmtime/Sekiban.Dcb.WasmRuntime.Wasmtime.csproj" />
     <Project Path="lib/Sekiban.Dcb.WasmRuntime/Sekiban.Dcb.WasmRuntime.csproj" />

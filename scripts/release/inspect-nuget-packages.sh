@@ -20,6 +20,7 @@ projects=(
   "src/lib/Sekiban.Dcb.WasmRuntime/Sekiban.Dcb.WasmRuntime.csproj"
   "src/lib/Sekiban.Dcb.WasmRuntime.Remote/Sekiban.Dcb.WasmRuntime.Remote.csproj"
   "src/lib/Sekiban.Dcb.WasmRuntime.Wasmtime/Sekiban.Dcb.WasmRuntime.Wasmtime.csproj"
+  "src/lib/Sekiban.Dcb.WasmRuntime.Aspire/Sekiban.Dcb.WasmRuntime.Aspire.csproj"
 )
 
 for project in "${projects[@]}"; do
@@ -43,6 +44,7 @@ expected_ids = {
     "Sekiban.Dcb.WasmRuntime",
     "Sekiban.Dcb.WasmRuntime.Remote",
     "Sekiban.Dcb.WasmRuntime.Wasmtime",
+    "Sekiban.Dcb.WasmRuntime.Aspire",
 }
 
 packages = sorted(output_dir.glob("*.nupkg"))
@@ -135,6 +137,13 @@ for package in packages:
                         errors.append(
                             f"{package.name}: Wasmtime dependency {dependency_version} "
                             f"does not match Directory.Packages.props {expected_wasmtime}"
+                        )
+                if package_id == "Sekiban.Dcb.WasmRuntime.Aspire" and dependency_id == "Aspire.Hosting":
+                    expected_aspire = central_versions.get("Aspire.Hosting", "")
+                    if dependency_version != expected_aspire:
+                        errors.append(
+                            f"{package.name}: Aspire.Hosting dependency {dependency_version} "
+                            f"does not match Directory.Packages.props {expected_aspire}"
                         )
 
         for asset in native_assets:

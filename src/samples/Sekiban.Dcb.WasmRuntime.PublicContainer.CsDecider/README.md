@@ -8,19 +8,23 @@ It runs SekibanWasmRuntime exactly as an external developer would:
   repo-local library project references;
 - the **public GHCR runtime container** `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3`
   (the latest verified runtime-host tag — distinct from the public NuGet package
-  versions, which are `1.0.0-preview.1`) via Aspire `AddContainer` — **not**
+  versions, which are `1.0.0-preview.1`) — **not**
   `AddProject<...WasmRuntime.Host>`;
 - a small **Decider-pattern** weather domain compiled to WASM;
 - **Postgres** as the external event DB;
-- an AppHost that mounts the generated `.wasm` and manifest into the runtime
-  container read-only and wires the DB connection string.
+- an AppHost that wires the runtime container through the
+  `Sekiban.Dcb.WasmRuntime.Aspire` package's single `AddSekibanWasmRuntime`
+  call: the public image, read-only `.wasm`/manifest bind mounts, the runtime
+  environment contract, and the Postgres references (see
+  [`docs/nuget/aspire-package-readme.md`](../../../docs/nuget/aspire-package-readme.md)).
 
 > **This sample must not use repository-local implementation shortcuts.** Its whole
 > point is to prove that the published packages + published image are sufficient.
 > It does not reference `src/runtime`, `src/internalUsages`, or `submodules/Sekiban`
-> source. The only `ProjectReference` is sample-internal (`Wasm` → `Domain`): the
-> domain is compiled *into* the WASM module, which is normal sample composition,
-> not a runtime/source shortcut.
+> source. The `ProjectReference`s are sample-internal (`Wasm` → `Domain`: the
+> domain is compiled *into* the WASM module) plus the packable
+> `Sekiban.Dcb.WasmRuntime.Aspire` project, which stands in for its NuGet package
+> until the first publish — neither is a runtime/source shortcut.
 
 ## Layout
 

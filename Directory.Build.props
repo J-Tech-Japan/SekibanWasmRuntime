@@ -4,6 +4,10 @@
     <IsSekibanWasmRuntimePublicPackage Condition="'$(MSBuildProjectName)' == 'Sekiban.Dcb.WasmRuntime'">true</IsSekibanWasmRuntimePublicPackage>
     <IsSekibanWasmRuntimePublicPackage Condition="'$(MSBuildProjectName)' == 'Sekiban.Dcb.WasmRuntime.Remote'">true</IsSekibanWasmRuntimePublicPackage>
     <IsSekibanWasmRuntimePublicPackage Condition="'$(MSBuildProjectName)' == 'Sekiban.Dcb.WasmRuntime.Wasmtime'">true</IsSekibanWasmRuntimePublicPackage>
+    <IsSekibanWasmRuntimePublicPackage Condition="'$(MSBuildProjectName)' == 'Sekiban.Dcb.WasmRuntime.Aspire'">true</IsSekibanWasmRuntimePublicPackage>
+    <!-- The Aspire hosting package ships its own README; the other packages share the runtime README. -->
+    <SekibanPackageReadmePath Condition="'$(MSBuildProjectName)' == 'Sekiban.Dcb.WasmRuntime.Aspire'">$(MSBuildThisFileDirectory)docs/nuget/aspire-package-readme.md</SekibanPackageReadmePath>
+    <SekibanPackageReadmePath Condition="'$(SekibanPackageReadmePath)' == ''">$(MSBuildThisFileDirectory)docs/nuget/package-readme.md</SekibanPackageReadmePath>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(IsSekibanWasmRuntimePublicPackage)' == 'true'">
@@ -21,7 +25,7 @@
   </PropertyGroup>
 
   <ItemGroup Condition="'$(IsSekibanWasmRuntimePublicPackage)' == 'true'">
-    <None Include="$(MSBuildThisFileDirectory)docs/nuget/package-readme.md"
+    <None Include="$(SekibanPackageReadmePath)"
           Pack="true"
           PackagePath="README.md" />
   </ItemGroup>

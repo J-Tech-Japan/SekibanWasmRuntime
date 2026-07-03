@@ -2,9 +2,11 @@ using System.IO;
 
 // Public-consumer Aspire AppHost: runs the PUBLIC runtime container image and a
 // Postgres event DB. It never uses AddProject<...Host> — only the published
-// ghcr.io image, exactly as an external developer would consume it.
+// ghcr.io image, exactly as an external developer would consume it. The container
+// wiring itself comes from the Sekiban.Dcb.WasmRuntime.Aspire package's
+// AddSekibanWasmRuntime call (referenced as a project here until the package is
+// published; an external consumer uses the NuGet package).
 
-const string RuntimeImage = "ghcr.io/j-tech-japan/sekiban-wasm-runtime-host";
 // Defaults to 1.0.0-preview.3 — the verified, recommended public tag: a multi-arch
 // (linux/amd64 + linux/arm64) manifest list carrying both libwasmtime.so and the
 // WASI preview2 shim, so list-query and Materialized View catch-up work and no
@@ -45,36 +47,30 @@ var postgres = builder.AddPostgres("pg");
 var sekibanDb = postgres.AddDatabase("SekibanDcb");
 var materializedViewDb = postgres.AddDatabase("DcbMaterializedViewPostgres");
 
-// The runtime connects to Postgres lazily and retries, so it is NOT gated on a
-// Postgres health check (WaitFor) — that gate can stall a headless run before the
-// runtime container is ever created. WithReference still injects the connection
-// string; the runtime tolerates the DB coming up moments later.
-var runtime = builder
-    .AddContainer("runtime", RuntimeImage, runtimeImageTag)
-    .WithReference(sekibanDb)
-    .WithReference(materializedViewDb)
-    .WithBindMount(configDir, "/app/config", isReadOnly: true)
-    .WithBindMount(modulesDir, "/app/modules", isReadOnly: true)
-    .WithEnvironment("ASPNETCORE_URLS", "http://0.0.0.0:8080")
-    // dual = MultiProjection grains AND materialized views (the default; set
-    // explicitly so the sample's intent is clear). The MV catch-up worker polls
-    // the event store and writes MV state to DcbMaterializedViewPostgres.
-    .WithEnvironment("SEKIBAN_PROJECTION_MODE", "dual")
-    .WithEnvironment("SEKIBAN_MANIFEST_PATH", "/app/config/sekiban-manifest.json")
-    .WithEnvironment("WASM_MODULE_PATH", $"/app/modules/{ModuleFileName}");
+// One call wires the public GHCR image, the read-only /app/config + /app/modules
+// bind mounts, the env contract (ASPNETCORE_URLS, SEKIBAN_PROJECTION_MODE=dual,
+// SEKIBAN_MANIFEST_PATH, WASM_MODULE_PATH), the Postgres references, and the HTTP
+// endpoint. The runtime connects to Postgres lazily and retries, so the package
+// deliberately adds no WaitFor gate — that gate can stall a headless run before
+// the runtime container is ever created.
+var runtimeOptions = new SekibanWasmRuntimeOptions
+{
+    Tag = runtimeImageTag,
+    ConfigDirectory = configDir,
+    ModulesDirectory = modulesDir,
+    WasmModulePath = $"/app/modules/{ModuleFileName}",
+    EventStoreDatabase = sekibanDb,
+    MaterializedViewDatabase = materializedViewDb,
+};
 
 // The smoke script pins a known host port via SAMPLE_RUNTIME_HOST_PORT so it can
 // reach the runtime deterministically; otherwise Aspire assigns one.
 if (int.TryParse(Environment.GetEnvironmentVariable("SAMPLE_RUNTIME_HOST_PORT"), out var hostPort) && hostPort > 0)
 {
-    runtime.WithHttpEndpoint(targetPort: 8080, port: hostPort, name: "http", isProxied: false);
-}
-else
-{
-    runtime.WithHttpEndpoint(targetPort: 8080, name: "http");
+    runtimeOptions.HostPort = hostPort;
 }
 
-runtime.WithExternalHttpEndpoints();
+builder.AddSekibanWasmRuntime("runtime", runtimeOptions);
 
 builder.Build().Run();
 return 0;
