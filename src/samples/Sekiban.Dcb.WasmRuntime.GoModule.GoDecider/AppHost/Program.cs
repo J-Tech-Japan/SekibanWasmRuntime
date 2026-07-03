@@ -37,7 +37,10 @@ var runtime = builder
     .WithEnvironment("ASPNETCORE_URLS", "http://0.0.0.0:8080")
     .WithEnvironment("SEKIBAN_PROJECTION_MODE", "dual")
     .WithEnvironment("SEKIBAN_MANIFEST_PATH", "/app/config/sekiban-manifest.json")
-    .WithEnvironment("WASM_MODULE_PATH", $"/app/modules/{ModuleFileName}");
+    .WithEnvironment("WASM_MODULE_PATH", $"/app/modules/{ModuleFileName}")
+    // TinyGo/Go modules require the unpooled instance mode (see
+    // docker/sekiban-wasm-runtime/README.md and the Decider.Wasm.Go sample).
+    .WithEnvironment("SEKIBAN_WASM_POOL_SIZE", "0");
 
 if (int.TryParse(Environment.GetEnvironmentVariable("SAMPLE_RUNTIME_HOST_PORT"), out var hostPort) && hostPort > 0)
 {

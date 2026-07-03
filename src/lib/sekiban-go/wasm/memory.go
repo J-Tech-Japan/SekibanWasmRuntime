@@ -39,36 +39,54 @@ func Dealloc(ptr uint32, length uint32) {
 	// No-op: TinyGo WASI reactor mode is sensitive to allocator bookkeeping.
 }
 
-// linearMemoryPointer converts a WASM linear-memory address into a pointer.
-// Inside a wasm guest the address space is the module's own linear memory, so
-// the conversion is well defined; unsafe.Add from the nil base expresses it
-// without the uintptr round-trip that `go vet` rejects.
-func linearMemoryPointer(ptr uint32) unsafe.Pointer {
-	return unsafe.Add(unsafe.Pointer(nil), uintptr(ptr))
+// registryBytes resolves a (ptr, len) pair the host obtained from Alloc back
+// to the Go buffer that backs it. Every string the host passes into an export
+// lives in memory it allocated through the exported `alloc`, so the tracked
+// allocation registry is the source of truth — no integer-to-pointer
+// conversion is needed (which `go vet` rejects and which LLVM treats as
+// undefined when based on a nil pointer, silently breaking TinyGo builds).
+func registryBytes(ptr uint32, length uint32) []byte {
+	for i := 0; i < allocationCount; i++ {
+		buf := Allocations[i]
+		if len(buf) == 0 {
+			continue
+		}
+		base := uint32(uintptr(unsafe.Pointer(&buf[0])))
+		if ptr >= base && uint64(ptr)+uint64(length) <= uint64(base)+uint64(len(buf)) {
+			offset := ptr - base
+			return buf[offset : offset+length]
+		}
+	}
+	return nil
 }
 
-// ReadString reads a UTF-8 string from WASM linear memory.
+// ReadString reads a UTF-8 string the host wrote into memory it allocated
+// through the exported `alloc`.
 func ReadString(ptr uint32, length uint32) string {
 	if ptr == 0 || length == 0 {
 		return ""
 	}
-	data := unsafe.Slice((*byte)(linearMemoryPointer(ptr)), int(length))
+	data := registryBytes(ptr, length)
+	if data == nil {
+		return ""
+	}
 	return string(data)
 }
 
-// WriteString writes a string to WASM linear memory and returns packed ptr|len.
+// WriteString stores a string in a tracked guest buffer and returns packed
+// ptr|len for the host to read (and later release via dealloc).
 func WriteString(value string) int64 {
 	if value == "" {
 		return PackPtrLen(0, 0)
 	}
-	bytes := []byte(value)
-	ptr := Alloc(uint32(len(bytes)))
-	if ptr == 0 {
-		return PackPtrLen(0, 0)
+	if allocationCount >= len(Allocations) {
+		panic("wasm allocation registry exhausted; host must call ResetAllocations between invocations")
 	}
-	dest := unsafe.Slice((*byte)(linearMemoryPointer(ptr)), len(bytes))
-	copy(dest, bytes)
-	return PackPtrLen(ptr, uint32(len(bytes)))
+	buf := []byte(value)
+	Allocations[allocationCount] = buf
+	allocationCount++
+	ptr := uint32(uintptr(unsafe.Pointer(&buf[0])))
+	return PackPtrLen(ptr, uint32(len(buf)))
 }
 
 // PackPtrLen packs a pointer and length into a single int64 value.

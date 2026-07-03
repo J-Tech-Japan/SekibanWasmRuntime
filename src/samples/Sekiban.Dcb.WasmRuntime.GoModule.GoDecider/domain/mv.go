@@ -27,6 +27,7 @@ func (WeatherForecastMvV1) LogicalTables() []string { return []string{WeatherFor
 func (WeatherForecastMvV1) Initialize(tables mv.MvTableBindingsDto) []mv.MvSqlStatementDto {
 	table := tables.PhysicalName(WeatherForecastLogicalTable)
 	return []mv.MvSqlStatementDto{{
+		Parameters: []mv.MvParam{},
 		Sql: fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
 forecast_id UUID PRIMARY KEY,
 location TEXT NOT NULL,

@@ -57,6 +57,14 @@ func Initialize(
 	if statements == nil {
 		statements = []MvSqlStatementDto{}
 	}
+	// The host deserializes parameters with a non-null contract; normalize nil
+	// slices (e.g. parameterless statements or empty ParamBuilder results) so a
+	// projector cannot emit "parameters": null and crash statement conversion.
+	for i := range statements {
+		if statements[i].Parameters == nil {
+			statements[i].Parameters = []MvParam{}
+		}
+	}
 	batch := MvStatementBatchDto{Statements: statements}
 	data, err := json.Marshal(batch)
 	if err != nil {
