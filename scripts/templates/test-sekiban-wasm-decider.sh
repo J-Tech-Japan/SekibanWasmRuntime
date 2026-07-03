@@ -40,8 +40,24 @@ trap cleanup EXIT
 rm -rf "$PKG_DIR" "$WORK_DIR"
 mkdir -p "$PKG_DIR" "$WORK_DIR"
 
+# The work dir lives under the repo, so stop the repo's Directory.Build.props /
+# Directory.Packages.props (central package management) from flowing into the
+# generated consumer projects — real consumers build outside this repo.
+printf '<Project />\n' > "$WORK_DIR/Directory.Build.props"
+printf '<Project />\n' > "$WORK_DIR/Directory.Build.targets"
+printf '<Project />\n' > "$WORK_DIR/Directory.Packages.props"
+
+# Optional version override so the templates-v* release lane can validate the
+# exact version it would publish (the Aspire dependency keeps the repo version;
+# generated AppHosts pin it independently).
+TEMPLATE_PACK_ARGS=()
+if [[ -n "${TEMPLATE_TEST_PACKAGE_VERSION:-}" ]]; then
+  TEMPLATE_PACK_ARGS+=("-p:Version=${TEMPLATE_TEST_PACKAGE_VERSION}")
+  log "using template package version override ${TEMPLATE_TEST_PACKAGE_VERSION}"
+fi
+
 log "packing $PACKAGE_ID and Sekiban.Dcb.WasmRuntime.Aspire"
-dotnet pack "$TEMPLATE_PROJ" -c Release -o "$PKG_DIR" --nologo >/dev/null || fail "template pack failed"
+dotnet pack "$TEMPLATE_PROJ" -c Release -o "$PKG_DIR" --nologo "${TEMPLATE_PACK_ARGS[@]+"${TEMPLATE_PACK_ARGS[@]}"}" >/dev/null || fail "template pack failed"
 dotnet pack "$ASPIRE_PROJ" -c Release -o "$PKG_DIR" --nologo >/dev/null || fail "Aspire package pack failed"
 
 TEMPLATE_NUPKG="$(ls "$PKG_DIR"/$PACKAGE_ID.*.nupkg | head -1)"
