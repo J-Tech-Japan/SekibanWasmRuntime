@@ -22,6 +22,7 @@ expected_packages=(
   "Sekiban.Dcb.WasmRuntime"
   "Sekiban.Dcb.WasmRuntime.Remote"
   "Sekiban.Dcb.WasmRuntime.Wasmtime"
+  "Sekiban.Dcb.WasmRuntime.Aspire"
 )
 
 rm -rf "$smoke_root"
@@ -74,11 +75,13 @@ cat > "$project_dir/SekibanWasmRuntime.ConsumerSmoke.csproj" <<EOF
     <PackageReference Include="Sekiban.Dcb.WasmRuntime" Version="$package_version" />
     <PackageReference Include="Sekiban.Dcb.WasmRuntime.Remote" Version="$package_version" />
     <PackageReference Include="Sekiban.Dcb.WasmRuntime.Wasmtime" Version="$package_version" />
+    <PackageReference Include="Sekiban.Dcb.WasmRuntime.Aspire" Version="$package_version" />
   </ItemGroup>
 </Project>
 EOF
 
 cat > "$project_dir/Program.cs" <<'EOF'
+using Aspire.Hosting;
 using Sekiban.Dcb.WasmRuntime;
 using Sekiban.Dcb.WasmRuntime.Remote;
 using Sekiban.Dcb.WasmRuntime.Wasmtime;
@@ -98,6 +101,11 @@ var wasmtimeOptions = new WasmtimeHostOptions
     DefaultModulePath = module.ModulePath,
     EnableWarmup = false
 };
+var aspireOptions = new SekibanWasmRuntimeOptions
+{
+    WasmModulePath = "/app/modules/consumer-smoke.wasm",
+    HostPort = 58080,
+};
 
 Type[] publicSurface =
 [
@@ -109,7 +117,9 @@ Type[] publicSurface =
     typeof(HttpSerializedQueryClient),
     typeof(SerializedDcbClientOptions),
     typeof(WasmtimeHostOptions),
-    typeof(WasmtimeRuntime)
+    typeof(WasmtimeRuntime),
+    typeof(SekibanWasmRuntimeOptions),
+    typeof(SekibanWasmRuntimeBuilderExtensions)
 ];
 
 Console.WriteLine(string.Join(
@@ -120,6 +130,7 @@ Console.WriteLine(commandOptions.DryRun);
 Console.WriteLine(remoteOptions.BaseUrl);
 Console.WriteLine(runnerOptions.Endpoint);
 Console.WriteLine(wasmtimeOptions.DefaultModulePath);
+Console.WriteLine($"{aspireOptions.Image}:{aspireOptions.Tag} {aspireOptions.WasmModulePath} {aspireOptions.HostPort}");
 EOF
 
 restore_log="$smoke_root/restore.log"

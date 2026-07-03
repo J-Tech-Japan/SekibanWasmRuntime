@@ -21,6 +21,11 @@
   <ItemGroup>
     <PackageReference Include="Aspire.Hosting" Version="13.2.2" />
     <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="13.2.2" />
+    <!-- The published package is Sekiban.Dcb.WasmRuntime.Aspire; referenced as a
+         project until the first NuGet publish. IsAspireProjectResource=false keeps
+         the AppHost SDK from treating the library as an orchestrated project. -->
+    <ProjectReference Include="../../../lib/Sekiban.Dcb.WasmRuntime.Aspire/Sekiban.Dcb.WasmRuntime.Aspire.csproj"
+                      IsAspireProjectResource="false" />
   </ItemGroup>
 
 </Project>

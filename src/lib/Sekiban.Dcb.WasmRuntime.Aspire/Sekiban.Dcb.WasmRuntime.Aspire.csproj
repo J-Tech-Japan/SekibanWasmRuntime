@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <PackageId>Sekiban.Dcb.WasmRuntime.Aspire</PackageId>
+    <Description>Aspire AppHost hosting extension for the public Sekiban WASM Runtime container: one AddSekibanWasmRuntime call wires the ghcr.io image, wasm/manifest bind mounts, Postgres references, environment contract, endpoint, and health check</Description>
+    <PackageTags>$(PackageTags);aspire;hosting;container</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting" />
+  </ItemGroup>
+
+</Project>

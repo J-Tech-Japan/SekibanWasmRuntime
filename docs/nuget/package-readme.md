@@ -20,6 +20,12 @@ in-process with Wasmtime. This package is part of the initial preview matrix and
 may carry preview Wasmtime dependency behavior while the host integration is
 stabilized.
 
+Install `Sekiban.Dcb.WasmRuntime.Aspire` when an Aspire AppHost should run the
+public runtime container (`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host`); its
+`AddSekibanWasmRuntime` call wires the image, wasm/manifest bind mounts,
+Postgres references, environment contract, endpoint, and health check. That
+package ships its own README with the full options table.
+
 ### Wasmtime Preview Caveat
 
 `Sekiban.Dcb.WasmRuntime.Wasmtime` is a preview-only package in this release
@@ -44,12 +50,14 @@ Install the preview packages with prerelease resolution enabled:
 dotnet add package Sekiban.Dcb.WasmRuntime --prerelease
 dotnet add package Sekiban.Dcb.WasmRuntime.Remote --prerelease
 dotnet add package Sekiban.Dcb.WasmRuntime.Wasmtime --prerelease
+dotnet add package Sekiban.Dcb.WasmRuntime.Aspire --prerelease
 ```
 
 Most applications install only the package for their runtime boundary. Use the
 core package for shared contracts, add the remote package in HTTP clients, and
 add the Wasmtime package in API services that host projection modules
-in-process.
+in-process. Add the Aspire package in Aspire AppHost projects that run the
+public runtime container.
 
 Before publication, release readiness restores and builds a generated consumer
 project against locally packed `.nupkg` files for this package matrix. That
