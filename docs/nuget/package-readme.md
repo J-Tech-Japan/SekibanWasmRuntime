@@ -50,12 +50,14 @@ Install the preview packages with prerelease resolution enabled:
 dotnet add package Sekiban.Dcb.WasmRuntime --prerelease
 dotnet add package Sekiban.Dcb.WasmRuntime.Remote --prerelease
 dotnet add package Sekiban.Dcb.WasmRuntime.Wasmtime --prerelease
+dotnet add package Sekiban.Dcb.WasmRuntime.Aspire --prerelease
 ```
 
 Most applications install only the package for their runtime boundary. Use the
 core package for shared contracts, add the remote package in HTTP clients, and
 add the Wasmtime package in API services that host projection modules
-in-process.
+in-process. Add the Aspire package in Aspire AppHost projects that run the
+public runtime container.
 
 Before publication, release readiness restores and builds a generated consumer
 project against locally packed `.nupkg` files for this package matrix. That

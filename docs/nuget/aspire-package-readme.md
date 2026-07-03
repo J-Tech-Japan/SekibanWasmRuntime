@@ -7,6 +7,19 @@ manifest and wasm-module bind mounts, Postgres references, the environment
 contract, an HTTP endpoint, and an optional health check — the same wiring the
 public-container samples assemble by hand.
 
+## Install
+
+Install into your Aspire AppHost project with prerelease resolution enabled:
+
+```bash
+dotnet add package Sekiban.Dcb.WasmRuntime.Aspire --prerelease
+```
+
+The package targets Aspire AppHost projects only (it depends on
+`Aspire.Hosting`); service and client projects use the runtime packages
+instead — `Sekiban.Dcb.WasmRuntime`, `.Remote`, or `.Wasmtime` (see
+[Related packages](#related-packages)).
+
 ## Usage
 
 ```csharp
