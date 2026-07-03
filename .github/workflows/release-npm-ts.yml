@@ -1,7 +1,8 @@
 name: release-npm-ts
 
-# TypeScript SDK npm release lane for @sekiban/ts and @sekiban/as-wasm
-# (src/lib/sekiban-ts, src/lib/sekiban-as-wasm).
+# TypeScript SDK npm release lane for @sekiban/ts, @sekiban/as-wasm, and
+# @sekiban/aspire (src/lib/sekiban-ts, src/lib/sekiban-as-wasm,
+# src/lib/sekiban-aspire-ts).
 #
 # Follows the Rust crates lane shape: a published GitHub Release whose tag
 # matches `ts-vX.Y.Z` defines the release moment and the package version
@@ -78,22 +79,30 @@ jobs:
           npm --prefix src/lib/sekiban-as-wasm ci
           npm --prefix src/lib/sekiban-as-wasm run build
 
+      - name: Build @sekiban/aspire
+        run: |
+          set -euo pipefail
+          npm --prefix src/lib/sekiban-aspire-ts ci
+          npm --prefix src/lib/sekiban-aspire-ts run build
+
       - name: npm pack (tarball inventory)
         run: |
           set -euo pipefail
           mkdir -p artifacts/npm
           (cd src/lib/sekiban-ts && npm pack --pack-destination "$GITHUB_WORKSPACE/artifacts/npm")
           (cd src/lib/sekiban-as-wasm && npm pack --pack-destination "$GITHUB_WORKSPACE/artifacts/npm")
+          (cd src/lib/sekiban-aspire-ts && npm pack --pack-destination "$GITHUB_WORKSPACE/artifacts/npm")
           ls -la artifacts/npm
 
       - name: Extraction smoke (packed tarballs; container step self-reports SKIPPED without Docker)
         run: bash scripts/release/npm-extraction-smoke.sh
 
-      - name: npm publish --dry-run (both packages, no credentials)
+      - name: npm publish --dry-run (all packages, no credentials)
         run: |
           set -euo pipefail
           (cd src/lib/sekiban-ts && npm publish --dry-run --access public)
           (cd src/lib/sekiban-as-wasm && npm publish --dry-run --access public)
+          (cd src/lib/sekiban-aspire-ts && npm publish --dry-run --access public)
 
       - uses: actions/upload-artifact@v4
         with:
@@ -151,7 +160,13 @@ jobs:
           npm --prefix src/lib/sekiban-as-wasm ci
           npm --prefix src/lib/sekiban-as-wasm run build
 
-      - name: Publish both packages
+      - name: Install and build @sekiban/aspire
+        run: |
+          set -euo pipefail
+          npm --prefix src/lib/sekiban-aspire-ts ci
+          npm --prefix src/lib/sekiban-aspire-ts run build
+
+      - name: Publish all packages
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
@@ -161,7 +176,9 @@ jobs:
             echo "Configuring the npm-release environment and its npm auth is a human release-batch task; see docs/release/npm-ts-release-lane.md." >&2
             exit 1
           fi
-          # The two packages are independent (no cross-dependency at 0.1.0);
-          # publish the projector SDK first by convention, then the host SDK.
+          # The packages are independent (no cross-dependency at 0.1.0);
+          # publish the projector SDK first by convention, then the host SDK,
+          # then the AppHost helper.
           (cd src/lib/sekiban-as-wasm && npm publish --access public)
           (cd src/lib/sekiban-ts && npm publish --access public)
+          (cd src/lib/sekiban-aspire-ts && npm publish --access public)

@@ -1,8 +1,8 @@
 # npm TypeScript SDK Release Lane (SWR-G058)
 
-The TypeScript SDK packages `@sekiban/ts` (`src/lib/sekiban-ts`) and
-`@sekiban/as-wasm` (`src/lib/sekiban-as-wasm`) release together through the
-`ts-v*` lane: a published GitHub Release defines the release moment, the tag
+The TypeScript SDK packages `@sekiban/ts` (`src/lib/sekiban-ts`),
+`@sekiban/as-wasm` (`src/lib/sekiban-as-wasm`), and `@sekiban/aspire`
+(`src/lib/sekiban-aspire-ts`) release together through the `ts-v*` lane: a published GitHub Release defines the release moment, the tag
 defines the package version, and the actual npm publish is gated behind the
 protected `npm-release` environment. Package contents and metadata are owned by
 `npm-ts-preview-readiness.md` (SWR-G057); this lane only verifies and ships
@@ -11,12 +11,12 @@ them.
 ## Tag Convention
 
 - Release tag: `ts-vX.Y.Z` (first release `ts-v0.1.0`); the version is derived
-  by stripping the `ts-v` prefix and must equal the `version` field of **both**
-  package.json files.
+  by stripping the `ts-v` prefix and must equal the `version` field of **all
+  three** package.json files.
 - `scripts/release/check-npm-package-versions.sh <version>` is the gate (it
   also accepts the full `ts-v0.1.0` tag form) and is runnable locally exactly
   as CI runs it.
-- Both packages version together; a release always publishes both.
+- All packages version together; a release always publishes all of them.
 
 ## Workflow
 
