@@ -26,20 +26,20 @@ them.
   with `ts-v`, since release events fire repository-wide for every lane) and
   `workflow_dispatch` with `expected_version` plus a `publish` boolean
   defaulting to `false`.
-- **verify job (credential-free)** — version gate, `npm ci` + build for both
-  packages, `npm pack` tarball inventory, the packed-tarball extraction smoke
+- **verify job (credential-free)** — version gate, `npm ci` + build for all
+  three packages, `npm pack` tarball inventory, the packed-tarball extraction smoke
   (`scripts/release/npm-extraction-smoke.sh` — tarball-content whitelists,
   no-local-path guard, compiles the samples against the packed tarballs, and a
   public-container load/E2E check that self-reports SKIPPED when Docker is
-  unavailable), and `npm publish --dry-run` for both packages. Runs to
+  unavailable), and `npm publish --dry-run` for all three packages. Runs to
   completion with no npm credentials and no `npm-release` environment.
 - **publish job** — separate job, `environment: npm-release`, runs only for
   `ts-v*` release events or `publish=true` dispatches. Self-contained on a
   clean runner: it re-runs the version gate and the same `npm ci` + build path
   as verify before publishing (`@sekiban/ts`'s `prepack` needs `tsc` from
   devDependencies). Fails fast with an explicit message while `NPM_TOKEN` is
-  absent. Publishes `@sekiban/as-wasm` first, then `@sekiban/ts` (no
-  cross-dependency at 0.1.0; the order is convention).
+  absent. Publishes `@sekiban/as-wasm` first, then `@sekiban/ts`, then
+  `@sekiban/aspire` (no cross-dependency at 0.1.0; the order is convention).
 
 ## Dry-Run Procedure (no credentials)
 
@@ -50,6 +50,7 @@ bash scripts/release/check-npm-package-versions.sh 0.1.0
 bash scripts/release/npm-extraction-smoke.sh
 (cd src/lib/sekiban-ts && npm publish --dry-run --access public)
 (cd src/lib/sekiban-as-wasm && npm publish --dry-run --access public)
+(cd src/lib/sekiban-aspire-ts && npm publish --dry-run --access public)
 ```
 
 In CI: run the workflow via `workflow_dispatch` with `expected_version` set and
@@ -66,13 +67,14 @@ Note: `npm --prefix <pkg> pack --dry-run` fails on npm 10.9.x with `ENOENT`
 2. Provision npm auth for the `@sekiban` scope (granular automation token or
    npm trusted publishing) and store it as the `NPM_TOKEN` secret scoped to
    that environment.
-3. Confirm both package.json files are at the target version and the dispatch
-   dry-run is green on the release commit.
+3. Confirm all three package.json files are at the target version
+   (`bash scripts/release/check-npm-package-versions.sh <version>`) and the
+   dispatch dry-run is green on the release commit.
 4. Push the `ts-vX.Y.Z` tag and publish the GitHub Release for it; approve the
    `npm-release` environment gate.
-5. After publish, verify `npm view @sekiban/ts@X.Y.Z` and
-   `npm view @sekiban/as-wasm@X.Y.Z`, then proceed to the registry-consumer
-   proof (SWR-G059).
+5. After publish, verify `npm view @sekiban/ts@X.Y.Z`,
+   `npm view @sekiban/as-wasm@X.Y.Z`, and `npm view @sekiban/aspire@X.Y.Z`,
+   then proceed to the registry-consumer proof (SWR-G059).
 
 ## Rollback / Republish Notes
 
@@ -80,17 +82,18 @@ Note: `npm --prefix <pkg> pack --dry-run` fails on npm 10.9.x with `ENOENT`
   `npm unpublish` is restricted (72-hour window, and the version can never be
   reused) — treat it as a last resort for accidental secrets, not as rollback.
 - The standard remedy is roll-forward: `npm deprecate @sekiban/ts@X.Y.Z
-  "<reason, pointer to fixed version>"` (same for `@sekiban/as-wasm`), bump
-  both package.json versions, and cut the next `ts-v*` release.
-- If one package publishes and the other fails mid-release, fix the cause and
+  "<reason, pointer to fixed version>"` (same for `@sekiban/as-wasm` and
+  `@sekiban/aspire`), bump all three package.json versions, and cut the next
+  `ts-v*` release.
+- If some packages publish and others fail mid-release, fix the cause and
   re-run the publish job (or an emergency `publish=true` dispatch at the same
-  version): `npm publish` of the already-published package fails on the
-  duplicate version, so republish only the missing one — deprecate-and-bump
-  both if the partial state is user-visible for long.
+  version): `npm publish` of an already-published package fails on the
+  duplicate version, so only the missing ones actually republish —
+  deprecate-and-bump all three if the partial state is user-visible for long.
 
 ## Compatibility
 
-`@sekiban/ts` 0.1.x and `@sekiban/as-wasm` 0.1.x pair with runtime image
+`@sekiban/ts`, `@sekiban/as-wasm`, and `@sekiban/aspire` 0.1.x pair with runtime image
 `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3` and the Rust
 0.1.0 crates — see `sdk-runtime-compatibility.md` (required docs gate) and
 `npm-ts-preview-readiness.md` for the proven evidence.

@@ -11,8 +11,8 @@ name: release-npm-ts
 # defaults to false) plus an emergency manual publish.
 #
 # The verify job needs no npm credentials: version gate, builds, npm pack,
-# the packed-tarball extraction smoke, and `npm publish --dry-run` for both
-# packages. The real publish is a separate job behind the protected
+# the packed-tarball extraction smoke, and `npm publish --dry-run` for all
+# three packages. The real publish is a separate job behind the protected
 # `npm-release` environment, which (with its npm auth) is configured in the
 # human release batch — see docs/release/npm-ts-release-lane.md.
 
@@ -145,7 +145,7 @@ jobs:
         run: bash scripts/release/check-npm-package-versions.sh "${NPM_PACKAGE_VERSION}"
 
       # The publish job runs on a clean runner, so it must be self-contained:
-      # install and build both packages exactly as verify does before
+      # install and build all packages exactly as verify does before
       # publishing (@sekiban/ts's prepack runs tsc from devDependencies, and
       # @sekiban/as-wasm's build is the asc compile check).
       - name: Install and build @sekiban/ts
