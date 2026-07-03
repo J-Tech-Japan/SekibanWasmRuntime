@@ -34,10 +34,12 @@ them.
   unavailable), and `npm publish --dry-run` for both packages. Runs to
   completion with no npm credentials and no `npm-release` environment.
 - **publish job** — separate job, `environment: npm-release`, runs only for
-  `ts-v*` release events or `publish=true` dispatches. Fails fast with an
-  explicit message while `NPM_TOKEN` is absent. Publishes `@sekiban/as-wasm`
-  first, then `@sekiban/ts` (no cross-dependency at 0.1.0; the order is
-  convention).
+  `ts-v*` release events or `publish=true` dispatches. Self-contained on a
+  clean runner: it re-runs the version gate and the same `npm ci` + build path
+  as verify before publishing (`@sekiban/ts`'s `prepack` needs `tsc` from
+  devDependencies). Fails fast with an explicit message while `NPM_TOKEN` is
+  absent. Publishes `@sekiban/as-wasm` first, then `@sekiban/ts` (no
+  cross-dependency at 0.1.0; the order is convention).
 
 ## Dry-Run Procedure (no credentials)
 

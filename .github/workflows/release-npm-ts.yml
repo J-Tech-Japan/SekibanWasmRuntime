@@ -135,6 +135,22 @@ jobs:
       - name: Validate synchronized package versions
         run: bash scripts/release/check-npm-package-versions.sh "${NPM_PACKAGE_VERSION}"
 
+      # The publish job runs on a clean runner, so it must be self-contained:
+      # install and build both packages exactly as verify does before
+      # publishing (@sekiban/ts's prepack runs tsc from devDependencies, and
+      # @sekiban/as-wasm's build is the asc compile check).
+      - name: Install and build @sekiban/ts
+        run: |
+          set -euo pipefail
+          npm --prefix src/lib/sekiban-ts ci
+          npm --prefix src/lib/sekiban-ts run build
+
+      - name: Install and build @sekiban/as-wasm
+        run: |
+          set -euo pipefail
+          npm --prefix src/lib/sekiban-as-wasm ci
+          npm --prefix src/lib/sekiban-as-wasm run build
+
       - name: Publish both packages
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
