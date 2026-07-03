@@ -33,10 +33,13 @@ let package = Package(
             // `@_extern(c, "...")` marks an undefined Swift declaration as a plain C-ABI WASM
             // import. Without it, `@_silgen_name` keeps Swift's native calling convention and
             // wasm-ld emits a 7-param import signature the host cannot satisfy.
+            //
+            // Only the safe `.enableExperimentalFeature` form may be used here: SwiftPM
+            // rejects any versioned remote dependency whose targets carry `.unsafeFlags`,
+            // so an unsafeFlags entry would make the published sekiban-swift package
+            // unconsumable (surfaced by the PublicSpm.SwiftDecider consumer proof).
             swiftSettings: [
                 .enableExperimentalFeature("Extern"),
-                .unsafeFlags(["-Xfrontend", "-enable-experimental-feature",
-                              "-Xfrontend", "Extern"]),
             ]),
         .testTarget(
             name: "SekibanSwiftTests",
