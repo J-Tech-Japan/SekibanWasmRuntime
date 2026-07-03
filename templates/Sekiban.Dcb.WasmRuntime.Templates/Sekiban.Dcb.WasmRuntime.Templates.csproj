@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageType>Template</PackageType>
+    <PackageId>Sekiban.Dcb.WasmRuntime.Templates</PackageId>
+    <Title>Sekiban WASM Runtime Templates</Title>
+    <Description>dotnet new templates for the Sekiban WASM Runtime: sekiban-wasm-decider generates an Aspire solution hosting the public runtime container (ghcr.io/j-tech-japan/sekiban-wasm-runtime-host) with a Postgres event store, a Decider-pattern domain compiled to a WASM projector module, sample commands/queries, and a smoke script</Description>
+    <PackageTags>$(PackageTags);templates;dotnet-new;aspire</PackageTags>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <IncludeContentInPack>true</IncludeContentInPack>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <ContentTargetFolders>content</ContentTargetFolders>
+    <!-- Template content ships dotfiles (.template.config, .gitignore). -->
+    <NoDefaultExcludes>true</NoDefaultExcludes>
+    <!-- Template packages have no lib/ assets by design. -->
+    <NoWarn>$(NoWarn);NU5128</NoWarn>
+    <EnableDefaultItems>false</EnableDefaultItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="content\**\*"
+             Exclude="content\**\bin\**;content\**\obj\**;content\**\modules\**;content\**\config\**;content\**\publish\**" />
+    <Compile Remove="**\*" />
+  </ItemGroup>
+
+</Project>
