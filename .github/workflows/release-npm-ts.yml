@@ -1,0 +1,151 @@
+name: release-npm-ts
+
+# TypeScript SDK npm release lane for @sekiban/ts and @sekiban/as-wasm
+# (src/lib/sekiban-ts, src/lib/sekiban-as-wasm).
+#
+# Follows the Rust crates lane shape: a published GitHub Release whose tag
+# matches `ts-vX.Y.Z` defines the release moment and the package version
+# (`ts-v0.1.0` -> `0.1.0`); releases with other tag prefixes are skipped early.
+# `workflow_dispatch` keeps a credential-free check/dry-run path (`publish`
+# defaults to false) plus an emergency manual publish.
+#
+# The verify job needs no npm credentials: version gate, builds, npm pack,
+# the packed-tarball extraction smoke, and `npm publish --dry-run` for both
+# packages. The real publish is a separate job behind the protected
+# `npm-release` environment, which (with its npm auth) is configured in the
+# human release batch — see docs/release/npm-ts-release-lane.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_version:
+        description: 'npm package version to validate/dry-run (and publish when publish=true)'
+        required: true
+        default: '0.1.0'
+      publish:
+        description: 'Emergency manual publish to npmjs.com after checks (normally publish via a ts-v* GitHub Release)'
+        type: boolean
+        required: true
+        default: false
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+env:
+  # Release tag wins; workflow_dispatch input is the fallback. `ts-v` / `v`
+  # prefixes are stripped in the "Resolve package version" steps.
+  RAW_PACKAGE_VERSION: ${{ github.event.release.tag_name || inputs.expected_version || '0.1.0' }}
+
+jobs:
+  verify:
+    name: npm TS release checks (credential-free)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # Skip cleanly when a GitHub Release for another lane (runtime-host-v*,
+    # go-v*, swift-v*, moonbit-v*, plain v*) fires this repository-wide event.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      startsWith(github.event.release.tag_name, 'ts-v')
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Resolve package version
+        run: |
+          set -euo pipefail
+          version="${RAW_PACKAGE_VERSION#ts-v}"
+          version="${version#v}"
+          echo "NPM_PACKAGE_VERSION=${version}" >> "$GITHUB_ENV"
+          echo "Using NPM_PACKAGE_VERSION=${version}"
+
+      - name: Validate synchronized package versions
+        run: bash scripts/release/check-npm-package-versions.sh "${NPM_PACKAGE_VERSION}"
+
+      - name: Build @sekiban/ts
+        run: |
+          set -euo pipefail
+          npm --prefix src/lib/sekiban-ts ci
+          npm --prefix src/lib/sekiban-ts run build
+
+      - name: Build @sekiban/as-wasm
+        run: |
+          set -euo pipefail
+          npm --prefix src/lib/sekiban-as-wasm ci
+          npm --prefix src/lib/sekiban-as-wasm run build
+
+      - name: npm pack (tarball inventory)
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/npm
+          (cd src/lib/sekiban-ts && npm pack --pack-destination "$GITHUB_WORKSPACE/artifacts/npm")
+          (cd src/lib/sekiban-as-wasm && npm pack --pack-destination "$GITHUB_WORKSPACE/artifacts/npm")
+          ls -la artifacts/npm
+
+      - name: Extraction smoke (packed tarballs; container step self-reports SKIPPED without Docker)
+        run: bash scripts/release/npm-extraction-smoke.sh
+
+      - name: npm publish --dry-run (both packages, no credentials)
+        run: |
+          set -euo pipefail
+          (cd src/lib/sekiban-ts && npm publish --dry-run --access public)
+          (cd src/lib/sekiban-as-wasm && npm publish --dry-run --access public)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-ts-${{ env.NPM_PACKAGE_VERSION }}
+          path: |
+            artifacts/npm/*.tgz
+            artifacts/release/npm-extraction-smoke.md
+          if-no-files-found: error
+
+  publish:
+    name: Publish npm packages to npmjs.com
+    runs-on: ubuntu-latest
+    needs: verify
+    # Publish on a published ts-v* GitHub Release, or on an explicit emergency
+    # manual dispatch. The protected `npm-release` environment still gates this
+    # job; it and the npm auth are configured in the human release batch.
+    if: >-
+      github.repository == 'J-Tech-Japan/SekibanWasmRuntime' &&
+      ((github.event_name == 'release' && startsWith(github.event.release.tag_name, 'ts-v')) ||
+       (github.event_name == 'workflow_dispatch' && inputs.publish == true))
+    timeout-minutes: 30
+    environment: npm-release
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Resolve package version
+        run: |
+          set -euo pipefail
+          version="${RAW_PACKAGE_VERSION#ts-v}"
+          version="${version#v}"
+          echo "NPM_PACKAGE_VERSION=${version}" >> "$GITHUB_ENV"
+          echo "Using NPM_PACKAGE_VERSION=${version}"
+
+      - name: Validate synchronized package versions
+        run: bash scripts/release/check-npm-package-versions.sh "${NPM_PACKAGE_VERSION}"
+
+      - name: Publish both packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "ERROR: npm-release environment secret NPM_TOKEN is required for publish mode." >&2
+            echo "Configuring the npm-release environment and its npm auth is a human release-batch task; see docs/release/npm-ts-release-lane.md." >&2
+            exit 1
+          fi
+          # The two packages are independent (no cross-dependency at 0.1.0);
+          # publish the projector SDK first by convention, then the host SDK.
+          (cd src/lib/sekiban-as-wasm && npm publish --access public)
+          (cd src/lib/sekiban-ts && npm publish --access public)
