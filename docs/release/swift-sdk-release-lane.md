@@ -91,13 +91,51 @@ cd "$(mktemp -d)" && swift package init --type executable
 swift package resolve
 ```
 
+## Consumer Proof (SWR-G063)
+
+[`src/samples/Sekiban.Dcb.WasmRuntime.PublicSpm.SwiftDecider`](../../src/samples/Sekiban.Dcb.WasmRuntime.PublicSpm.SwiftDecider)
+is the external-consumer proof for this lane: its committed `Package.swift`
+depends on `https://github.com/J-Tech-Japan/sekiban-swift` at exact 0.1.0 with
+no path-based references (guard: `scripts/verify-no-local-sekiban-paths.sh`),
+and its smoke validates command execution, tag-state readback, in-memory
+projection queries, and materialized-view catch-up against the public GHCR
+runtime container.
+
+Two-stage verification:
+
+- **Pre-publish dry-run** (demonstrated now, NOT release evidence):
+  `smoke.sh --local-package` stages the mirror tree with this lane's sync
+  dry-run, tags it `v0.1.0` in a local git repo, and redirects the dependency
+  via SwiftPM dependency mirroring — the committed manifest is untouched.
+- **Mirror-resolved run** (release evidence, after the mirror is public at
+  v0.1.0): `smoke.sh` resolves the dependency from the real mirror URL; this
+  is the recorded follow-up once the human mirror-publish batch completes.
+
+Consumer-surfaced constraint (fixed in SWR-G063): SwiftPM **rejects versioned
+remote dependencies whose targets declare `unsafeFlags`**, so the `SekibanMv`
+target now uses only the safe `.enableExperimentalFeature("Extern")` setting —
+an `unsafeFlags` entry would have made the published package unconsumable.
+
+## Linux Container Build (SWR-G063)
+
+`src/samples/Sekiban.Dcb.WasmRuntime.PublicSpm.SwiftDecider/scripts/linux-build-check.sh`
+stages the mirror tree and runs `swift build` plus a time-bounded `swift test`
+inside a `swift:6.1-noble` Linux container. Outcome (2026-07-03, aarch64):
+**works with caveats** — `swift build` succeeds against the staged mirror
+tree, but the XCTest runner hangs at test execution (observed both unbounded
+for hours and within the bounded window; the check records this instead of
+hanging). Library consumption is build-time only for wasm projector modules,
+so Linux consumers can build against the package today; XCTest-runner
+remediation is follow-up work per the SWR-G063 scope. Evidence:
+`reports/smoke/sekiban-swift-linux-build.md` (regenerated per run).
+
 ## Compatibility
 
 `sekiban-swift` 0.1.x pairs with runtime image
 `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3` and implements
 the same guest ABI as the Rust `sekiban-wasm`/`sekiban-mv` 0.1.0 crates — see
 `sdk-runtime-compatibility.md`. The Swift external-consumer sample against the
-public container is SWR-G063.
+public container is SWR-G063 (above).
 
 ## Consolidation Notes (closeout learning)
 

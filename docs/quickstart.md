@@ -247,6 +247,18 @@ replace-free published-module run (`smoke.sh`, `GOWORK=off`) is the recorded
 follow-up once the tag exists. See the sample README for the two-stage
 verification.
 
+The Swift equivalent is
+[`src/samples/Sekiban.Dcb.WasmRuntime.PublicSpm.SwiftDecider`](../src/samples/Sekiban.Dcb.WasmRuntime.PublicSpm.SwiftDecider):
+its committed `Package.swift` depends on the public
+`github.com/J-Tech-Japan/sekiban-swift` mirror at exact 0.1.0 with no
+path-based references (guarded), and its smoke runs the same four checks
+against the public runtime container. Until the mirror is public, run the
+clearly-labeled pre-publish dry-run (`smoke.sh --local-package`, redirecting
+the URL to the staged mirror tree via SwiftPM dependency mirroring); the
+mirror-resolved run (`smoke.sh`) is the recorded follow-up. Its
+`linux-build-check.sh` records whether the package builds with Swift in a
+Linux container (see `docs/release/swift-sdk-release-lane.md`).
+
 See [`docker/sekiban-wasm-runtime/README.md`](../docker/sekiban-wasm-runtime/README.md)
 for the public local runtime container contract: provided/non-goal behavior,
 ports, volumes, required and optional environment variables, storage-provider
