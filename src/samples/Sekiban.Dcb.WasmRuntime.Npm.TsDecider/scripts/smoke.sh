@@ -74,6 +74,8 @@ command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 || skip "Docker
 command -v dotnet >/dev/null 2>&1 || skip "dotnet SDK not found."
 command -v npm >/dev/null 2>&1 || skip "npm not found."
 command -v node >/dev/null 2>&1 || skip "node not found."
+command -v curl >/dev/null 2>&1 || skip "curl not found."
+command -v python3 >/dev/null 2>&1 || skip "python3 not found."
 
 if [[ ! -s "$MODULE" || ! -s "$CONFIG" ]]; then
   log "building AssemblyScript WASM module + manifest (SEKIBAN_NPM_MODE=$NPM_MODE)"
