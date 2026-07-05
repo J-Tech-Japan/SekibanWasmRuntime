@@ -1,0 +1,47 @@
+{
+  "name": "create-sekiban-wasm",
+  "version": "0.1.0",
+  "description": "npx generator that scaffolds per-language Sekiban WASM projects (Rust, TypeScript, Go, Swift, MoonBit) from the maintained registry-consumer sample shapes.",
+  "type": "module",
+  "license": "Elastic-2.0",
+  "author": "J-Tech Japan, Inc.",
+  "homepage": "https://github.com/J-Tech-Japan/SekibanWasmRuntime",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/J-Tech-Japan/SekibanWasmRuntime.git",
+    "directory": "src/tools/create-sekiban-wasm"
+  },
+  "keywords": [
+    "sekiban",
+    "dcb",
+    "wasm",
+    "wasi",
+    "event-sourcing",
+    "scaffolding",
+    "generator"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "create-sekiban-wasm": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "templates",
+    "samples.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "sync-templates": "node scripts/sync-templates.mjs",
+    "pretest": "npm run sync-templates && npm run build",
+    "test": "node --test",
+    "prepack": "npm run sync-templates && npm run build"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "@types/node": "^22.10.5"
+  }
+}
