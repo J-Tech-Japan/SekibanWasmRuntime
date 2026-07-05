@@ -1,0 +1,15 @@
+{
+  "targets": {
+    "release": {
+      "outFile": "build/npm-ts-decider.wasm",
+      "optimize": true,
+      "exportStart": "_initialize",
+      "runtime": "incremental",
+      "exportRuntime": true,
+      "use": ["abort="]
+    }
+  },
+  "options": {
+    "transform": ["json-as/transform"]
+  }
+}

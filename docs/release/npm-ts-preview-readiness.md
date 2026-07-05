@@ -131,10 +131,68 @@ sqlite.
   statement protocol) as `sekiban-wasm`/`sekiban-mv` 0.1.0. Modules built with
   either SDK run side by side on the same runtime image.
 
+## SWR-G059 npm Consumer Sample Against the Public GHCR Runtime
+
+SWR-G059 added `src/samples/Sekiban.Dcb.WasmRuntime.Npm.TsDecider`, the npm
+counterpart of the crates.io Rust sample (SWR-G056): an external-consumer
+proof that depends on `@sekiban/as-wasm`/`@sekiban/ts` at exact npm `0.1.0`
+versions only (`Wasm/package.json`, `Client/package.json`; no `file:`/
+`link:`/relative-path references, guarded by
+`scripts/verify-no-local-sekiban-paths.sh`), with a sample-owned Aspire
+AppHost provisioning Postgres and the public GHCR runtime container.
+
+Because neither package is published yet, the guard is static (no live
+`npm install` against the registry, unlike the Rust guard's `cargo check`
+against already-published crates.io crates). Both `scripts/build-wasm.sh` and
+`scripts/smoke.sh` accept `SEKIBAN_NPM_MODE=tarball|registry`:
+
+- `tarball` packs `@sekiban/as-wasm`/`@sekiban/ts` from `src/lib` with
+  `npm pack` and installs each from its packed tarball in a scratch build
+  directory (never rewriting the committed `package.json`), with a guard
+  asserting the installed package resolved from the `.tgz`. This mode passes
+  today.
+- `registry` (the default, and the mode that becomes real after publish)
+  runs a plain `npm install`; today this 404s, and both scripts report
+  `SKIP` rather than `FAIL`.
+
+```bash
+bash src/samples/Sekiban.Dcb.WasmRuntime.Npm.TsDecider/scripts/verify-no-local-sekiban-paths.sh
+env SEKIBAN_NPM_MODE=tarball bash src/samples/Sekiban.Dcb.WasmRuntime.Npm.TsDecider/scripts/build-wasm.sh
+env -u SAMPLE_RUNTIME_IMAGE_TAG SEKIBAN_NPM_MODE=tarball bash src/samples/Sekiban.Dcb.WasmRuntime.Npm.TsDecider/scripts/smoke.sh
+```
+
+Verified locally on 2026-07-03 in tarball mode: full PASS against
+`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3` --
+`CreateWeatherForecast` + `UpdateWeatherForecastLocation` committed through
+`SekibanRuntimeClient`, tag-state read back (version 2, location `Osaka`),
+`GetWeatherForecastListQuery`/`GetWeatherForecastCountQuery` both returned the
+forecast, and the `WeatherForecast` materialized view caught up in
+`DcbMaterializedViewPostgres` (`sekiban_mv_weatherforecast_v1_weather_forecast`).
+Report: `reports/smoke/npm-ts-decider-smoke.md`.
+
+**API gap found**: `SekibanRuntimeClient.executeQuery`/`executeListQuery`
+(`@sekiban/ts`) have no host-side wait-for-sortable-id parameter, unlike the
+Go SDK's `ExecuteListQuery(queryType, paramsJson, waitForSortableUniqueId)`.
+The sample's query params carry a `waitForSortableUniqueId` field that the
+WASM module can read, but nothing on the host blocks on it before invoking
+the module, so the sample's client polls client-side for catch-up (mirroring
+the Rust smoke client's own retry loop) rather than relying on a blocking
+host wait. This is a candidate follow-up for a future `@sekiban/ts` release,
+not addressed in this slice (kept out of scope per the SWR-G059 packet).
+
+**Pending evidence**: the registry-mode run
+(`SEKIBAN_NPM_MODE=registry`, `dotnet`/`npm install` without a tarball
+override) is still outstanding and tracked here until the `ts-v*` publish
+batch (SWR-G058) completes; re-run the same three commands with
+`SEKIBAN_NPM_MODE=registry` (or omit it, since that is the default) once
+`@sekiban/ts`/`@sekiban/as-wasm` 0.1.0 are live on npm, and update this
+section with the result.
+
 ## Out of Scope (deferred)
 
 - npm publish, tokens, or trusted publishing (human-gated batch).
 - The `ts-v*` release workflow and `npm-release` protected environment
   (SWR-G058).
-- The npm registry-consumer sample and public-container E2E proof (SWR-G059).
+- The registry-mode confirmation of the SWR-G059 npm consumer sample (see
+  above; pending until the npm publish batch completes).
 - `@sekiban/aspire`, `create-sekiban-wasm`, and any `@sekiban/ts` API split.
