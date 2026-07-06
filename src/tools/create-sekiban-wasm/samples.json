@@ -1,0 +1,71 @@
+{
+  "rust": {
+    "displayName": "Rust",
+    "registry": {
+      "available": true,
+      "sourceDir": "../../samples/Sekiban.Dcb.WasmRuntime.CratesIo.RsDecider",
+      "sampleDirName": "Sekiban.Dcb.WasmRuntime.CratesIo.RsDecider",
+      "note": "Depends on the published crates.io Sekiban crates at exact =0.1.0 versions. Builds and runs today."
+    },
+    "dev": {
+      "available": true,
+      "sourceDir": "../../samples/Sekiban.Dcb.WasmRuntime.PublicContainer.RsDecider",
+      "sampleDirName": "Sekiban.Dcb.WasmRuntime.PublicContainer.RsDecider",
+      "note": "Local build against the public GHCR runtime container. Vendors the monorepo-internal wasm-projectors/rust crates (sekiban-core, sekiban-derive, sekiban-mv, sekiban-wasm, sekiban-executor, domain) into vendor/ so the generated project is self-contained; builds and runs today.",
+      "vendorCrates": ["sekiban-core", "sekiban-derive", "sekiban-mv", "sekiban-wasm", "sekiban-executor", "domain"],
+      "vendorSourceDir": "../../wasm-projectors/rust"
+    }
+  },
+  "ts": {
+    "displayName": "TypeScript",
+    "registry": {
+      "available": true,
+      "sourceDir": "../../samples/Sekiban.Dcb.WasmRuntime.Npm.TsDecider",
+      "sampleDirName": "Sekiban.Dcb.WasmRuntime.Npm.TsDecider",
+      "note": "Depends on @sekiban/ts and @sekiban/as-wasm at exact npm 0.1.0 versions. Both packages are not published to npm yet (SWR-G058); npm install will fail with a 404 until they are."
+    },
+    "dev": {
+      "available": false,
+      "reason": "No local-container dev-mode sample exists yet in the monorepo for TypeScript (only Rust's Sekiban.Dcb.WasmRuntime.PublicContainer.RsDecider provides this shape today) -- there is nothing to bundle. See docs/tools/create-sekiban-wasm.md."
+    }
+  },
+  "go": {
+    "displayName": "Go",
+    "registry": {
+      "available": true,
+      "sourceDir": "../../samples/Sekiban.Dcb.WasmRuntime.GoModule.GoDecider",
+      "sampleDirName": "Sekiban.Dcb.WasmRuntime.GoModule.GoDecider",
+      "note": "Requires the published Go subdirectory module github.com/J-Tech-Japan/SekibanWasmRuntime/src/lib/sekiban-go at v0.1.0. That tag is not published yet; go build will fail until it is."
+    },
+    "dev": {
+      "available": false,
+      "reason": "No local-container dev-mode sample exists yet in the monorepo for Go (only Rust's Sekiban.Dcb.WasmRuntime.PublicContainer.RsDecider provides this shape today) -- there is nothing to bundle. See docs/tools/create-sekiban-wasm.md."
+    }
+  },
+  "swift": {
+    "displayName": "Swift",
+    "registry": {
+      "available": true,
+      "sourceDir": "../../samples/Sekiban.Dcb.WasmRuntime.PublicSpm.SwiftDecider",
+      "sampleDirName": "Sekiban.Dcb.WasmRuntime.PublicSpm.SwiftDecider",
+      "note": "Depends on the public github.com/J-Tech-Japan/sekiban-swift mirror at exact 0.1.0. Until that mirror is public, swift build will fail to resolve the dependency."
+    },
+    "dev": {
+      "available": false,
+      "reason": "No local-container dev-mode sample exists yet in the monorepo for Swift (only Rust's Sekiban.Dcb.WasmRuntime.PublicContainer.RsDecider provides this shape today) -- there is nothing to bundle. See docs/tools/create-sekiban-wasm.md."
+    }
+  },
+  "moonbit": {
+    "displayName": "MoonBit",
+    "registry": {
+      "available": true,
+      "sourceDir": "../../samples/Sekiban.Dcb.WasmRuntime.Mooncakes.MbDecider",
+      "sampleDirName": "Sekiban.Dcb.WasmRuntime.Mooncakes.MbDecider",
+      "note": "Depends on sekiban/sekiban-wasm-runtime and sekiban/sekiban-client as mooncakes.io registry packages. Until those packages are published, moon check/build will fail to resolve them."
+    },
+    "dev": {
+      "available": false,
+      "reason": "No local-container dev-mode sample exists yet in the monorepo for MoonBit (only Rust's Sekiban.Dcb.WasmRuntime.PublicContainer.RsDecider provides this shape today) -- there is nothing to bundle. See docs/tools/create-sekiban-wasm.md."
+    }
+  }
+}
