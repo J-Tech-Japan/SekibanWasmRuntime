@@ -14,6 +14,8 @@ export interface ModeInfo {
   sampleDirName?: string;
   note?: string;
   reason?: string;
+  vendorCrates?: string[];
+  vendorSourceDir?: string;
 }
 
 export interface LanguageInfo {

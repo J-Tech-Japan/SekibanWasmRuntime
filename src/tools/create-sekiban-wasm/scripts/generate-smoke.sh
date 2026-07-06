@@ -59,8 +59,8 @@ write_report() {
   {
     printf '# create-sekiban-wasm Generation Smoke (SWR-G070)\n\n'
     printf 'Commit: `%s`\n\n' "$(git rev-parse HEAD 2>/dev/null || echo unknown)"
-    printf '| Language | Result | Detail |\n'
-    printf '| --- | --- | --- |\n'
+    printf '| Language | Mode | Result | Detail |\n'
+    printf '| --- | --- | --- | --- |\n'
     for language in $ALL_LANGUAGES; do
       line="$(grep "^$language"$'\t' "$RESULTS_TSV" 2>/dev/null | head -1)"
       if [[ -n "$line" ]]; then
@@ -70,10 +70,14 @@ write_report() {
         result="not-run"
         detail=""
       fi
-      printf '| %s | %s | %s |\n' "$language" "$result" "$detail"
+      printf '| %s | registry | %s | %s |\n' "$language" "$result" "$detail"
     done
-    printf '\n`GUARD-PASS` = the language'"'"'s bundled scripts/verify-no-local-sekiban-paths.sh ran standalone in the generated project (outside the monorepo) and passed.\n'
-    printf '`TREE-ONLY` = file tree generated and validated; the guard was not run (toolchain unavailable) or did not pass (expected pre-publish for go/swift/moonbit until their package/tag publishes).\n'
+    rust_dev_line="$(grep "^rust-dev"$'\t' "$RESULTS_TSV" 2>/dev/null | head -1)"
+    if [[ -n "$rust_dev_line" ]]; then
+      printf '| rust | dev | %s | %s |\n' "$(printf '%s' "$rust_dev_line" | cut -f2)" "$(printf '%s' "$rust_dev_line" | cut -f3)"
+    fi
+    printf '\n`GUARD-PASS` = the language'"'"'s bundled scripts/verify-no-local-sekiban-paths.sh ran standalone in the generated project (outside the monorepo) and passed (rust-dev: `cargo check --workspace` succeeded standalone instead).\n'
+    printf '`TREE-ONLY` = file tree generated and validated; the guard/build was not run (toolchain unavailable) or did not pass (expected pre-publish for go/swift/moonbit until their package/tag publishes).\n'
   } > "$REPORT"
   log "report: ${REPORT#"$ROOT"/}"
 }
@@ -103,12 +107,41 @@ fi
 grep -q "Unknown --language value" /tmp/csw-smoke-unknown.log \
   || fail_hard "unknown --language rejection message missing expected text"
 
-log "checking --mode dev reports unavailable rather than generating broken output"
-if node "$CLI" --language rust --mode dev --dir "$SMOKE_ROOT/rust-dev" >/tmp/csw-smoke-dev.log 2>&1; then
-  fail_hard "--mode dev should be reported as unavailable in 0.1.0"
+log "checking --mode dev reports unavailable for languages with no dev-mode sample (ts)"
+if node "$CLI" --language ts --mode dev --dir "$SMOKE_ROOT/ts-dev" >/tmp/csw-smoke-dev.log 2>&1; then
+  fail_hard "ts --mode dev should be reported as unavailable (no dev-mode sample exists)"
 fi
 grep -q "not available" /tmp/csw-smoke-dev.log || fail_hard "dev-mode unavailable message missing expected text"
-[[ -e "$SMOKE_ROOT/rust-dev" ]] && fail_hard "--mode dev must not create output when unavailable"
+[[ -e "$SMOKE_ROOT/ts-dev" ]] && fail_hard "--mode dev must not create output when unavailable"
+
+log "generating rust (dev mode) and checking it builds standalone"
+if ! node "$CLI" --language rust --mode dev --dir "$SMOKE_ROOT/rust-dev" >/tmp/csw-smoke-rustdev.log 2>&1; then
+  fail_hard "rust --mode dev generation failed: $(cat /tmp/csw-smoke-rustdev.log)"
+fi
+[[ -d "$SMOKE_ROOT/rust-dev/vendor/sekiban-core" ]] \
+  || fail_hard "rust dev mode: vendored sekiban-core crate missing"
+if command -v cargo >/dev/null 2>&1; then
+  if (cd "$SMOKE_ROOT/rust-dev" && cargo check --workspace >/tmp/csw-smoke-rustdev-build.log 2>&1); then
+    record_result "rust-dev" "GUARD-PASS" "cargo check --workspace succeeded standalone (vendored wasm-projectors/rust crates)"
+    log "rust-dev: GUARD-PASS (cargo check succeeded)"
+  else
+    fail_hard "rust dev-mode generated project must build standalone: $(tail -c 400 /tmp/csw-smoke-rustdev-build.log)"
+  fi
+else
+  record_result "rust-dev" "TREE-ONLY" "cargo not found in this environment"
+  log "rust-dev: TREE-ONLY (cargo not found)"
+fi
+
+log "checking the standalone-mode guard for monorepo-only pre-publish dry-run flags"
+if ! node "$CLI" --language ts --mode registry --dir "$SMOKE_ROOT/ts-guard-check" >/tmp/csw-smoke-guardcheck.log 2>&1; then
+  fail_hard "ts registry generation for guard check failed: $(cat /tmp/csw-smoke-guardcheck.log)"
+fi
+if (cd "$SMOKE_ROOT/ts-guard-check" && SEKIBAN_NPM_MODE=tarball bash scripts/build-wasm.sh >/tmp/csw-smoke-tsguard.log 2>&1); then
+  fail_hard "generated ts project: SEKIBAN_NPM_MODE=tarball should be guarded as unavailable standalone"
+fi
+grep -q "requires a full monorepo checkout" /tmp/csw-smoke-tsguard.log \
+  || fail_hard "generated ts project: standalone-mode guard message missing expected text"
+log "standalone-mode guard OK (ts SEKIBAN_NPM_MODE=tarball)"
 
 for language in $ALL_LANGUAGES; do
   target_dir="$SMOKE_ROOT/$language"

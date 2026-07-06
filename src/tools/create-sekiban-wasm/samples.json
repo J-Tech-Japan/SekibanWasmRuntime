@@ -8,8 +8,12 @@
       "note": "Depends on the published crates.io Sekiban crates at exact =0.1.0 versions. Builds and runs today."
     },
     "dev": {
-      "available": false,
-      "reason": "Local-container dev mode is not bundled in create-sekiban-wasm 0.1.0: the reference sample (Sekiban.Dcb.WasmRuntime.PublicContainer.RsDecider) depends on monorepo-internal crates under src/wasm-projectors/rust that are not vendored into this package. See docs/tools/create-sekiban-wasm.md."
+      "available": true,
+      "sourceDir": "../../samples/Sekiban.Dcb.WasmRuntime.PublicContainer.RsDecider",
+      "sampleDirName": "Sekiban.Dcb.WasmRuntime.PublicContainer.RsDecider",
+      "note": "Local build against the public GHCR runtime container. Vendors the monorepo-internal wasm-projectors/rust crates (sekiban-core, sekiban-derive, sekiban-mv, sekiban-wasm, sekiban-executor, domain) into vendor/ so the generated project is self-contained; builds and runs today.",
+      "vendorCrates": ["sekiban-core", "sekiban-derive", "sekiban-mv", "sekiban-wasm", "sekiban-executor", "domain"],
+      "vendorSourceDir": "../../wasm-projectors/rust"
     }
   },
   "ts": {
@@ -22,7 +26,7 @@
     },
     "dev": {
       "available": false,
-      "reason": "Local-container dev mode is not bundled in create-sekiban-wasm 0.1.0. See docs/tools/create-sekiban-wasm.md."
+      "reason": "No local-container dev-mode sample exists yet in the monorepo for TypeScript (only Rust's Sekiban.Dcb.WasmRuntime.PublicContainer.RsDecider provides this shape today) -- there is nothing to bundle. See docs/tools/create-sekiban-wasm.md."
     }
   },
   "go": {
@@ -35,7 +39,7 @@
     },
     "dev": {
       "available": false,
-      "reason": "Local-container dev mode is not bundled in create-sekiban-wasm 0.1.0. See docs/tools/create-sekiban-wasm.md."
+      "reason": "No local-container dev-mode sample exists yet in the monorepo for Go (only Rust's Sekiban.Dcb.WasmRuntime.PublicContainer.RsDecider provides this shape today) -- there is nothing to bundle. See docs/tools/create-sekiban-wasm.md."
     }
   },
   "swift": {
@@ -48,7 +52,7 @@
     },
     "dev": {
       "available": false,
-      "reason": "Local-container dev mode is not bundled in create-sekiban-wasm 0.1.0. See docs/tools/create-sekiban-wasm.md."
+      "reason": "No local-container dev-mode sample exists yet in the monorepo for Swift (only Rust's Sekiban.Dcb.WasmRuntime.PublicContainer.RsDecider provides this shape today) -- there is nothing to bundle. See docs/tools/create-sekiban-wasm.md."
     }
   },
   "moonbit": {
@@ -61,7 +65,7 @@
     },
     "dev": {
       "available": false,
-      "reason": "Local-container dev mode is not bundled in create-sekiban-wasm 0.1.0. See docs/tools/create-sekiban-wasm.md."
+      "reason": "No local-container dev-mode sample exists yet in the monorepo for MoonBit (only Rust's Sekiban.Dcb.WasmRuntime.PublicContainer.RsDecider provides this shape today) -- there is nothing to bundle. See docs/tools/create-sekiban-wasm.md."
     }
   }
 }

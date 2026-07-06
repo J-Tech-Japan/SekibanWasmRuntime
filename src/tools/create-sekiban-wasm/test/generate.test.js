@@ -125,13 +125,72 @@ test("unknown --language value is rejected with a clear message", () => {
   assert.match(result.stderr, /Unknown --language value/);
 });
 
-test("--mode dev reports unavailable rather than generating broken output", () => {
+test("--mode dev reports unavailable rather than generating broken output (ts: no dev-mode sample exists)", () => {
   const dir = mkTempDir("csw-dev-");
   const targetDir = path.join(dir, "out");
-  const result = runCli(["--language", "rust", "--mode", "dev", "--dir", targetDir]);
+  const result = runCli(["--language", "ts", "--mode", "dev", "--dir", targetDir]);
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /not available/);
   assert.equal(fs.existsSync(targetDir), false, "dev mode must not create output when unavailable");
+});
+
+test("rust --mode dev generates a standalone, cargo-buildable project (vendored wasm-projectors/rust crates)", () => {
+  const dir = mkTempDir("csw-rust-dev-");
+  const targetDir = path.join(dir, "out");
+  const result = runCli(["--language", "rust", "--mode", "dev", "--dir", targetDir]);
+  assert.equal(result.status, 0, `cli exited non-zero: ${result.stderr}`);
+  for (const entry of ["Cargo.toml", "Wasm", "Client", "AppHost", "scripts", "vendor", "README.md"]) {
+    assert.ok(fs.existsSync(path.join(targetDir, entry)), `expected ${entry} in generated rust dev project`);
+  }
+  for (const crate of ["sekiban-core", "sekiban-derive", "sekiban-mv", "sekiban-wasm", "sekiban-executor", "domain"]) {
+    assert.ok(
+      fs.existsSync(path.join(targetDir, "vendor", crate, "Cargo.toml")),
+      `expected vendored crate ${crate} in generated rust dev project`,
+    );
+  }
+
+  if (!hasTool("cargo")) {
+    console.log("[generate.test] SKIP cargo check for rust dev mode: cargo not found (tree-validated only)");
+    return;
+  }
+  const buildResult = spawnSync("cargo", ["check", "--workspace"], {
+    cwd: targetDir,
+    encoding: "utf8",
+  });
+  assert.equal(
+    buildResult.status,
+    0,
+    `rust dev-mode generated project must build standalone: ${buildResult.stdout}\n${buildResult.stderr}`,
+  );
+});
+
+test("generated ts registry-mode project guards SEKIBAN_NPM_MODE=tarball as unavailable standalone", () => {
+  const dir = mkTempDir("csw-ts-guard-");
+  const targetDir = path.join(dir, "out");
+  const genResult = runCli(["--language", "ts", "--mode", "registry", "--dir", targetDir]);
+  assert.equal(genResult.status, 0, `cli exited non-zero: ${genResult.stderr}`);
+
+  const result = spawnSync("bash", ["scripts/build-wasm.sh"], {
+    cwd: targetDir,
+    encoding: "utf8",
+    env: { ...process.env, SEKIBAN_NPM_MODE: "tarball" },
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /requires a full monorepo checkout/);
+});
+
+test("generated go registry-mode project guards --local-module as unavailable standalone", () => {
+  const dir = mkTempDir("csw-go-guard-");
+  const targetDir = path.join(dir, "out");
+  const genResult = runCli(["--language", "go", "--mode", "registry", "--dir", targetDir]);
+  assert.equal(genResult.status, 0, `cli exited non-zero: ${genResult.stderr}`);
+
+  const result = spawnSync("bash", ["scripts/smoke.sh", "--local-module"], {
+    cwd: targetDir,
+    encoding: "utf8",
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /requires a full monorepo checkout/);
 });
 
 test("refuses to generate into a non-empty directory without --force", () => {

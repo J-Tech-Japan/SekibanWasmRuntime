@@ -18,7 +18,7 @@ Run with no `--language` in an interactive terminal and it prompts for one.
 | Option | Default | Effect |
 | --- | --- | --- |
 | `--language <id>` | prompted | `rust`, `ts`, `go`, `swift`, `moonbit`, or `all`. |
-| `--mode <mode>` | `registry` | `registry` (published-package consumer) or `dev` (not bundled in 0.1.0). |
+| `--mode <mode>` | `registry` | `registry` (published-package consumer, all languages) or `dev` (local build against the public runtime container -- Rust only in 0.1.0; other languages report "not available", no dev-mode sample exists for them yet). |
 | `--dir <path>` | `./<language>-sekiban-wasm` | Output directory (`./sekiban-wasm-all/<language>` for `--language all`). |
 | `--force` | off | Allow generating into a non-empty directory. |
 
