@@ -176,8 +176,17 @@ app.MapPost("/api/sekiban/serialized/tag-latest-sortable", async (
         lastSortableUniqueId));
 });
 
-app.MapPost("/api/sekiban/serialized/commit", async (HttpContext http, SerializedCommitRequest request, CancellationToken ct) =>
+app.MapPost("/api/sekiban/serialized/commit", async (HttpContext http, CancellationToken ct) =>
 {
+    // Two-phase acceptance (SEK-G17): discriminate the raw envelope version before any typed binding, so an
+    // off-contract or unsupported envelope fails closed instead of binding optimistically.
+    var bind = await SerializedCommitEnvelope.BindAsync(http.Request.Body, ct);
+    if (bind.Error is { } envelopeError)
+    {
+        return Results.BadRequest(new { error = envelopeError.Message, code = envelopeError.Code });
+    }
+
+    SerializedCommitRequest request = bind.Request!;
     var executor = http.RequestServices.GetRequiredService<ISerializedSekibanDcbExecutor>();
     var result = await executor.CommitSerializableEventsAsync(request, ct);
     if (!result.IsSuccess)

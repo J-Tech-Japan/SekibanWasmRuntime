@@ -66,10 +66,12 @@ public class HttpSerializedDcbClient : ISerializedDcbClient
     {
         var baseUrl = _options.BaseUrl.TrimEnd('/');
 
+        // Lift to the current (V1) envelope so a 10.7.0-line host discriminates the version explicitly instead of
+        // falling back to the legacy unversioned shape. The lift preserves per-candidate tags verbatim.
         var response = await _httpClient.PostAsJsonAsync(
             $"{baseUrl}/api/sekiban/serialized/commit",
-            request,
-            _jsonOptions,
+            LegacyUnversionedSerializedCommitAdapter.ToVersionedV1(request),
+            SerializedCommitWireContract.Options,
             cancellationToken);
 
         if (!response.IsSuccessStatusCode)
