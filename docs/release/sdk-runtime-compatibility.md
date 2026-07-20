@@ -19,6 +19,11 @@ Runtime image: `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host`.
 | Swift `sekiban-swift` (products `SekibanWasm`, `SekibanMv`) | 0.1.0 | Mirror repo `github.com/J-Tech-Japan/sekiban-swift` (creation + tag `swift-v0.1.0` pending, human-gated) | `1.0.0-preview.3` | Lane prepared | Consolidated SPM package with build/test + dry-run mirror sync gate (SWR-G062), `swift-sdk-release-lane.md`; in-repo Swift sample module builds with the full C-ABI export list; public-container consumer proof follows in SWR-G063 |
 | MoonBit `sekiban/sekiban-wasm-runtime` + `sekiban/sekiban-client` | 0.1.0 | mooncakes.io (account/`sekiban` scope + tag `moonbit-v0.1.0` pending, human-gated) | `1.0.0-preview.3` | Lane prepared | Metadata gate + moon check/test + `moon package` dry-run producing the publish zips (SWR-G064), `moonbit-package-release-lane.md`; in-repo MoonBit sample pairs both packages; public-container consumer proof follows in SWR-G065 |
 
+Framework baseline: all rows above sit on Sekiban.Dcb `10.7.0` and speak the V1
+serialized commit envelope. Mixed-version behavior (a pre-10.7 client against a
+10.7.x server and the reverse) is documented in
+[`sekiban-dcb-10.7.0-baseline.md`](sekiban-dcb-10.7.0-baseline.md).
+
 Maintenance rule: when a new runtime image preview or a new SDK version ships,
 add or update the row here in the same PR that ships it, citing the smoke or
 consumer proof that established the pairing.

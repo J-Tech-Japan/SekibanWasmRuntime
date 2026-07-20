@@ -300,6 +300,65 @@ public class RemoteSekibanExecutorTests
         Assert.Equal(1, handler.GetRequestCount("/api/sekiban/serialized/tag-state"));
     }
 
+    /// <summary>
+    ///     Pins the serialized commit envelope the executor puts on the wire against the Sekiban.Dcb 10.7.0 (SEK-G17)
+    ///     contract: the V1 envelope is the legacy official shape plus an explicit <c>version</c> discriminator. The
+    ///     negative half of this test is the point — J-Tech-Japan/SekibanWasmRuntime#248 assumed a rename to
+    ///     events / payloadJson / eventType, and reflection over the shipped 10.7.0 assembly showed no such shape
+    ///     exists. If a future bump really does rename these, this test fails loudly instead of silently drifting.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_ShouldEmitVersion1SerializedCommitEnvelope()
+    {
+        var tagState = new SerializableTagState(
+            Array.Empty<byte>(),
+            0,
+            string.Empty,
+            "weather",
+            "f-1",
+            WeatherForecastProjector.ProjectorName,
+            nameof(EmptyTagStatePayload),
+            WeatherForecastProjector.ProjectorVersion);
+        var commitResult = new SerializedCommitResult([], [], TimeSpan.Zero);
+        var handler = new RoutingHttpMessageHandler(request => Task.FromResult(
+            request.RequestUri?.AbsolutePath switch
+            {
+                "/api/sekiban/serialized/tag-state" => CreateJsonResponse(tagState),
+                "/api/sekiban/serialized/commit" => CreateJsonResponse(commitResult),
+                _ => throw new InvalidOperationException($"Unexpected path {request.RequestUri?.AbsolutePath}")
+            }));
+        var executor = CreateExecutor(handler);
+
+        await executor.ExecuteAsync(new CreateWeatherForecast("f-1", "Tokyo", 20, "Cloudy"));
+
+        using JsonDocument commit = JsonDocument.Parse(
+            handler.GetSingleRequestBody("/api/sekiban/serialized/commit"));
+        JsonElement root = commit.RootElement;
+
+        Assert.Equal(VersionedSerializedCommitRequest.CurrentVersion, root.GetProperty("version").GetInt32());
+        JsonElement candidate = Assert.Single(root.GetProperty("eventCandidates").EnumerateArray().ToList());
+
+        // payload stays a base64-encoded byte[], NOT a raw JSON string under payloadJson.
+        byte[] payload = Convert.FromBase64String(candidate.GetProperty("payload").GetString()!);
+        using JsonDocument payloadJson = JsonDocument.Parse(payload);
+        Assert.Equal("f-1", payloadJson.RootElement.GetProperty("forecastId").GetString());
+
+        Assert.Equal(nameof(WeatherForecastCreated), candidate.GetProperty("eventPayloadName").GetString());
+
+        // tags stay per-candidate; they are NOT collapsed into a single per-commit list.
+        Assert.Equal(
+            ["weather:f-1"],
+            candidate.GetProperty("tags").EnumerateArray().Select(static t => t.GetString()!).ToArray());
+        Assert.True(root.TryGetProperty("consistencyTags", out _));
+
+        foreach (string offContractProperty in new[] { "events", "payloadJson", "eventType", "tags" })
+        {
+            Assert.False(
+                root.TryGetProperty(offContractProperty, out _),
+                $"Commit envelope must not carry off-contract property '{offContractProperty}'.");
+        }
+    }
+
     private static RemoteSekibanExecutor CreateExecutor(
         RoutingHttpMessageHandler handler,
         IEventPublisher? publisher = null)
