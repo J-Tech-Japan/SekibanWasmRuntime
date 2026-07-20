@@ -4,6 +4,11 @@ on:
   pull_request:
     paths:
       - '.github/workflows/release-nuget-preview.yml'
+      # Included so the tag-scoping check below runs when any release-triggered
+      # lane's trigger changes, not just this one.
+      - '.github/workflows/release-rust-crates.yml'
+      - '.github/workflows/release-templates-preview.yml'
+      - '.github/workflows/release-npm-ts.yml'
       - '.github/release-notes/**'
       - 'Directory.Build.props'
       - 'Directory.Packages.props'
@@ -30,6 +35,15 @@ jobs:
   readiness:
     name: release readiness
     runs-on: ubuntu-latest
+    # This lane owns plain `v*` tags. Every other lane uses a family prefix
+    # (`rust-v*`, `runtime-host-v*`, `ts-v*`, `swift-v*`, `moonbit-v*`,
+    # `src/lib/sekiban-go/v*`), none of which start with `v`, so matching `v`
+    # positively excludes them all — including lanes added later, which an
+    # enumerated deny-list would silently let through. Non-matching releases skip
+    # rather than fail. pull_request and workflow_dispatch runs are unaffected.
+    if: >-
+      github.event_name != 'release' ||
+      startsWith(github.event.release.tag_name, 'v')
     env:
       RAW_PACKAGE_VERSION: ${{ github.event.release.tag_name || inputs.package_version || '1.0.0-preview.1' }}
     steps:
@@ -69,6 +83,11 @@ jobs:
       - name: Public hygiene check
         run: scripts/check-public-hygiene.sh
 
+      - name: Release lane tag scoping
+        run: |
+          python3 -m pip install --quiet pyyaml
+          python3 scripts/release/check-release-lane-tag-scoping.py
+
       - name: Artifact inventory
         run: scripts/release/write-artifact-inventory.sh
 
@@ -90,7 +109,12 @@ jobs:
     name: publish to NuGet
     runs-on: ubuntu-latest
     needs: readiness
-    if: github.event_name == 'release' && github.repository == 'J-Tech-Japan/SekibanWasmRuntime'
+    # Same `v*` scoping as readiness: another lane's prefix-tagged release must
+    # never reach the NuGet publish step.
+    if: >-
+      github.event_name == 'release' &&
+      startsWith(github.event.release.tag_name, 'v') &&
+      github.repository == 'J-Tech-Japan/SekibanWasmRuntime'
     permissions:
       contents: read
       id-token: write
