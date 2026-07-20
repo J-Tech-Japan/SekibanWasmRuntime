@@ -4,9 +4,11 @@ on:
   pull_request:
     paths:
       - '.github/workflows/release-nuget-preview.yml'
-      # Included so the tag-scoping check below runs when either lane's trigger
-      # changes, not just this one.
+      # Included so the tag-scoping check below runs when any release-triggered
+      # lane's trigger changes, not just this one.
       - '.github/workflows/release-rust-crates.yml'
+      - '.github/workflows/release-templates-preview.yml'
+      - '.github/workflows/release-npm-ts.yml'
       - '.github/release-notes/**'
       - 'Directory.Build.props'
       - 'Directory.Packages.props'

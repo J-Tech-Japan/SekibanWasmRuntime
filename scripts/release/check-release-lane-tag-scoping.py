@@ -27,15 +27,24 @@ import yaml
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 RUST_LANE = ".github/workflows/release-rust-crates.yml"
 NUGET_LANE = ".github/workflows/release-nuget-preview.yml"
+TEMPLATES_LANE = ".github/workflows/release-templates-preview.yml"
+TS_LANE = ".github/workflows/release-npm-ts.yml"
 REPO = "J-Tech-Japan/SekibanWasmRuntime"
 
 # Every prefix that is NOT the NuGet lane. None of these start with "v", which is
 # what lets the NuGet lane scope itself positively instead of enumerating a
 # deny-list that a future lane could slip past.
+#
+# The first four are release-triggered lanes, which GitHub fans a published
+# release out to regardless of tag. The rest filter on `push: tags:` instead, so
+# they never receive another lane's release at all; they are listed so this check
+# still fails if one of them is ever converted to a release trigger without a
+# guard.
 OTHER_LANE_TAGS = [
     "rust-v0.1.1",
-    "runtime-host-v1.0.0-preview.3",
     "ts-v0.1.0",
+    "templates-v1.0.0-preview.1",
+    "runtime-host-v1.0.0-preview.3",
     "swift-v0.1.0",
     "moonbit-v0.1.0",
     "src/lib/sekiban-go/v0.1.0",
@@ -110,6 +119,20 @@ def main() -> int:
     expect("rust publish on rust-v0.1.1", job_runs(RUST_LANE, "publish", rust), True)
     expect("nuget readiness on rust-v0.1.1", job_runs(NUGET_LANE, "readiness", rust), False)
     expect("nuget publish on rust-v0.1.1", job_runs(NUGET_LANE, "publish", rust), False)
+
+    print("\nThe other release-triggered lanes must stay mutually exclusive too")
+    templates = release("templates-v1.0.0-preview.1")
+    expect("templates validate on templates-v1.0.0-preview.1", job_runs(TEMPLATES_LANE, "validate", templates), True)
+    expect("templates publish on templates-v1.0.0-preview.1", job_runs(TEMPLATES_LANE, "publish", templates), True)
+    expect("templates validate on v1.0.0-preview.2", job_runs(TEMPLATES_LANE, "validate", incident), False)
+    expect("templates validate on rust-v0.1.1", job_runs(TEMPLATES_LANE, "validate", rust), False)
+
+    ts = release("ts-v0.1.0")
+    expect("ts verify on ts-v0.1.0", job_runs(TS_LANE, "verify", ts), True)
+    expect("ts verify on v1.0.0-preview.2", job_runs(TS_LANE, "verify", incident), False)
+    expect("ts verify on templates-v1.0.0-preview.1", job_runs(TS_LANE, "verify", templates), False)
+    expect("nuget readiness on templates-v1.0.0-preview.1", job_runs(NUGET_LANE, "readiness", templates), False)
+    expect("templates validate on ts-v0.1.0", job_runs(TEMPLATES_LANE, "validate", ts), False)
 
     print("\nEvery other lane's prefix starts neither lane")
     for tag in OTHER_LANE_TAGS:
