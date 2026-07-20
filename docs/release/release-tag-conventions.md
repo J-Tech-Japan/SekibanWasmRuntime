@@ -61,8 +61,13 @@ deny-list would silently let through.
    For publish jobs, combine it with the repository and environment guards.
 3. Strip the prefix when deriving the version, keeping any `workflow_dispatch`
    input working as a bare version.
-4. Add a row to the table above and a case to
-   `scripts/release/check-release-lane-tag-scoping.py`.
+4. Add a row to the table above. If the lane is release-triggered — whether it
+   is new or an existing `tag push` lane being converted — also add its workflow
+   to the lane constants in
+   `scripts/release/check-release-lane-tag-scoping.py`, add positive and
+   negative cases for it, and add its path to the `pull_request` path filter of
+   `release-nuget-preview.yml`. The check does not discover lanes on its own, so
+   an unlisted release-triggered lane is simply unverified.
 
 ## Verification
 
@@ -71,14 +76,23 @@ out of the committed workflow YAML, evaluates them against synthetic release
 payloads, and asserts which jobs run. It does not re-implement the guards, so
 drift between a workflow and this document fails the check.
 
-It asserts that the NuGet, Rust, and Templates lanes stay mutually exclusive,
-that every other lane prefix starts none of them, that fork releases never
-publish, and that `workflow_dispatch` and `pull_request` behavior is unchanged.
-The `tag push` lanes are covered too, so converting one of them to a release
-trigger without adding a guard fails here rather than in production.
+It asserts that the NuGet, Rust, npm, and Templates lanes stay mutually
+exclusive, that every other lane prefix starts none of them, that fork releases
+never publish, and that `workflow_dispatch` and `pull_request` behavior is
+unchanged.
+
+**What it does not do:** the check only reads the four release-triggered
+workflow files it names. The `tag push` lanes appear solely as negative tag
+vectors against the Rust and NuGet guards — their workflows are never parsed. If
+one of them is converted to a `release: [published]` trigger, this check will
+not notice on its own. That conversion must be accompanied by adding the
+workflow to the check's lane constants, adding its own positive/negative cases,
+and adding its path to the readiness job's PR path filter. Step 4 of
+[Adding a Lane](#adding-a-lane) covers the same requirement.
 
 It runs in the `release readiness` job of `release-nuget-preview.yml`, which is
-triggered by pull requests touching either release-scoped workflow file.
+triggered by pull requests touching any of the four release-triggered workflow
+files.
 
 ```
 python3 scripts/release/check-release-lane-tag-scoping.py

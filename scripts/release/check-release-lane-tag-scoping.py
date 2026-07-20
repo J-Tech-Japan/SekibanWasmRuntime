@@ -35,11 +35,16 @@ REPO = "J-Tech-Japan/SekibanWasmRuntime"
 # what lets the NuGet lane scope itself positively instead of enumerating a
 # deny-list that a future lane could slip past.
 #
-# The first four are release-triggered lanes, which GitHub fans a published
+# The first three are release-triggered lanes, which GitHub fans a published
 # release out to regardless of tag. The rest filter on `push: tags:` instead, so
-# they never receive another lane's release at all; they are listed so this check
-# still fails if one of them is ever converted to a release trigger without a
-# guard.
+# they never receive another lane's release at all.
+#
+# The tag-push entries are negative vectors only: they assert that these prefixes
+# start neither the Rust nor the NuGet lane. Their own workflows are NOT parsed
+# by this check, so converting one of them to a `release: [published]` trigger is
+# NOT detected here. Such a conversion must also add the workflow to the lane
+# constants above, add its own positive/negative cases below, and add its path to
+# the readiness job's PR path filter.
 OTHER_LANE_TAGS = [
     "rust-v0.1.1",
     "ts-v0.1.0",
