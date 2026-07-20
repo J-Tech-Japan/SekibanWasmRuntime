@@ -8,8 +8,12 @@ code/repository release has a separate checklist and gate in
 
 ## Release Inputs
 
-- Use tags in the form `v1.0.0-preview.<n>` or `1.0.0-preview.<n>`.
-- The tag version is passed into `dotnet pack` as `PackageVersion`.
+- Use tags in the form `v1.0.0-preview.<n>`. The leading `v` is **required**:
+  the lane is scoped to `v*` so that other lanes' prefix-tagged releases skip it,
+  so a bare `1.0.0-preview.<n>` tag would silently run nothing. See
+  [`release-tag-conventions.md`](release-tag-conventions.md).
+- The tag version is passed into `dotnet pack` as `PackageVersion` (the `v` is
+  stripped).
 - The GitHub Release body is the public release note source.
 - `Directory.Build.props` keeps the repository default `VersionPrefix` on the
   active `1.0.0-preview.*` line.
