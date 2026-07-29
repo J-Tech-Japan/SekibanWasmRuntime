@@ -15,8 +15,9 @@ public sealed record SerializedCommitEnvelopeBindResult(
     SerializedCommitEnvelopeError? Error);
 
 /// <summary>
-///     Host-side acceptance of the serialized commit envelope, mirroring the two-phase contract that Sekiban.Dcb 10.7.0
-///     (SEK-G17) defines in <see cref="SerializedCommitAcceptor" />.
+///     Host-side acceptance of the serialized commit envelope, mirroring the two-phase contract introduced by
+///     Sekiban.Dcb 10.7.0 (SEK-G17) and verified unchanged through 10.8.0 in
+///     <see cref="SerializedCommitAcceptor" />.
 ///     <para>
 ///         Phase 1 reads only the raw <c>version</c> discriminator via
 ///         <see cref="SerializedCommitVersionDiscriminator" />. Phase 2 binds only the resolved shape: a missing

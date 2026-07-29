@@ -8,8 +8,12 @@ for the version, changelog, migration-note, and compatibility evidence rules.
 
 ## Unreleased
 
-- No additional consumer-facing package changes are staged after the
-  `1.0.0-preview.1` release-candidate closeout below.
+- Updated every `Sekiban.Dcb.*` package dependency and the matching Sekiban
+  source submodule from 10.7.0 to 10.8.0 for the `1.0.0-preview.3` package
+  refresh.
+- Re-verified the V1 serialized commit envelope against the published
+  Sekiban.Dcb 10.8.0 package. The wire shape is unchanged, so existing V1 and
+  legacy-unversioned compatibility behavior remains intact.
 
 ## 1.0.0-preview.1
 
