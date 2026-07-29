@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Sekiban.Dcb;
+using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Queries;
@@ -10,13 +11,16 @@ using SekibanWasm.Cs.Domain.Weather;
 public sealed class WeatherSerializedCommandCommitRequestBuilder : ISekibanCommandCommitRequestBuilder
 {
     private readonly ISekibanExecutor _executor;
+    private readonly IActorObjectAccessor _actorAccessor;
     private readonly JsonSerializerOptions _jsonOptions;
 
     public WeatherSerializedCommandCommitRequestBuilder(
         ISekibanExecutor executor,
+        IActorObjectAccessor actorAccessor,
         JsonSerializerOptions jsonOptions)
     {
         _executor = executor;
+        _actorAccessor = actorAccessor;
         _jsonOptions = jsonOptions;
     }
 
@@ -122,8 +126,20 @@ public sealed class WeatherSerializedCommandCommitRequestBuilder : ISekibanComma
     private async Task<string> GetExpectedTagVersionAsync(string forecastId)
     {
         // Sekiban.Dcb 10.8.0 reserves existing tags by exact expected-version match.
-        string expectedTagVersion = await _executor.GetTagLatestSortableUniqueIdAsync(
-            new WeatherForecastTag(forecastId));
+        string tag = new WeatherForecastTag(forecastId).GetTag();
+        var actorResult = await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tag);
+        if (!actorResult.IsSuccess)
+        {
+            throw new InvalidOperationException($"Weather forecast {forecastId} does not exist");
+        }
+
+        var latestSortableResult = await actorResult.GetValue().GetLatestSortableUniqueIdAsync();
+        if (!latestSortableResult.IsSuccess)
+        {
+            throw latestSortableResult.GetException();
+        }
+
+        string expectedTagVersion = latestSortableResult.GetValue();
         if (string.IsNullOrEmpty(expectedTagVersion))
         {
             throw new InvalidOperationException($"Weather forecast {forecastId} does not exist");
