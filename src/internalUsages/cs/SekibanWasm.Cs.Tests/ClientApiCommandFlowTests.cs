@@ -28,7 +28,9 @@ public class ClientApiCommandFlowTests
         var candidate = Assert.Single(result.EventCandidates);
         Assert.Equal(nameof(WeatherForecastCreated), candidate.EventPayloadName);
         Assert.Equal(["weather:f-1"], candidate.Tags);
-        Assert.Equal("weather:f-1", Assert.Single(result.ConsistencyTags).Tag);
+        ConsistencyTagEntry consistencyTag = Assert.Single(result.ConsistencyTags);
+        Assert.Equal("weather:f-1", consistencyTag.Tag);
+        Assert.Equal(string.Empty, consistencyTag.LastSortableUniqueId);
 
         using var payloadDocument = JsonDocument.Parse(candidate.Payload);
         Assert.Equal("f-1", payloadDocument.RootElement.GetProperty("forecastId").GetString());
@@ -61,6 +63,9 @@ public class ClientApiCommandFlowTests
 
         var candidate = Assert.Single(result.EventCandidates);
         Assert.Equal(nameof(WeatherForecastLocationUpdated), candidate.EventPayloadName);
+        Assert.Equal(
+            "uid-current",
+            Assert.Single(result.ConsistencyTags).LastSortableUniqueId);
 
         using var payloadDocument = JsonDocument.Parse(candidate.Payload);
         Assert.Equal("Osaka", payloadDocument.RootElement.GetProperty("newLocation").GetString());
@@ -106,6 +111,9 @@ public class ClientApiCommandFlowTests
 
         var candidate = Assert.Single(result.EventCandidates);
         Assert.Equal(nameof(WeatherForecastDeleted), candidate.EventPayloadName);
+        Assert.Equal(
+            "uid-current",
+            Assert.Single(result.ConsistencyTags).LastSortableUniqueId);
     }
 
     [Fact]
@@ -125,12 +133,15 @@ public class ClientApiCommandFlowTests
     private static ClientApiCommandFlow CreateFlow(bool tagExists, WeatherForecastItem? existingForecast)
     {
         var client = new StubSerializedDcbClient();
-        var tagExistenceChecker = new StubTagExistenceChecker { Exists = tagExists };
+        var tagVersionReader = new StubTagVersionReader
+        {
+            Version = new TagVersion(tagExists, tagExists ? "uid-current" : string.Empty)
+        };
         var queryClient = new StubWeatherQueryClient { ForecastToReturn = existingForecast };
         var tracker = new WeatherForecastConsistencyTracker();
         return new ClientApiCommandFlow(
             client,
-            tagExistenceChecker,
+            tagVersionReader,
             queryClient,
             tracker,
             new DomainSerializerOptions(DomainJsonOptions));
@@ -149,11 +160,11 @@ public class ClientApiCommandFlowTests
             IsDeleted: isDeleted,
             DeletedAt: isDeleted ? DateTimeOffset.Parse("2026-03-12T00:00:00+00:00") : null);
 
-    private sealed class StubTagExistenceChecker : ITagExistenceChecker
+    private sealed class StubTagVersionReader : ITagVersionReader
     {
-        public bool Exists { get; init; }
+        public required TagVersion Version { get; init; }
 
-        public Task<bool> ExistsAsync(ITag tag, CancellationToken ct) => Task.FromResult(Exists);
+        public Task<TagVersion> ReadAsync(ITag tag, CancellationToken ct) => Task.FromResult(Version);
     }
 
     private sealed class StubWeatherQueryClient : IWeatherQueryClient

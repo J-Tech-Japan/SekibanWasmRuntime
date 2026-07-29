@@ -20,13 +20,15 @@ packages.
 `Sekiban.Dcb.WasmRuntime.Wasmtime` version `1.0.0-preview.3` must therefore carry
 the 10.8.0 dependency baseline.
 
-## Serialized Commit Ground Truth
+## Serialized Commit Wire-Shape Ground Truth
 
 The contract was measured before changing any emit or accept path. The evidence
 came from the actual `Sekiban.Dcb.Core` 10.8.0 package restored from nuget.org,
 not from issue wording or the checked-out submodule:
 
 ```bash
+# `dnx` is the .NET 10 SDK tool runner and downloads the pinned tool package for
+# this invocation; no global dotnet-inspect installation is required.
 dnx dotnet-inspect -y -- diff \
   --package Sekiban.Dcb.Core@10.7.0..10.8.0 --oneline
 dnx dotnet-inspect -y -- find '*SerializedCommit*' \
@@ -65,14 +67,44 @@ Serializing a real `VersionedSerializedCommitRequest` with the package's own
 
 Deserializing those same bytes with
 `SerializedCommitWireContract.Options` restored version `1`, the event payload
-name, the per-candidate tag, and the consistency tag. The finding is therefore
-**unchanged from 10.7.0**: 10.8.0 still uses the V1 envelope, base64 `payload`,
+name, the per-candidate tag, and the consistency tag. The **wire shape** is
+unchanged from 10.7.0: 10.8.0 still uses the V1 envelope, base64 `payload`,
 `eventPayloadName`, per-candidate `tags`, and `consistencyTags`. There is no
 `events` / `payloadJson` / `eventType` rename and no root-level commit tag list.
+The existing envelope black-box tests remain the executable shape guard.
 
-Because the real contract did not change, this upgrade deliberately makes no
-emit/accept shape or typed-error behavior change. The existing black-box tests
-remain the executable guard against drift.
+## Tag Reservation Ground Truth
+
+The additive-only API diff does not reveal an important runtime behavior change
+inside `GeneralTagConsistentActor.MakeReservationAsync`. The matching
+`dcb-v10.8.0` source and package repository commit (`e264a2ed`) changes the
+comparison from:
+
+```text
+10.7.0: check only when expected and current are both non-empty
+10.8.0: normalize null/empty to "" and require expected == current
+```
+
+The five 10.8.0 reservation cases are therefore:
+
+| Expected version | Current version | Result |
+| --- | --- | --- |
+| empty | empty | Accepted: first write. |
+| empty | non-empty | Conflict: a first-write request cannot update an existing tag. |
+| non-empty | empty | Conflict: the expected tag version does not exist. |
+| non-empty mismatch | non-empty | Conflict: optimistic-concurrency failure. |
+| non-empty exact match | non-empty | Accepted: existing-tag update. |
+
+This is the behavioral ground truth behind the original CI failure:
+`ClientApiCommandFlow` emitted an empty `lastSortableUniqueId` for create,
+update, and delete. That was effectively an unchecked update on 10.7.0, but it
+correctly fails as an expect-empty request on 10.8.0.
+
+The C# client/sample paths now read the current tag version before update or
+delete and copy it into `ConsistencyTagEntry.LastSortableUniqueId`. Create still
+uses an empty version, preserving first-write conflict detection. A concurrent
+write after the read still fails with the existing optimistic-concurrency
+error; the sample does not hide a real conflict with a blind retry.
 
 ## Mixed-Version Behavior
 
@@ -80,10 +112,11 @@ The 10.8.0 refresh does not introduce a new envelope version:
 
 | Client → server | Behavior |
 | --- | --- |
-| 10.8.0-line client (V1) → 10.8.0-line server | Accepted; this is the primary path for `1.0.0-preview.3`. |
-| 10.7.0-line client (V1) → 10.8.0-line server | Accepted; the wire contract is unchanged. |
+| Corrected 10.8.0-line client (V1) → 10.8.0-line server | Creates send empty expected; updates/deletes send the exact current version. Accepted when no concurrent write intervenes. |
+| 10.7.0-line client (V1) → 10.8.0-line server | Wire shape is readable, but an existing-tag write that sends empty expected now conflicts. Clients already sending the current token remain compatible. |
+| Corrected 10.8.0-line client (V1) → 10.7.0-line server | Accepted; 10.7.0 also accepts a matching non-empty expected version. |
 | Pre-10.7 client (legacy envelope without `version`) → 10.8.0-line server | Accepted and lifted losslessly to V1. |
-| 10.8.0-line client (V1) → pre-10.7 server | Accepted by servers that ignore the unknown `version` property and bind the unchanged candidate fields. |
+| Corrected 10.8.0-line client (V1) → pre-10.7 server | The envelope remains readable by servers that ignore the unknown `version` property; expected-version enforcement depends on that server line. |
 | Unsupported, duplicated, case-variant, or non-integer version | Rejected before write with the existing typed HTTP 400 error. |
 
 Package/source mixing inside one process is not supported: all
@@ -98,6 +131,7 @@ The required verification for this change is:
 ```bash
 dotnet build src/SekibanWasmRuntime.slnx -c Release
 dotnet test src/SekibanWasmRuntime.slnx -c Release
+E2E_SAMPLE=cs bash scripts/e2e-aspire-playwright.sh
 bash scripts/smoke-runtime-compose.sh
 grep -c '10.7.0' Directory.Packages.props || true
 git diff --check
@@ -108,15 +142,20 @@ Results recorded for SWR-G073:
 - Full Release build: **0 errors**.
 - Full Release test: **188/188 passed**.
 - Serialized envelope contract subset: **11/11 passed**.
+- Client expected-version regression subset: **7/7 passed**.
+- Aspire + Playwright C# E2E: **PASS** — ClientApi and Web UI create → update
+  → delete flows passed; this is the required expected-version gate.
 - Runtime compose E2E: **PASS** — V1 commit/read-back, legacy-unversioned
   acceptance, and both typed rejection cases passed against the 10.8.0 image.
 - Remaining `10.7.0` occurrences in `Directory.Packages.props`: **0**.
 - `git diff --check`: **clean**.
 
-The compose smoke exercises a V1 commit and read-back through the runtime
+The compose smoke exercises a V1 first commit and read-back through the runtime
 container with PostgreSQL, legacy-unversioned acceptance, and typed rejection
 of unsupported and case-variant versions. Its generated report is
-`reports/smoke/runtime-compose-smoke.md`.
+`reports/smoke/runtime-compose-smoke.md`. It does not replace the Aspire +
+Playwright create → update → delete gate, which specifically proves existing-tag
+expected-version propagation.
 
 After this PR is merged and all release checks are green, the host/operator may
 cut GitHub Release `v1.0.0-preview.3` through the existing protected

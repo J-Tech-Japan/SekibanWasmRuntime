@@ -47,7 +47,11 @@ public sealed class WeatherSerializedCommandCommitRequestBuilder : ISekibanComma
             command.Summary,
             DateTimeOffset.UtcNow);
 
-        return BuildCommitRequest(command.ForecastId, evt, nameof(WeatherForecastCreated));
+        return BuildCommitRequest(
+            command.ForecastId,
+            evt,
+            nameof(WeatherForecastCreated),
+            expectedTagVersion: string.Empty);
     }
 
     private async Task<SerializedCommitRequest> BuildUpdateRequestAsync(UpdateWeatherForecastLocation command)
@@ -73,7 +77,12 @@ public sealed class WeatherSerializedCommandCommitRequestBuilder : ISekibanComma
             command.NewLocation,
             DateTimeOffset.UtcNow);
 
-        return BuildCommitRequest(command.ForecastId, evt, nameof(WeatherForecastLocationUpdated));
+        string expectedTagVersion = await GetExpectedTagVersionAsync(command.ForecastId);
+        return BuildCommitRequest(
+            command.ForecastId,
+            evt,
+            nameof(WeatherForecastLocationUpdated),
+            expectedTagVersion);
     }
 
     private async Task<SerializedCommitRequest> BuildDeleteRequestAsync(DeleteWeatherForecast command)
@@ -90,7 +99,12 @@ public sealed class WeatherSerializedCommandCommitRequestBuilder : ISekibanComma
         }
 
         var evt = new WeatherForecastDeleted(command.ForecastId, DateTimeOffset.UtcNow);
-        return BuildCommitRequest(command.ForecastId, evt, nameof(WeatherForecastDeleted));
+        string expectedTagVersion = await GetExpectedTagVersionAsync(command.ForecastId);
+        return BuildCommitRequest(
+            command.ForecastId,
+            evt,
+            nameof(WeatherForecastDeleted),
+            expectedTagVersion);
     }
 
     private async Task<WeatherForecastItem?> GetForecastAsync(string forecastId)
@@ -105,10 +119,24 @@ public sealed class WeatherSerializedCommandCommitRequestBuilder : ISekibanComma
         return result.Items.SingleOrDefault();
     }
 
+    private async Task<string> GetExpectedTagVersionAsync(string forecastId)
+    {
+        // Sekiban.Dcb 10.8.0 reserves existing tags by exact expected-version match.
+        string expectedTagVersion = await _executor.GetTagLatestSortableUniqueIdAsync(
+            new WeatherForecastTag(forecastId));
+        if (string.IsNullOrEmpty(expectedTagVersion))
+        {
+            throw new InvalidOperationException($"Weather forecast {forecastId} does not exist");
+        }
+
+        return expectedTagVersion;
+    }
+
     private SerializedCommitRequest BuildCommitRequest(
         string forecastId,
         object evt,
-        string eventPayloadName)
+        string eventPayloadName,
+        string expectedTagVersion)
     {
         var tag = new WeatherForecastTag(forecastId).GetTag();
         var eventCandidate = new SerializableEventCandidate(
@@ -118,6 +146,6 @@ public sealed class WeatherSerializedCommandCommitRequestBuilder : ISekibanComma
 
         return new SerializedCommitRequest(
             EventCandidates: [eventCandidate],
-            ConsistencyTags: [new ConsistencyTagEntry(tag, string.Empty)]);
+            ConsistencyTags: [new ConsistencyTagEntry(tag, expectedTagVersion)]);
     }
 }

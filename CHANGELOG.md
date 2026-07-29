@@ -12,8 +12,9 @@ for the version, changelog, migration-note, and compatibility evidence rules.
   source submodule from 10.7.0 to 10.8.0 for the `1.0.0-preview.3` package
   refresh.
 - Re-verified the V1 serialized commit envelope against the published
-  Sekiban.Dcb 10.8.0 package. The wire shape is unchanged, so existing V1 and
-  legacy-unversioned compatibility behavior remains intact.
+  Sekiban.Dcb 10.8.0 package. The wire shape is unchanged, while tag reservation
+  now treats an empty expected version as "expect empty"; the C# sample clients
+  therefore propagate the current tag version for updates and deletes.
 
 ## 1.0.0-preview.1
 

@@ -10,20 +10,20 @@ namespace SekibanWasm.Cs.ClientApi;
 public sealed class ClientApiCommandFlow
 {
     private readonly ISerializedDcbClient _client;
-    private readonly ITagExistenceChecker _tagExistenceChecker;
+    private readonly ITagVersionReader _tagVersionReader;
     private readonly IWeatherQueryClient _queryClient;
     private readonly IWeatherForecastConsistencyTracker _consistencyTracker;
     private readonly JsonSerializerOptions _jsonOptions;
 
     public ClientApiCommandFlow(
         ISerializedDcbClient client,
-        ITagExistenceChecker tagExistenceChecker,
+        ITagVersionReader tagVersionReader,
         IWeatherQueryClient queryClient,
         IWeatherForecastConsistencyTracker consistencyTracker,
         DomainSerializerOptions jsonOptions)
     {
         _client = client;
-        _tagExistenceChecker = tagExistenceChecker;
+        _tagVersionReader = tagVersionReader;
         _queryClient = queryClient;
         _consistencyTracker = consistencyTracker;
         _jsonOptions = jsonOptions.Value;
@@ -64,7 +64,10 @@ public sealed class ClientApiCommandFlow
         CreateWeatherForecast command,
         CancellationToken ct)
     {
-        if (await _tagExistenceChecker.ExistsAsync(new WeatherForecastTag(command.ForecastId), ct))
+        TagVersion tagVersion = await _tagVersionReader.ReadAsync(
+            new WeatherForecastTag(command.ForecastId),
+            ct);
+        if (tagVersion.Exists)
         {
             throw new InvalidOperationException($"Weather forecast {command.ForecastId} already exists");
         }
@@ -76,7 +79,11 @@ public sealed class ClientApiCommandFlow
             command.Summary,
             DateTimeOffset.UtcNow);
 
-        return BuildCommitRequest(command.ForecastId, evt, nameof(WeatherForecastCreated));
+        return BuildCommitRequest(
+            command.ForecastId,
+            evt,
+            nameof(WeatherForecastCreated),
+            expectedTagVersion: string.Empty);
     }
 
     private async Task<SerializedCommitRequest> BuildUpdateRequestAsync(
@@ -107,7 +114,12 @@ public sealed class ClientApiCommandFlow
             command.NewLocation,
             DateTimeOffset.UtcNow);
 
-        return BuildCommitRequest(command.ForecastId, evt, nameof(WeatherForecastLocationUpdated));
+        TagVersion tagVersion = await GetExistingTagVersionAsync(command.ForecastId, ct);
+        return BuildCommitRequest(
+            command.ForecastId,
+            evt,
+            nameof(WeatherForecastLocationUpdated),
+            tagVersion.LastSortableUniqueId);
     }
 
     private async Task<SerializedCommitRequest> BuildDeleteRequestAsync(
@@ -129,13 +141,32 @@ public sealed class ClientApiCommandFlow
         }
 
         var evt = new WeatherForecastDeleted(command.ForecastId, DateTimeOffset.UtcNow);
-        return BuildCommitRequest(command.ForecastId, evt, nameof(WeatherForecastDeleted));
+        TagVersion tagVersion = await GetExistingTagVersionAsync(command.ForecastId, ct);
+        return BuildCommitRequest(
+            command.ForecastId,
+            evt,
+            nameof(WeatherForecastDeleted),
+            tagVersion.LastSortableUniqueId);
+    }
+
+    private async Task<TagVersion> GetExistingTagVersionAsync(string forecastId, CancellationToken ct)
+    {
+        // Sekiban.Dcb 10.8.0 treats an empty expected version as "expect this tag to be empty".
+        // Existing-tag writes must therefore carry the exact current tag version.
+        TagVersion tagVersion = await _tagVersionReader.ReadAsync(new WeatherForecastTag(forecastId), ct);
+        if (!tagVersion.Exists || string.IsNullOrEmpty(tagVersion.LastSortableUniqueId))
+        {
+            throw new InvalidOperationException($"Weather forecast {forecastId} does not exist");
+        }
+
+        return tagVersion;
     }
 
     private SerializedCommitRequest BuildCommitRequest(
         string forecastId,
         object evt,
-        string eventPayloadName)
+        string eventPayloadName,
+        string expectedTagVersion)
     {
         var tag = new WeatherForecastTag(forecastId).GetTag();
         var eventCandidate = new SerializableEventCandidate(
@@ -145,7 +176,7 @@ public sealed class ClientApiCommandFlow
 
         return new SerializedCommitRequest(
             EventCandidates: [eventCandidate],
-            ConsistencyTags: [new ConsistencyTagEntry(tag, string.Empty)]);
+            ConsistencyTags: [new ConsistencyTagEntry(tag, expectedTagVersion)]);
     }
 
     private void TrackCommittedSortableUniqueId(object command, SerializedCommitResult result)
