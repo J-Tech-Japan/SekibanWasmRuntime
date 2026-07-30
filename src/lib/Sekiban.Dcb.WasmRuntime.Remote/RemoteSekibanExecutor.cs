@@ -296,7 +296,7 @@ public sealed class RemoteSekibanExecutor(
     /// <summary>
     ///     Builds the current (V1) serialized commit envelope. The V1 shape is the legacy official shape plus an explicit
     ///     <c>version</c> discriminator: event candidates keep base64 <c>payload</c>, <c>eventPayloadName</c>, and their
-    ///     own per-candidate <c>tags</c>. Emitting the version lets a 10.7.0-line host fail closed on an off-contract
+    ///     own per-candidate <c>tags</c>. Emitting the version lets a 10.7+-line host fail closed on an off-contract
     ///     envelope instead of binding it optimistically; older hosts that predate the discriminator ignore the unknown
     ///     property and bind the same candidates.
     /// </summary>

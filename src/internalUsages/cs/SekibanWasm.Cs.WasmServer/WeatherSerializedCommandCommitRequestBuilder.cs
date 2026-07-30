@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Sekiban.Dcb;
+using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Queries;
@@ -10,13 +11,16 @@ using SekibanWasm.Cs.Domain.Weather;
 public sealed class WeatherSerializedCommandCommitRequestBuilder : ISekibanCommandCommitRequestBuilder
 {
     private readonly ISekibanExecutor _executor;
+    private readonly IActorObjectAccessor _actorAccessor;
     private readonly JsonSerializerOptions _jsonOptions;
 
     public WeatherSerializedCommandCommitRequestBuilder(
         ISekibanExecutor executor,
+        IActorObjectAccessor actorAccessor,
         JsonSerializerOptions jsonOptions)
     {
         _executor = executor;
+        _actorAccessor = actorAccessor;
         _jsonOptions = jsonOptions;
     }
 
@@ -47,7 +51,11 @@ public sealed class WeatherSerializedCommandCommitRequestBuilder : ISekibanComma
             command.Summary,
             DateTimeOffset.UtcNow);
 
-        return BuildCommitRequest(command.ForecastId, evt, nameof(WeatherForecastCreated));
+        return BuildCommitRequest(
+            command.ForecastId,
+            evt,
+            nameof(WeatherForecastCreated),
+            expectedTagVersion: string.Empty);
     }
 
     private async Task<SerializedCommitRequest> BuildUpdateRequestAsync(UpdateWeatherForecastLocation command)
@@ -73,7 +81,12 @@ public sealed class WeatherSerializedCommandCommitRequestBuilder : ISekibanComma
             command.NewLocation,
             DateTimeOffset.UtcNow);
 
-        return BuildCommitRequest(command.ForecastId, evt, nameof(WeatherForecastLocationUpdated));
+        string expectedTagVersion = await GetExpectedTagVersionAsync(command.ForecastId);
+        return BuildCommitRequest(
+            command.ForecastId,
+            evt,
+            nameof(WeatherForecastLocationUpdated),
+            expectedTagVersion);
     }
 
     private async Task<SerializedCommitRequest> BuildDeleteRequestAsync(DeleteWeatherForecast command)
@@ -90,7 +103,12 @@ public sealed class WeatherSerializedCommandCommitRequestBuilder : ISekibanComma
         }
 
         var evt = new WeatherForecastDeleted(command.ForecastId, DateTimeOffset.UtcNow);
-        return BuildCommitRequest(command.ForecastId, evt, nameof(WeatherForecastDeleted));
+        string expectedTagVersion = await GetExpectedTagVersionAsync(command.ForecastId);
+        return BuildCommitRequest(
+            command.ForecastId,
+            evt,
+            nameof(WeatherForecastDeleted),
+            expectedTagVersion);
     }
 
     private async Task<WeatherForecastItem?> GetForecastAsync(string forecastId)
@@ -105,10 +123,36 @@ public sealed class WeatherSerializedCommandCommitRequestBuilder : ISekibanComma
         return result.Items.SingleOrDefault();
     }
 
+    private async Task<string> GetExpectedTagVersionAsync(string forecastId)
+    {
+        // Sekiban.Dcb 10.8.0 reserves existing tags by exact expected-version match.
+        string tag = new WeatherForecastTag(forecastId).GetTag();
+        var actorResult = await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tag);
+        if (!actorResult.IsSuccess)
+        {
+            throw new InvalidOperationException($"Weather forecast {forecastId} does not exist");
+        }
+
+        var latestSortableResult = await actorResult.GetValue().GetLatestSortableUniqueIdAsync();
+        if (!latestSortableResult.IsSuccess)
+        {
+            throw latestSortableResult.GetException();
+        }
+
+        string expectedTagVersion = latestSortableResult.GetValue();
+        if (string.IsNullOrEmpty(expectedTagVersion))
+        {
+            throw new InvalidOperationException($"Weather forecast {forecastId} does not exist");
+        }
+
+        return expectedTagVersion;
+    }
+
     private SerializedCommitRequest BuildCommitRequest(
         string forecastId,
         object evt,
-        string eventPayloadName)
+        string eventPayloadName,
+        string expectedTagVersion)
     {
         var tag = new WeatherForecastTag(forecastId).GetTag();
         var eventCandidate = new SerializableEventCandidate(
@@ -118,6 +162,6 @@ public sealed class WeatherSerializedCommandCommitRequestBuilder : ISekibanComma
 
         return new SerializedCommitRequest(
             EventCandidates: [eventCandidate],
-            ConsistencyTags: [new ConsistencyTagEntry(tag, string.Empty)]);
+            ConsistencyTags: [new ConsistencyTagEntry(tag, expectedTagVersion)]);
     }
 }

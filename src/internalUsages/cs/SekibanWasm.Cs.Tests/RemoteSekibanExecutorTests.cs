@@ -301,11 +301,12 @@ public class RemoteSekibanExecutorTests
     }
 
     /// <summary>
-    ///     Pins the serialized commit envelope the executor puts on the wire against the Sekiban.Dcb 10.7.0 (SEK-G17)
-    ///     contract: the V1 envelope is the legacy official shape plus an explicit <c>version</c> discriminator. The
+    ///     Pins the serialized commit envelope the executor puts on the wire against the Sekiban.Dcb contract introduced
+    ///     in 10.7.0 (SEK-G17) and verified unchanged in 10.8.0: the V1 envelope is the legacy official shape plus an
+    ///     explicit <c>version</c> discriminator. The
     ///     negative half of this test is the point — J-Tech-Japan/SekibanWasmRuntime#248 assumed a rename to
-    ///     events / payloadJson / eventType, and reflection over the shipped 10.7.0 assembly showed no such shape
-    ///     exists. If a future bump really does rename these, this test fails loudly instead of silently drifting.
+    ///     events / payloadJson / eventType, and reflection over the shipped assemblies showed no such shape exists.
+    ///     If a future bump really does rename these, this test fails loudly instead of silently drifting.
     /// </summary>
     [Fact]
     public async Task ExecuteAsync_ShouldEmitVersion1SerializedCommitEnvelope()

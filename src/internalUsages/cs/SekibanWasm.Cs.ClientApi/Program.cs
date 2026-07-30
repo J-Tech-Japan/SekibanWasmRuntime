@@ -43,8 +43,8 @@ builder.Services.AddScoped<ISerializedQueryClient>(sp =>
         sp.GetRequiredService<DomainSerializerOptions>().Value));
 builder.Services.AddScoped<IWeatherQueryClient, WeatherQueryClient>();
 builder.Services.AddSingleton<IWeatherForecastConsistencyTracker, WeatherForecastConsistencyTracker>();
-builder.Services.AddScoped<ITagExistenceChecker>(sp =>
-    new TagExistenceChecker(
+builder.Services.AddScoped<ITagVersionReader>(sp =>
+    new TagVersionReader(
         sp.GetRequiredService<IHttpClientFactory>().CreateClient("wasmserver")));
 builder.Services.AddScoped<ClientApiCommandFlow>();
 builder.Services.AddSingleton<IEventPublisher, NoOpEventPublisher>();

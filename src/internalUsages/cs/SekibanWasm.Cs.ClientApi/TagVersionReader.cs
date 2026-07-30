@@ -4,17 +4,19 @@ using Sekiban.Dcb.Tags;
 
 namespace SekibanWasm.Cs.ClientApi;
 
-public interface ITagExistenceChecker
+public sealed record TagVersion(bool Exists, string LastSortableUniqueId);
+
+public interface ITagVersionReader
 {
-    Task<bool> ExistsAsync(ITag tag, CancellationToken ct);
+    Task<TagVersion> ReadAsync(ITag tag, CancellationToken ct);
 }
 
-public sealed class TagExistenceChecker(HttpClient httpClient) : ITagExistenceChecker
+public sealed class TagVersionReader(HttpClient httpClient) : ITagVersionReader
 {
     private static readonly JsonSerializerOptions TransportJsonOptions = new(JsonSerializerDefaults.Web);
     private readonly HttpClient _httpClient = httpClient;
 
-    public async Task<bool> ExistsAsync(ITag tag, CancellationToken ct)
+    public async Task<TagVersion> ReadAsync(ITag tag, CancellationToken ct)
     {
         var response = await _httpClient.PostAsJsonAsync(
             "/api/sekiban/serialized/tag-latest-sortable",
@@ -26,9 +28,11 @@ public sealed class TagExistenceChecker(HttpClient httpClient) : ITagExistenceCh
         var payload = await response.Content.ReadFromJsonAsync<TagLatestSortableResponse>(
             TransportJsonOptions,
             ct);
-        return payload?.Exists ?? false;
+        return payload is null
+            ? new TagVersion(false, string.Empty)
+            : new TagVersion(payload.Exists, payload.LastSortableUniqueId ?? string.Empty);
     }
 
     private sealed record TagLatestSortableRequest(string Tag);
-    private sealed record TagLatestSortableResponse(bool Exists, string LastSortableUniqueId);
+    private sealed record TagLatestSortableResponse(bool Exists, string? LastSortableUniqueId);
 }

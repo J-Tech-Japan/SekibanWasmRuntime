@@ -8,7 +8,7 @@ namespace SekibanWasm.Cs.Tests;
 
 /// <summary>
 ///     Black-box contract tests for host-side acceptance of the serialized commit envelope
-///     (<see cref="SerializedCommitEnvelope" />), pinned against Sekiban.Dcb 10.7.0 / SEK-G17.
+///     (<see cref="SerializedCommitEnvelope" />), verified against Sekiban.Dcb 10.8.0.
 ///     <para>
 ///         These pin two things the runtime must never lose: a pre-10.7 client sending the legacy unversioned shape is
 ///         still accepted losslessly, and an envelope that is off-contract fails closed with a typed error rather than

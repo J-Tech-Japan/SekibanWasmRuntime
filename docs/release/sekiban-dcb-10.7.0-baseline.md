@@ -1,5 +1,9 @@
 # Sekiban.Dcb 10.7.0 Baseline and the Serialized Commit Envelope
 
+> Historical baseline: the repository now targets Sekiban.Dcb 10.8.0. See
+> [`nuget-preview-readiness.md`](nuget-preview-readiness.md) for the current
+> package-ground-truth verification and release readiness record.
+
 Records the SWR-G071 move from the Sekiban.Dcb 10.2.2 baseline to 10.7.0, the
 serialized commit envelope the remote executor now speaks, and what happens
 when a client and a server sit on different versions.
