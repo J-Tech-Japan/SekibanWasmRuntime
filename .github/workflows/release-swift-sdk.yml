@@ -9,9 +9,8 @@ name: release-swift-sdk
 #
 # The gate job (build + test + dry-run sync with the path-leakage guard) runs
 # on every swift-v* tag and on workflow_dispatch. The mirror-push job is gated
-# behind the `swift-mirror-release` protected environment and is BLOCKED on
-# human prerequisites (mirror repository creation + SEKIBAN_SWIFT_MIRROR_TOKEN
-# secret); until those exist it fails fast with an explicit message.
+# behind the `swift-mirror-release` protected environment. Every inline step
+# declares POSIX `sh` because the Swift container is not a bash contract.
 #
 # See docs/release/swift-sdk-release-lane.md.
 
@@ -36,24 +35,23 @@ jobs:
 
       - name: Validate tag format
         if: github.ref_type == 'tag'
+        shell: sh
         run: |
-          set -euo pipefail
-          tag="${GITHUB_REF_NAME}"
-          if [[ ! "$tag" =~ ^swift-v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
-            echo "Tag '$tag' does not match swift-vX.Y.Z" >&2
-            exit 1
-          fi
-          echo "Release tag: $tag (mirror tag v${tag#swift-v})"
+          set -eu
+          sh scripts/release/validate-swift-tag.sh "$GITHUB_REF_NAME"
 
       - name: swift build
+        shell: sh
         run: swift build --package-path src/wasm-projectors/swift
 
       - name: swift test
+        shell: sh
         run: swift test --package-path src/wasm-projectors/swift
 
       - name: Mirror dry-run sync (staged tree + path-leakage guard)
+        shell: sh
         run: |
-          set -euo pipefail
+          set -eu
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           bash scripts/release/sync-sekiban-swift-mirror.sh --dry-run
 
@@ -72,8 +70,9 @@ jobs:
       - name: Sync mirror and tag
         env:
           SEKIBAN_SWIFT_MIRROR_TOKEN: ${{ secrets.SEKIBAN_SWIFT_MIRROR_TOKEN }}
+        shell: sh
         run: |
-          set -euo pipefail
+          set -eu
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           version="${GITHUB_REF_NAME#swift-v}"
           # Fails fast with an explicit message while the mirror repository and

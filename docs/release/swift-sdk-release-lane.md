@@ -150,3 +150,23 @@ public container is SWR-G063 (above).
   stub returning "no result"; wasm builds are byte-for-byte equivalent
   (verified via `build/scripts/build-swift-wasm.sh` with the full C-ABI export
   list intact).
+
+## CI shell compatibility and SWR-G075 handoff
+
+The `swift:6.1-noble` release container is not a bash contract. Every inline
+workflow step therefore declares `shell: sh` and uses POSIX syntax; strict tag
+validation lives in `scripts/release/validate-swift-tag.sh`. The malformed-tag
+cases are exercised by running that script with non-`swift-vX.Y.Z` inputs, so a
+local bash dry-run cannot mask a CI shell failure.
+
+An audit of all `release-*.yml` workflows found no other workflow combining a
+job-level `container:` with inline bash-only syntax; the other release lanes
+run on their normal hosted Ubuntu shell. The Swift lane's explicit shell is the
+remaining container compatibility boundary.
+
+The failed first run (30876914701) never reached the approval gate. After this
+fix merges to `main`, the operator must first re-prove that
+`J-Tech-Japan/sekiban-swift` is empty with zero remote tags, then re-cut
+`swift-v0.1.0` at the merged commit. Re-run the gate and confirm
+`mirror-push` is waiting on the `swift-mirror-release` approval gate. Do not
+approve the gate or publish from implementation work.
