@@ -13,7 +13,7 @@ let package = Package(
             targets: ["SekibanDcbDeciderSwiftEventSource"]),
     ],
     dependencies: [
-        .package(name: "sekiban-swift", path: "../../../wasm-projectors/swift"),
+        .package(name: "sekiban-swift", path: "../../../.."),
     ],
     targets: [
         .target(

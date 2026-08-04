@@ -1,12 +1,11 @@
 // swift-tools-version: 6.0
 import PackageDescription
 
-// External-consumer proof: this sample depends on the PUBLIC sekiban-swift
-// mirror repository at an exact version — never a path-based local package
-// reference (scripts/verify-no-local-sekiban-paths.sh guards this). Pre-publish
-// dry-runs redirect the URL to a locally staged mirror tree via SwiftPM's
-// dependency-mirroring configuration (scripts/smoke.sh --local-package), which
-// never modifies this manifest.
+// External-consumer proof: this sample depends on the public root package at
+// an exact version — never a path-based local package reference
+// (scripts/verify-no-local-sekiban-paths.sh guards this). Until the first
+// Swift-consumable tag is cut, smoke.sh --local-package redirects this URL to
+// an ephemeral local repository and never modifies this manifest.
 //
 // Linker flags mirror the in-repo Swift sample: the WASI reactor exec-model
 // plus explicit --export entries per C-ABI symbol (Swift's LTO can strip
@@ -14,7 +13,7 @@ import PackageDescription
 let package = Package(
     name: "PublicSpmSwiftDecider",
     dependencies: [
-        .package(url: "https://github.com/J-Tech-Japan/sekiban-swift", exact: "0.1.0"),
+        .package(name: "sekiban-swift", url: "https://github.com/J-Tech-Japan/SekibanWasmRuntime", exact: "1.0.0-preview.4"),
     ],
     targets: [
         .executableTarget(

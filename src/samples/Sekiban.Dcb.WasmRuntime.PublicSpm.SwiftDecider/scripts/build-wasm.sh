@@ -19,7 +19,7 @@ hash -r
 
 mkdir -p "$MODULES_DIR" "$CONFIG_DIR"
 
-echo "[build-wasm] building Swift WASM module (swift-sdk=$SDK); dependency resolution follows the current SwiftPM mirror configuration"
+echo "[build-wasm] building Swift WASM module (swift-sdk=$SDK); dependency resolution follows the configured SwiftPM package URL"
 (
   cd "$SAMPLE_DIR"
   swift build --swift-sdk "$SDK" -c release

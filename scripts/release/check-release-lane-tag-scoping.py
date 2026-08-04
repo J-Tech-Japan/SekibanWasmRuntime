@@ -50,7 +50,6 @@ OTHER_LANE_TAGS = [
     "ts-v0.1.0",
     "templates-v1.0.0-preview.1",
     "runtime-host-v1.0.0-preview.3",
-    "swift-v0.1.0",
     "moonbit-v0.1.0",
     "src/lib/sekiban-go/v0.1.0",
 ]

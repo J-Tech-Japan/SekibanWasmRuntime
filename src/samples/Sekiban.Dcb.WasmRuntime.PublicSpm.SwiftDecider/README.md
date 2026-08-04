@@ -1,8 +1,9 @@
 # Swift SPM External-Consumer Sample (SWR-G063)
 
 This sample is the **Swift external-consumer proof** for SekibanWasmRuntime:
-its committed `Package.swift` depends on the public mirror
-`https://github.com/J-Tech-Japan/sekiban-swift` at **exact 0.1.0** — no
+its committed `Package.swift` depends on the repository-root package
+`https://github.com/J-Tech-Japan/SekibanWasmRuntime` at
+**exact 1.0.0-preview.4** — no
 path-based package references (guarded by
 `scripts/verify-no-local-sekiban-paths.sh`) — imports only the fixed public
 products `SekibanWasm` / `SekibanMv`, and proves the four consumer checks
@@ -24,7 +25,7 @@ languages.
 ## Layout
 
 ```text
-Package.swift   Depends on the public sekiban-swift mirror at exact 0.1.0
+Package.swift   Depends on the repository-root package at exact 1.0.0-preview.4
 Sources/        WeatherForecast domain + C-ABI entry points (wasm module)
 AppHost/        C# Aspire AppHost running Postgres + the PUBLIC runtime container
 scripts/        build-wasm.sh, verify-no-local-sekiban-paths.sh (guard),
@@ -33,11 +34,12 @@ scripts/        build-wasm.sh, verify-no-local-sekiban-paths.sh (guard),
 
 ## Two-stage verification
 
-**Stage 1 — pre-publish dry-run (NOT release evidence).** Until the
-sekiban-swift mirror is public with tag v0.1.0, the URL cannot resolve.
-`smoke.sh --local-package` stages the mirror tree with the SWR-G062 sync
-dry-run, turns it into a local git repo tagged `v0.1.0`, and redirects the
-dependency via **SwiftPM dependency mirroring**
+**Stage 1 — pre-tag dry-run (NOT release evidence).** Tags
+`v1.0.0-preview.1`–`.3` predate the root manifest, so the URL cannot resolve
+until the operator cuts `v1.0.0-preview.4`. `smoke.sh --local-package` stages
+the current repository tree, turns it into a local git repo tagged
+`v1.0.0-preview.4`, and redirects the dependency via **SwiftPM dependency
+mirroring**
 (`swift package config set-mirror`, stored in
 `.swiftpm/configuration/mirrors.json`) — the committed `Package.swift` is
 never modified:
@@ -46,9 +48,9 @@ never modified:
 bash src/samples/Sekiban.Dcb.WasmRuntime.PublicSpm.SwiftDecider/scripts/smoke.sh --local-package
 ```
 
-**Stage 2 — mirror-resolved proof (release evidence).** After the mirror is
-public at v0.1.0, the default mode clears any mirror redirection and resolves
-the dependency from the real URL:
+**Stage 2 — remote-version proof (release evidence).** After
+`v1.0.0-preview.4` exists, the default mode clears any local redirection and
+resolves the dependency from the real URL:
 
 ```bash
 bash src/samples/Sekiban.Dcb.WasmRuntime.PublicSpm.SwiftDecider/scripts/smoke.sh
@@ -60,7 +62,7 @@ bash src/samples/Sekiban.Dcb.WasmRuntime.PublicSpm.SwiftDecider/scripts/smoke.sh
 bash src/samples/Sekiban.Dcb.WasmRuntime.PublicSpm.SwiftDecider/scripts/linux-build-check.sh
 ```
 
-Stages the mirror tree and runs `swift build` + `swift test` inside a
+Runs `swift build` + `swift test` against the repository root inside a
 `swift:6.x` Linux container; the outcome is recorded in
 `docs/release/swift-sdk-release-lane.md`. (The consumer sample itself only
 builds for the wasm target — its linker flags are wasm-ld specific — so the

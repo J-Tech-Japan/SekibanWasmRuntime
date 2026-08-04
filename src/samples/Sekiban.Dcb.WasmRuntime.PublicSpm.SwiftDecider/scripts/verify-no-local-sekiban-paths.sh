@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # External-consumer dependency guard for the Swift SPM sample. The committed
 # Package.swift must consume the Sekiban Swift SDK exactly as an external SPM
-# user would: the public sekiban-swift mirror URL at an exact version — no
+# user would: the public repository-root URL at an exact version — no
 # .package(path:) dependencies and no local Sekiban path references. (The
-# --local-package smoke mode redirects the URL through SwiftPM's dependency
-# mirroring, which never touches this manifest.)
+# --local-package smoke mode redirects the URL to an ephemeral local Git
+# repository, which never touches this manifest.)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
@@ -35,11 +35,11 @@ if rg -n 'wasm-projectors/swift|\.\./' "$MANIFEST"; then
   exit 1
 fi
 
-# The exact-version pin must sit on the sekiban-swift dependency declaration
+# The exact-version pin must sit on the root-package dependency declaration
 # itself (a `from:`/`branch:` drift there must fail even if some other
 # dependency happens to use `exact:`).
-if ! rg -Uq '\.package\(\s*url:\s*"https://github\.com/J-Tech-Japan/sekiban-swift"\s*,\s*exact:\s*"[0-9]+\.[0-9]+\.[0-9]+[0-9A-Za-z.+-]*"\s*\)' "$MANIFEST"; then
-  echo "Package.swift must depend on https://github.com/J-Tech-Japan/sekiban-swift pinned with exact: \"X.Y.Z\" on that dependency declaration" >&2
+if ! rg -Uq '\.package\(\s*name:\s*"sekiban-swift"\s*,\s*url:\s*"https://github\.com/J-Tech-Japan/SekibanWasmRuntime"\s*,\s*exact:\s*"1\.0\.0-preview\.4"\s*\)' "$MANIFEST"; then
+  echo "Package.swift must depend on the SekibanWasmRuntime root package pinned at exact: \"1.0.0-preview.4\"" >&2
   exit 1
 fi
 

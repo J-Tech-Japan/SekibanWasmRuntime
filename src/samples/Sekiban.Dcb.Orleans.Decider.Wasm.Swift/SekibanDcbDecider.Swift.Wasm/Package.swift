@@ -14,7 +14,7 @@ import PackageDescription
 let package = Package(
     name: "SekibanDcbDeciderSwiftWasm",
     dependencies: [
-        .package(name: "sekiban-swift", path: "../../../wasm-projectors/swift"),
+        .package(name: "sekiban-swift", path: "../../../.."),
         .package(path: "../SekibanDcbDecider.Swift.EventSource"),
     ],
     targets: [

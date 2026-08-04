@@ -260,15 +260,16 @@ recorded follow-up. See the sample README for the two-stage verification.
 
 The Swift equivalent is
 [`src/samples/Sekiban.Dcb.WasmRuntime.PublicSpm.SwiftDecider`](../src/samples/Sekiban.Dcb.WasmRuntime.PublicSpm.SwiftDecider):
-its committed `Package.swift` depends on the public
-`github.com/J-Tech-Japan/sekiban-swift` mirror at exact 0.1.0 with no
-path-based references (guarded), and its smoke runs the same four checks
-against the public runtime container. Until the mirror is public, run the
-clearly-labeled pre-publish dry-run (`smoke.sh --local-package`, redirecting
-the URL to the staged mirror tree via SwiftPM dependency mirroring); the
-mirror-resolved run (`smoke.sh`) is the recorded follow-up. Its
-`linux-build-check.sh` records whether the package builds with Swift in a
-Linux container (see `docs/release/swift-sdk-release-lane.md`).
+its committed `Package.swift` depends on the repository root
+`github.com/J-Tech-Japan/SekibanWasmRuntime` at exact `1.0.0-preview.4` with
+no path-based references (guarded), and its smoke runs the same four checks
+against the public runtime container. `v1.0.0-preview.1`–`.3` predate the
+root manifest and are not SwiftPM-resolvable. Before `v1.0.0-preview.4` is
+cut, run the clearly-labelled pre-tag check (`smoke.sh --local-package`), which
+redirects resolution to a temporary local Git repository; rerunning `smoke.sh`
+against the remote exact-version dependency is the recorded post-tag follow-up.
+Its `linux-build-check.sh` records whether the root package builds with Swift
+in a Linux container (see `docs/release/swift-sdk-release-lane.md`).
 
 The TypeScript equivalent is
 [`src/samples/Sekiban.Dcb.WasmRuntime.Npm.TsDecider`](../src/samples/Sekiban.Dcb.WasmRuntime.Npm.TsDecider):

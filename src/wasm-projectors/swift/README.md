@@ -4,16 +4,14 @@ Swift SDK for the [Sekiban WASM Runtime](https://github.com/J-Tech-Japan/Sekiban
 build Sekiban DCB projector modules in Swift and compile them to WebAssembly
 (WASI) for the public runtime container.
 
-This is **one SPM package with two products**. SwiftPM resolves packages from a
-repository root, so the package is published through the mirror repository
-`github.com/J-Tech-Japan/sekiban-swift`, whose content is synced from the
-[Swift SDK directory of the SekibanWasmRuntime monorepo](https://github.com/J-Tech-Japan/SekibanWasmRuntime/tree/main/src/wasm-projectors/swift)
-(the monorepo is the source of truth; do not commit to the mirror directly).
+This is **one SPM package with two products**. Its `Package.swift` lives at
+the [SekibanWasmRuntime repository root](https://github.com/J-Tech-Japan/SekibanWasmRuntime),
+which is required for SwiftPM Git resolution; sources stay in this directory.
 
 ```swift
 // Package.swift of your projector module
 dependencies: [
-    .package(url: "https://github.com/J-Tech-Japan/sekiban-swift", from: "0.1.0"),
+    .package(name: "sekiban-swift", url: "https://github.com/J-Tech-Japan/SekibanWasmRuntime", exact: "1.0.0-preview.4"),
 ],
 targets: [
     .executableTarget(
@@ -60,9 +58,10 @@ reactor exec-model and C-ABI export list).
 
 ## Runtime pairing
 
-`sekiban-swift` 0.1.x targets the public runtime container image
-`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3` and implements
-the same guest ABI as the Rust `sekiban-wasm`/`sekiban-mv` 0.1.0 crates, the
+The Swift SDK uses this repository's release version. `v1.0.0-preview.4` is
+the first SwiftPM-resolvable release because the earlier preview tags predate
+the root manifest. It targets the public runtime container image of the same
+version and implements the same guest ABI as the Rust `sekiban-wasm`/`sekiban-mv` 0.1.0 crates, the
 npm `@sekiban/as-wasm` 0.1.0 package, and the Go SDK — modules built with any
 of these SDKs run side by side on the same runtime image.
 

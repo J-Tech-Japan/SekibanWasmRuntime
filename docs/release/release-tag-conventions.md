@@ -13,12 +13,12 @@ prefix — not the workflow — is what decides which lane actually runs.
 | npm `@sekiban/*` | `ts-v<version>` | `release-npm-ts.yml` | release | strip `ts-v` |
 | Templates package | `templates-v<version>` | `release-templates-preview.yml` | release | strip `templates-v` |
 | Runtime host image (GHCR) | `runtime-host-v<version>` | `release-ghcr-image-preview.yml` | tag push | strip `runtime-host-v` |
-| Swift SPM | `swift-v<version>` | `release-swift-sdk.yml` | tag push | strip `swift-v` (mirror receives plain `v<version>`) |
+| Swift SPM | `v<version>` | repository-root `Package.swift` | same repository release | same bare `v` version as NuGet and runtime image |
 | MoonBit packages | `moonbit-v<version>` | `release-moonbit-packages.yml` | tag push | strip `moonbit-v` |
 | Go SDK | `src/lib/sekiban-go/v<version>` | `release-go-sdk.yml` | tag push | Go submodule tag format, required by the toolchain |
 
-NuGet is the one lane on a bare `v*` tag, for historical reasons. Every other
-lane carries a family prefix, and none of those prefixes begin with `v`.
+NuGet and Swift SPM share the bare `v*` tag. Every other lane carries a family
+prefix, and none of those prefixes begin with `v`.
 
 The **Trigger** column is what decides whether a lane needs a job-level guard.
 The `tag push` lanes filter on `push: tags:` in the workflow's `on:` block, so
