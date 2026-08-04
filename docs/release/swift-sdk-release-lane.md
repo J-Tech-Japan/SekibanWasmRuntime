@@ -65,21 +65,16 @@ access to it, or token.
   `swift test`, and the dry-run sync including the path-leakage guard, inside
   a `swift:6.1-noble` container.
 - **mirror-push** (tags only): gated behind the `swift-mirror-release`
-  protected environment; runs the sync script in `--push` mode. **Currently
-  blocked on human prerequisites** — until they are done, the step fails fast
-  with an explicit message and nothing is published.
+  protected environment; runs the sync script in `--push` mode only after the
+  required reviewer approval.
 
-## Human Prerequisites (blocking the first publish)
+## First-publish prerequisites (provisioned)
 
-1. Create the mirror repository `github.com/J-Tech-Japan/sekiban-swift`
-   (public, empty; no default README so the first sync is clean).
-2. Provision a push token for it and store it as the
-   `SEKIBAN_SWIFT_MIRROR_TOKEN` secret scoped to the `swift-mirror-release`
-   protected environment.
-3. Create/approve the `swift-mirror-release` protected environment with the
-   required reviewers.
-4. Push the `swift-v0.1.0` tag on the accepted commit; approve the
-   environment gate.
+The mirror repository, push token, and protected `swift-mirror-release`
+environment are provisioned. Before the post-merge `swift-v0.1.0` re-cut,
+the operator must re-prove that the mirror is empty and has zero remote tags.
+The operator/reviewer then approves the protected environment; implementation
+work must not approve or publish.
 
 After the first successful push, verify consumer resolution from a scratch
 package:
@@ -153,11 +148,13 @@ public container is SWR-G063 (above).
 
 ## CI shell compatibility and SWR-G075 handoff
 
-The `swift:6.1-noble` release container is not a bash contract. Every inline
-workflow step therefore declares `shell: sh` and uses POSIX syntax; strict tag
-validation lives in `scripts/release/validate-swift-tag.sh`. The malformed-tag
-cases are exercised by running that script with non-`swift-vX.Y.Z` inputs, so a
-local bash dry-run cannot mask a CI shell failure.
+GitHub Actions defaults run steps in a container job to `sh -e {0}`. On the
+failed run, that meant dash executed `set -o pipefail` even though the
+unmodified `swift:6.1-noble` image contains `/usr/bin/bash` GNU bash 5.2.21.
+Every inline workflow step therefore declares `shell: sh` and uses POSIX
+syntax; the existing sync script continues to run deliberately via `bash`.
+Strict tag validation lives in `scripts/release/validate-swift-tag.sh`, and
+the committed `test-validate-swift-tag.sh` matrix runs from the CI gate.
 
 An audit of all `release-*.yml` workflows found no other workflow combining a
 job-level `container:` with inline bash-only syntax; the other release lanes

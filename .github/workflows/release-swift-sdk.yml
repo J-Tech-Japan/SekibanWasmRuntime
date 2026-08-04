@@ -9,8 +9,10 @@ name: release-swift-sdk
 #
 # The gate job (build + test + dry-run sync with the path-leakage guard) runs
 # on every swift-v* tag and on workflow_dispatch. The mirror-push job is gated
-# behind the `swift-mirror-release` protected environment. Every inline step
-# declares POSIX `sh` because the Swift container is not a bash contract.
+# behind the `swift-mirror-release` protected environment. GitHub Actions
+# defaults container-job run steps to `sh -e {0}`; every inline step declares
+# POSIX `sh` explicitly, while the image's available bash is used deliberately
+# for the existing bash-only sync script.
 #
 # See docs/release/swift-sdk-release-lane.md.
 
@@ -40,6 +42,12 @@ jobs:
           set -eu
           sh scripts/release/validate-swift-tag.sh "$GITHUB_REF_NAME"
 
+      - name: Test malformed tag rejection
+        shell: sh
+        run: |
+          set -eu
+          sh scripts/release/test-validate-swift-tag.sh
+
       - name: swift build
         shell: sh
         run: swift build --package-path src/wasm-projectors/swift
@@ -56,7 +64,7 @@ jobs:
           bash scripts/release/sync-sekiban-swift-mirror.sh --dry-run
 
   mirror-push:
-    name: Push to sekiban-swift mirror (blocked on human prerequisites)
+    name: Push to sekiban-swift mirror (approval required)
     needs: gate
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
@@ -75,6 +83,6 @@ jobs:
           set -eu
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           version="${GITHUB_REF_NAME#swift-v}"
-          # Fails fast with an explicit message while the mirror repository and
-          # its token are still human-gated prerequisites.
+          # The protected environment approval remains an operator/reviewer
+          # responsibility; this step only runs after that approval.
           bash scripts/release/sync-sekiban-swift-mirror.sh --push --version "$version"
