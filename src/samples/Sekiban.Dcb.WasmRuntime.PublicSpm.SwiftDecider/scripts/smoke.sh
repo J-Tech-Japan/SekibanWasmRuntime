@@ -4,12 +4,12 @@
 # Two-stage verification:
 #   default            Mirror-resolved proof: the committed Package.swift
 #                      dependency on https://github.com/J-Tech-Japan/sekiban-swift
-#                      (exact 0.1.0) resolves from the real public mirror.
+#                      (exact 0.1.1) resolves from the real public mirror.
 #                      This is the release evidence; it requires the mirror
-#                      repository to be public with tag v0.1.0.
+#                      repository to be public with tag v0.1.1.
 #   --local-package    Pre-publish DRY-RUN (NOT release evidence): stages the
 #                      mirror tree with the SWR-G062 sync dry-run, turns it into
-#                      a local git repo tagged v0.1.0, and redirects the mirror
+#                      a local git repo tagged v0.1.1, and redirects the mirror
 #                      URL to it via SwiftPM dependency mirroring
 #                      (.swiftpm/configuration/mirrors.json — the committed
 #                      Package.swift is never modified).
@@ -47,7 +47,7 @@ if [[ "${1:-}" == "--local-package" ]]; then
 fi
 
 if [[ "$MODE" == "mirror-resolved" ]]; then
-  MODE_DETAIL="mirror-resolved (public $MIRROR_URL at exact 0.1.0; requires the mirror to be public)"
+  MODE_DETAIL="mirror-resolved (public $MIRROR_URL at exact 0.1.1; requires the v0.1.1 tag to be public)"
 else
   MODE_DETAIL="LOCAL-PACKAGE DRY-RUN via SwiftPM mirror redirection to the staged tree — pre-publish validation only, NOT release evidence"
 fi
@@ -64,7 +64,7 @@ write_report() {
     printf '%s\n' "- Mode: $MODE_DETAIL"
     printf '%s\n' "- Detail: $detail"
     printf '%s\n' "- Runtime image: \`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:${SAMPLE_RUNTIME_IMAGE_TAG:-1.0.0-preview.3}\`"
-    printf '%s\n' "- Swift package: \`$MIRROR_URL\` exact 0.1.0 (committed Package.swift is path-free)"
+    printf '%s\n' "- Swift package: \`$MIRROR_URL\` exact 0.1.1 (committed Package.swift is path-free)"
     printf '%s\n' "- Runtime URL: \`${RUNTIME_URL:-unresolved}\`"
     printf '%s\n' "- Commit: \`$(git rev-parse HEAD 2>/dev/null || echo unknown)\`"
     [[ -n "${MV_DETAIL:-}" ]] && printf '\n## Materialized view\n\n%s\n' "$MV_DETAIL"
@@ -109,7 +109,7 @@ log "dependency guard"
 bash "$SAMPLE_DIR/scripts/verify-no-local-sekiban-paths.sh" >/dev/null || fail "dependency guard failed"
 
 if [[ "$MODE" == "local-package" ]]; then
-  log "staging local mirror tree (SWR-G062 sync dry-run) and tagging v0.1.0"
+  log "staging local mirror tree (SWR-G062 sync dry-run) and tagging v0.1.1"
   bash scripts/release/sync-sekiban-swift-mirror.sh --dry-run >/dev/null 2>&1 \
     || fail "mirror sync dry-run failed (needed to stage the local package)"
   rm -rf "$LOCAL_MIRROR_ROOT"
@@ -120,7 +120,7 @@ if [[ "$MODE" == "local-package" ]]; then
     git init -q
     git add -A
     git -c user.name=smoke -c user.email=smoke@local commit -qm "staged mirror tree"
-    git tag v0.1.0
+    git tag v0.1.1
   ) || fail "could not turn the staged tree into a taggable local repo"
   # The staged repo's history changes every run, so drop SwiftPM's recorded
   # tag fingerprint for this identity before re-resolving.
@@ -139,7 +139,7 @@ if [[ ! -s "$MODULE" || ! -s "$CONFIG" ]]; then
   log "building Swift WASM module + manifest"
   if ! bash "$SAMPLE_DIR/scripts/build-wasm.sh"; then
     if [[ "$MODE" == "mirror-resolved" ]]; then
-      fail "could not build against the public mirror; is github.com/J-Tech-Japan/sekiban-swift public with tag v0.1.0?"
+      fail "could not build against the public mirror at v0.1.1; verify that the published v0.1.1 tag is available"
     fi
     skip "could not build the Swift WASM module; install the Swift wasm SDK (swift-6.3.1-RELEASE_wasm) and re-run."
   fi

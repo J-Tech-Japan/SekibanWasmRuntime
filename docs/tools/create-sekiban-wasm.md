@@ -66,7 +66,7 @@ for the flag explicitly.
 | Rust | Available -- depends on crates.io `sekiban-*` at exact `=0.1.0`. **Already published**; the generated project builds and runs standalone today. | **Available** -- vendors `src/wasm-projectors/rust` into `vendor/`; `cargo check --workspace` succeeds standalone today. |
 | TypeScript | Available -- depends on `@sekiban/ts`/`@sekiban/as-wasm` at exact npm `0.1.0`. Not published yet (SWR-G058); `npm install` 404s until it is. | Not available -- no dev-mode sample exists in the monorepo yet. |
 | Go | Available -- requires the published module `github.com/J-Tech-Japan/SekibanWasmRuntime/src/lib/sekiban-go` at `v0.1.0`. Tag not published yet; `go build` fails to resolve it until it is. | Not available -- no dev-mode sample exists in the monorepo yet. |
-| Swift | Available -- depends on the public `github.com/J-Tech-Japan/sekiban-swift` mirror at exact `0.1.0`. Mirror visibility is a separate human-gated step. | Not available -- no dev-mode sample exists in the monorepo yet. |
+| Swift | Available -- depends on the published `github.com/J-Tech-Japan/sekiban-swift` mirror at exact `0.1.1`; `0.1.0` remains published but is superseded by the clean artifact. | Not available -- no dev-mode sample exists in the monorepo yet. |
 | MoonBit | Available -- depends on `sekiban/sekiban-wasm-runtime` and `sekiban/sekiban-client` as mooncakes.io registry packages. Not published yet. | Not available -- no dev-mode sample exists in the monorepo yet. |
 
 Every generated project also provisions the **public GHCR runtime

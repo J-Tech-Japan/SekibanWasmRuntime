@@ -13,7 +13,7 @@ repository root, so the package is published through the mirror repository
 ```swift
 // Package.swift of your projector module
 dependencies: [
-    .package(url: "https://github.com/J-Tech-Japan/sekiban-swift", from: "0.1.0"),
+    .package(url: "https://github.com/J-Tech-Japan/sekiban-swift", from: "0.1.1"),
 ],
 targets: [
     .executableTarget(
@@ -60,7 +60,7 @@ reactor exec-model and C-ABI export list).
 
 ## Runtime pairing
 
-`sekiban-swift` 0.1.x targets the public runtime container image
+`sekiban-swift` 0.1.0 and 0.1.1 target the public runtime container image
 `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3` and implements
 the same guest ABI as the Rust `sekiban-wasm`/`sekiban-mv` 0.1.0 crates, the
 npm `@sekiban/as-wasm` 0.1.0 package, and the Go SDK — modules built with any

@@ -51,7 +51,16 @@ if [[ -z "$MODE" ]]; then
 fi
 
 log() { printf '[sync-sekiban-swift-mirror] %s\n' "$*"; }
-fail() { log "FAIL: $*"; exit 1; }
+fail() { printf '[sync-sekiban-swift-mirror] FAIL: %b\n' "$*" >&2; exit 1; }
+
+assert_stage_contents() {
+  expected_entries=$(printf '%s\n' LICENSE Package.swift README.md Sources Tests | sort)
+  actual_entries=$(find "$STAGE_DIR" -mindepth 1 -maxdepth 1 -exec basename {} \; | sort)
+  if ! entry_diff=$(diff -u <(printf '%s\n' "$expected_entries") <(printf '%s\n' "$actual_entries")); then
+    fail "staged tree must contain exactly LICENSE, Package.swift, README.md, Sources, Tests; unexpected or missing entries:\n$entry_diff"
+  fi
+  log "staged tree contents exactly: LICENSE Package.swift README.md Sources Tests"
+}
 
 command -v swift >/dev/null 2>&1 || fail "swift toolchain not found"
 
@@ -68,12 +77,7 @@ for entry in Package.swift README.md LICENSE Sources Tests; do
 done
 log "staged mirror tree at ${STAGE_DIR#"$ROOT"/}"
 
-expected_entries=$(printf '%s\n' LICENSE Package.swift README.md Sources Tests | sort)
-actual_entries=$(find "$STAGE_DIR" -mindepth 1 -maxdepth 1 -exec basename {} \; | sort)
-if ! entry_diff=$(diff -u <(printf '%s\n' "$expected_entries") <(printf '%s\n' "$actual_entries")); then
-  fail "staged tree must contain exactly LICENSE, Package.swift, README.md, Sources, Tests; unexpected or missing entries:\n$entry_diff"
-fi
-log "staged tree contents exactly: LICENSE Package.swift README.md Sources Tests"
+assert_stage_contents
 
 # ---------------------------------------------------------------------------
 # 2. Guard: the staged tree must be self-contained. Any host-repo relative
@@ -110,6 +114,10 @@ swift build --package-path "$STAGE_DIR" --scratch-path "$SCRATCH_DIR" || fail "s
 log "swift test (staged tree)"
 swift test --package-path "$STAGE_DIR" --scratch-path "$SCRATCH_DIR" || fail "swift test failed inside the staged tree"
 
+# Re-check after the verification window. This is intentionally before the
+# dry-run exit and also repeated immediately before push-mode copying below.
+assert_stage_contents
+
 if [[ "$MODE" == "dry-run" ]]; then
   log "DRY-RUN PASS: staged tree is self-contained and builds/tests standalone"
   exit 0
@@ -133,6 +141,7 @@ git clone --depth 1 "https://x-access-token:${SEKIBAN_SWIFT_MIRROR_TOKEN}@github
   || fail "could not clone the mirror repository (does github.com/$MIRROR_REPO exist yet?)"
 
 find "$CLONE_DIR" -mindepth 1 -maxdepth 1 -not -name '.git' -exec rm -rf {} +
+assert_stage_contents
 cp -R "$STAGE_DIR"/. "$CLONE_DIR"/
 (
   cd "$CLONE_DIR"

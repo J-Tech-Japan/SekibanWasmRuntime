@@ -34,7 +34,7 @@ scripts/        build-wasm.sh, verify-no-local-sekiban-paths.sh (guard),
 ## Two-stage verification
 
 **Stage 1 — pre-publish dry-run (NOT release evidence).** Until the
-sekiban-swift mirror is public with tag v0.1.1, the URL cannot resolve.
+the mirror is public; the pinned v0.1.1 tag is the clean published version.
 `smoke.sh --local-package` stages the mirror tree with the SWR-G062 sync
 dry-run, turns it into a local git repo tagged `v0.1.1`, and redirects the
 dependency via **SwiftPM dependency mirroring**
