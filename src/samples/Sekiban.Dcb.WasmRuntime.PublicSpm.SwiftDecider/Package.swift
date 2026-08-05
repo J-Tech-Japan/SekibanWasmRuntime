@@ -14,7 +14,7 @@ import PackageDescription
 let package = Package(
     name: "PublicSpmSwiftDecider",
     dependencies: [
-        .package(url: "https://github.com/J-Tech-Japan/sekiban-swift", exact: "0.1.0"),
+        .package(url: "https://github.com/J-Tech-Japan/sekiban-swift", exact: "0.1.1"),
     ],
     targets: [
         .executableTarget(

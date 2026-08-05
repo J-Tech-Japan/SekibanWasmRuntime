@@ -2,7 +2,7 @@
 
 This sample is the **Swift external-consumer proof** for SekibanWasmRuntime:
 its committed `Package.swift` depends on the public mirror
-`https://github.com/J-Tech-Japan/sekiban-swift` at **exact 0.1.0** — no
+`https://github.com/J-Tech-Japan/sekiban-swift` at **exact 0.1.1** — no
 path-based package references (guarded by
 `scripts/verify-no-local-sekiban-paths.sh`) — imports only the fixed public
 products `SekibanWasm` / `SekibanMv`, and proves the four consumer checks
@@ -24,7 +24,7 @@ languages.
 ## Layout
 
 ```text
-Package.swift   Depends on the public sekiban-swift mirror at exact 0.1.0
+Package.swift   Depends on the public sekiban-swift mirror at exact 0.1.1
 Sources/        WeatherForecast domain + C-ABI entry points (wasm module)
 AppHost/        C# Aspire AppHost running Postgres + the PUBLIC runtime container
 scripts/        build-wasm.sh, verify-no-local-sekiban-paths.sh (guard),
@@ -33,10 +33,10 @@ scripts/        build-wasm.sh, verify-no-local-sekiban-paths.sh (guard),
 
 ## Two-stage verification
 
-**Stage 1 — pre-publish dry-run (NOT release evidence).** Until the
-sekiban-swift mirror is public with tag v0.1.0, the URL cannot resolve.
+**Stage 1 — pre-publish dry-run (NOT release evidence).** The mirror is public,
+but the pinned v0.1.1 tag is not cut yet, so the URL cannot resolve.
 `smoke.sh --local-package` stages the mirror tree with the SWR-G062 sync
-dry-run, turns it into a local git repo tagged `v0.1.0`, and redirects the
+dry-run, turns it into a local git repo tagged `v0.1.1`, and redirects the
 dependency via **SwiftPM dependency mirroring**
 (`swift package config set-mirror`, stored in
 `.swiftpm/configuration/mirrors.json`) — the committed `Package.swift` is
@@ -47,7 +47,7 @@ bash src/samples/Sekiban.Dcb.WasmRuntime.PublicSpm.SwiftDecider/scripts/smoke.sh
 ```
 
 **Stage 2 — mirror-resolved proof (release evidence).** After the mirror is
-public at v0.1.0, the default mode clears any mirror redirection and resolves
+public at v0.1.1, the default mode clears any mirror redirection and resolves
 the dependency from the real URL:
 
 ```bash

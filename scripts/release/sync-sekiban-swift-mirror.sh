@@ -28,6 +28,12 @@ PACKAGE_DIR="$ROOT/src/wasm-projectors/swift"
 STAGE_ROOT="${SEKIBAN_SWIFT_MIRROR_STAGE_DIR:-$ROOT/artifacts/sekiban-swift-mirror}"
 STAGE_DIR="$STAGE_ROOT/tree"
 MIRROR_REPO="${SEKIBAN_SWIFT_MIRROR_REPO:-J-Tech-Japan/sekiban-swift}"
+SCRATCH_DIR=""
+
+cleanup() {
+  [[ -z "$SCRATCH_DIR" ]] || rm -rf "$SCRATCH_DIR"
+}
+trap cleanup EXIT
 
 MODE=""
 VERSION=""
@@ -45,7 +51,18 @@ if [[ -z "$MODE" ]]; then
 fi
 
 log() { printf '[sync-sekiban-swift-mirror] %s\n' "$*"; }
-fail() { log "FAIL: $*"; exit 1; }
+fail() { printf '[sync-sekiban-swift-mirror] FAIL: %s\n' "$*" >&2; exit 1; }
+
+assert_stage_contents() {
+  expected_entries=$(printf '%s\n' LICENSE Package.swift README.md Sources Tests | sort)
+  actual_entries=$(find "$STAGE_DIR" -mindepth 1 -maxdepth 1 -exec basename {} \; | sort)
+  if ! entry_diff=$(diff -u <(printf '%s\n' "$expected_entries") <(printf '%s\n' "$actual_entries")); then
+    printf '[sync-sekiban-swift-mirror] FAIL: staged tree must contain exactly LICENSE, Package.swift, README.md, Sources, Tests; unexpected or missing entries:\n' >&2
+    printf '%s\n' "$entry_diff" >&2
+    exit 1
+  fi
+  log "staged tree contents exactly: LICENSE Package.swift README.md Sources Tests"
+}
 
 command -v swift >/dev/null 2>&1 || fail "swift toolchain not found"
 
@@ -61,6 +78,8 @@ for entry in Package.swift README.md LICENSE Sources Tests; do
   cp -R "$PACKAGE_DIR/$entry" "$STAGE_DIR/$entry"
 done
 log "staged mirror tree at ${STAGE_DIR#"$ROOT"/}"
+
+assert_stage_contents
 
 # ---------------------------------------------------------------------------
 # 2. Guard: the staged tree must be self-contained. Any host-repo relative
@@ -91,10 +110,15 @@ log "guard OK: no host-repo relative path references anywhere in the staged tree
 #    external consumer would receive it.
 # ---------------------------------------------------------------------------
 
-log "swift build (staged tree)"
-swift build --package-path "$STAGE_DIR" || fail "swift build failed inside the staged tree"
+SCRATCH_DIR="$(mktemp -d "${TMPDIR:-/tmp}/sekiban-swift-mirror-build.XXXXXX")"
+log "swift build (staged tree, scratch outside staged tree: $SCRATCH_DIR)"
+swift build --package-path "$STAGE_DIR" --scratch-path "$SCRATCH_DIR" || fail "swift build failed inside the staged tree"
 log "swift test (staged tree)"
-swift test --package-path "$STAGE_DIR" || fail "swift test failed inside the staged tree"
+swift test --package-path "$STAGE_DIR" --scratch-path "$SCRATCH_DIR" || fail "swift test failed inside the staged tree"
+
+# Re-check after the verification window. This is intentionally before the
+# dry-run exit and also repeated immediately before push-mode copying below.
+assert_stage_contents
 
 if [[ "$MODE" == "dry-run" ]]; then
   log "DRY-RUN PASS: staged tree is self-contained and builds/tests standalone"
@@ -119,6 +143,7 @@ git clone --depth 1 "https://x-access-token:${SEKIBAN_SWIFT_MIRROR_TOKEN}@github
   || fail "could not clone the mirror repository (does github.com/$MIRROR_REPO exist yet?)"
 
 find "$CLONE_DIR" -mindepth 1 -maxdepth 1 -not -name '.git' -exec rm -rf {} +
+assert_stage_contents
 cp -R "$STAGE_DIR"/. "$CLONE_DIR"/
 (
   cd "$CLONE_DIR"
