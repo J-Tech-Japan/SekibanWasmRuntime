@@ -48,7 +48,7 @@
       "available": true,
       "sourceDir": "../../samples/Sekiban.Dcb.WasmRuntime.PublicSpm.SwiftDecider",
       "sampleDirName": "Sekiban.Dcb.WasmRuntime.PublicSpm.SwiftDecider",
-      "note": "Depends on the public github.com/J-Tech-Japan/sekiban-swift mirror at exact 0.1.0. Until that mirror is public, swift build will fail to resolve the dependency."
+      "note": "Depends on the published github.com/J-Tech-Japan/sekiban-swift mirror at exact 0.1.1. Version 0.1.0 remains published but is superseded by the clean 0.1.1 artifact."
     },
     "dev": {
       "available": false,

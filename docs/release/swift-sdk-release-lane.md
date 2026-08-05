@@ -33,9 +33,9 @@ basename, which is `swift` in the monorepo).
 
 ## Tag Convention
 
-- Monorepo release tag: `swift-vX.Y.Z` (first release `swift-v0.1.0`).
+- Monorepo release tag: `swift-vX.Y.Z` (first clean patch release `swift-v0.1.1`).
 - Mirror repository tag: plain `vX.Y.Z` (what SwiftPM consumers see as
-  `from: "0.1.0"`); created by the sync script during `--push`.
+  `from: "0.1.1"`); created by the sync script during `--push`.
 
 ## Sync Flow
 
@@ -71,8 +71,8 @@ access to it, or token.
 ## First-publish prerequisites (provisioned)
 
 The mirror repository, push token, and protected `swift-mirror-release`
-environment are provisioned. Before the post-merge `swift-v0.1.0` re-cut,
-the operator must re-prove that the mirror is empty and has zero remote tags.
+environment are provisioned. `v0.1.0` is published and immutable. After this
+fix merges, the operator must cut `swift-v0.1.1` for the clean artifact.
 The operator/reviewer then approves the protected environment; implementation
 work must not approve or publish.
 
@@ -82,7 +82,7 @@ package:
 ```bash
 cd "$(mktemp -d)" && swift package init --type executable
 # add to Package.swift:
-#   .package(url: "https://github.com/J-Tech-Japan/sekiban-swift", from: "0.1.0")
+#   .package(url: "https://github.com/J-Tech-Japan/sekiban-swift", from: "0.1.1")
 swift package resolve
 ```
 
@@ -90,7 +90,7 @@ swift package resolve
 
 [`src/samples/Sekiban.Dcb.WasmRuntime.PublicSpm.SwiftDecider`](../../src/samples/Sekiban.Dcb.WasmRuntime.PublicSpm.SwiftDecider)
 is the external-consumer proof for this lane: its committed `Package.swift`
-depends on `https://github.com/J-Tech-Japan/sekiban-swift` at exact 0.1.0 with
+depends on `https://github.com/J-Tech-Japan/sekiban-swift` at exact 0.1.1 with
 no path-based references (guard: `scripts/verify-no-local-sekiban-paths.sh`),
 and its smoke validates command execution, tag-state readback, in-memory
 projection queries, and materialized-view catch-up against the public GHCR
@@ -100,10 +100,10 @@ Two-stage verification:
 
 - **Pre-publish dry-run** (demonstrated now, NOT release evidence):
   `smoke.sh --local-package` stages the mirror tree with this lane's sync
-  dry-run, tags it `v0.1.0` in a local git repo, and redirects the dependency
+  dry-run, tags it `v0.1.1` in a local git repo, and redirects the dependency
   via SwiftPM dependency mirroring — the committed manifest is untouched.
 - **Mirror-resolved run** (release evidence, after the mirror is public at
-  v0.1.0): `smoke.sh` resolves the dependency from the real mirror URL; this
+  v0.1.1): `smoke.sh` resolves the dependency from the real mirror URL; this
   is the recorded follow-up once the human mirror-publish batch completes.
 
 Consumer-surfaced constraint (fixed in SWR-G063): SwiftPM **rejects versioned
@@ -126,7 +126,7 @@ remediation is follow-up work per the SWR-G063 scope. Evidence:
 
 ## Compatibility
 
-`sekiban-swift` 0.1.x pairs with runtime image
+`sekiban-swift` 0.1.1 pairs with runtime image
 `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3` and implements
 the same guest ABI as the Rust `sekiban-wasm`/`sekiban-mv` 0.1.0 crates — see
 `sdk-runtime-compatibility.md`. The Swift external-consumer sample against the
@@ -163,7 +163,25 @@ remaining container compatibility boundary.
 
 The failed first run (30876914701) never reached the approval gate. After this
 fix merges to `main`, the operator must first re-prove that
-`J-Tech-Japan/sekiban-swift` is empty with zero remote tags, then re-cut
-`swift-v0.1.0` at the merged commit. Re-run the gate and confirm
+`J-Tech-Japan/sekiban-swift` remains intact with published `v0.1.0`, then cut
+`swift-v0.1.1` at the merged commit. Re-run the gate and confirm
 `mirror-push` is waiting on the `swift-mirror-release` approval gate. Do not
 approve the gate or publish from implementation work.
+
+## Staged-tree publication invariant (SWR-G076)
+
+The staged tree is the published surface and must contain exactly `LICENSE`,
+`Package.swift`, `README.md`, `Sources`, and `Tests`. The verification build
+and test still run against that staged package, but SwiftPM scratch output is
+redirected outside the staged tree so `.build` can never be copied into the
+mirror. The sync script asserts the exact top-level contents before any push
+and reports missing or unexpected entries with a diff.
+
+The published `v0.1.0` remains resolvable but is superseded because its mirror
+root included SwiftPM build output. After merge, re-run the dry-run, cut
+`swift-v0.1.1`, and let the protected `swift-mirror-release` approval gate be
+reviewed by the operator. Implementation must not tag, approve, or publish.
+
+The npm, Go, and MoonBit release lanes do not use this Swift mirror staging
+shape; this exact-content and external-scratch invariant is therefore specific
+to the Swift sync script.

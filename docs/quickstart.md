@@ -261,12 +261,13 @@ recorded follow-up. See the sample README for the two-stage verification.
 The Swift equivalent is
 [`src/samples/Sekiban.Dcb.WasmRuntime.PublicSpm.SwiftDecider`](../src/samples/Sekiban.Dcb.WasmRuntime.PublicSpm.SwiftDecider):
 its committed `Package.swift` depends on the public
-`github.com/J-Tech-Japan/sekiban-swift` mirror at exact 0.1.0 with no
+`github.com/J-Tech-Japan/sekiban-swift` mirror at exact 0.1.1 with no
 path-based references (guarded), and its smoke runs the same four checks
-against the public runtime container. Until the mirror is public, run the
+against the public runtime container. Before v0.1.1 is published, run the
 clearly-labeled pre-publish dry-run (`smoke.sh --local-package`, redirecting
 the URL to the staged mirror tree via SwiftPM dependency mirroring); the
-mirror-resolved run (`smoke.sh`) is the recorded follow-up. Its
+mirror-resolved run (`smoke.sh`) is the recorded follow-up after v0.1.1 is
+published. Version v0.1.0 remains published but superseded. Its
 `linux-build-check.sh` records whether the package builds with Swift in a
 Linux container (see `docs/release/swift-sdk-release-lane.md`).
 

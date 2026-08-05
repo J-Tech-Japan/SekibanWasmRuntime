@@ -28,6 +28,12 @@ PACKAGE_DIR="$ROOT/src/wasm-projectors/swift"
 STAGE_ROOT="${SEKIBAN_SWIFT_MIRROR_STAGE_DIR:-$ROOT/artifacts/sekiban-swift-mirror}"
 STAGE_DIR="$STAGE_ROOT/tree"
 MIRROR_REPO="${SEKIBAN_SWIFT_MIRROR_REPO:-J-Tech-Japan/sekiban-swift}"
+SCRATCH_DIR=""
+
+cleanup() {
+  [[ -z "$SCRATCH_DIR" ]] || rm -rf "$SCRATCH_DIR"
+}
+trap cleanup EXIT
 
 MODE=""
 VERSION=""
@@ -62,6 +68,13 @@ for entry in Package.swift README.md LICENSE Sources Tests; do
 done
 log "staged mirror tree at ${STAGE_DIR#"$ROOT"/}"
 
+expected_entries=$(printf '%s\n' LICENSE Package.swift README.md Sources Tests | sort)
+actual_entries=$(find "$STAGE_DIR" -mindepth 1 -maxdepth 1 -exec basename {} \; | sort)
+if ! entry_diff=$(diff -u <(printf '%s\n' "$expected_entries") <(printf '%s\n' "$actual_entries")); then
+  fail "staged tree must contain exactly LICENSE, Package.swift, README.md, Sources, Tests; unexpected or missing entries:\n$entry_diff"
+fi
+log "staged tree contents exactly: LICENSE Package.swift README.md Sources Tests"
+
 # ---------------------------------------------------------------------------
 # 2. Guard: the staged tree must be self-contained. Any host-repo relative
 #    path reference — path-based package dependencies, parent-directory
@@ -91,10 +104,11 @@ log "guard OK: no host-repo relative path references anywhere in the staged tree
 #    external consumer would receive it.
 # ---------------------------------------------------------------------------
 
-log "swift build (staged tree)"
-swift build --package-path "$STAGE_DIR" || fail "swift build failed inside the staged tree"
+SCRATCH_DIR="$(mktemp -d "${TMPDIR:-/tmp}/sekiban-swift-mirror-build.XXXXXX")"
+log "swift build (staged tree, scratch outside staged tree: $SCRATCH_DIR)"
+swift build --package-path "$STAGE_DIR" --scratch-path "$SCRATCH_DIR" || fail "swift build failed inside the staged tree"
 log "swift test (staged tree)"
-swift test --package-path "$STAGE_DIR" || fail "swift test failed inside the staged tree"
+swift test --package-path "$STAGE_DIR" --scratch-path "$SCRATCH_DIR" || fail "swift test failed inside the staged tree"
 
 if [[ "$MODE" == "dry-run" ]]; then
   log "DRY-RUN PASS: staged tree is self-contained and builds/tests standalone"
