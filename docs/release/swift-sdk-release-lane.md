@@ -167,3 +167,33 @@ fix merges to `main`, the operator must first re-prove that
 `swift-v0.1.0` at the merged commit. Re-run the gate and confirm
 `mirror-push` is waiting on the `swift-mirror-release` approval gate. Do not
 approve the gate or publish from implementation work.
+
+### Outcome and the design lesson (SWR-G075 closeout)
+
+That sequence was carried out and **Swift SDK 0.1.0 is published**: the re-cut
+tag ran green, the operator approved `swift-mirror-release`, and the mirror
+received the package at tag `v0.1.0` (`d73b4767`). Publication was proven by
+consumption, not by a green workflow — a throwaway package declaring
+`.package(url: "https://github.com/J-Tech-Japan/sekiban-swift", exact: "0.1.0")`
+resolved and built, linking `libSekibanWasm.a`.
+
+Two lessons are worth keeping, because neither was visible from inside the
+implementation:
+
+**A lane that has never run is not a lane.** This one was authored, reviewed,
+merged, and documented as ready long before it could execute, because it was
+blocked on human prerequisites (mirror repository, token, protected
+environment). The first real tag push was also its first execution, and it
+failed on its first line. A dry-run passing locally proved nothing about CI: it
+ran under the developer's shell, not the container's. Treat "prepared" and
+"proven runnable" as different states, and prefer proving a lane end to end —
+even against a throwaway version — over declaring it ready.
+
+**Diagnose before recording a cause.** The first root cause recorded for this
+failure was that the image lacked bash. It was wrong, asserted without probing
+the image, and it would have been preserved here as documentation had review not
+disproved it with `docker run --rm swift:6.1-noble sh -c 'command -v bash'`. The
+true cause — Actions defaulting container-job steps to `sh` — is the one written
+above. A plausible cause recorded as fact is worse than an open question,
+because it stops the next person from looking.
+
