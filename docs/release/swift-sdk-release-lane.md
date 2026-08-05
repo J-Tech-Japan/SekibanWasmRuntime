@@ -33,9 +33,9 @@ basename, which is `swift` in the monorepo).
 
 ## Tag Convention
 
-- Monorepo release tag: `swift-vX.Y.Z` (first release `swift-v0.1.0`).
+- Monorepo release tag: `swift-vX.Y.Z` (next clean release `swift-v0.1.1`).
 - Mirror repository tag: plain `vX.Y.Z` (what SwiftPM consumers see as
-  `from: "0.1.0"`); created by the sync script during `--push`.
+  `from: "0.1.1"`); created by the sync script during `--push`.
 
 ## Sync Flow
 
@@ -71,8 +71,8 @@ access to it, or token.
 ## First-publish prerequisites (provisioned)
 
 The mirror repository, push token, and protected `swift-mirror-release`
-environment are provisioned. Before the post-merge `swift-v0.1.0` re-cut,
-the operator must re-prove that the mirror is empty and has zero remote tags.
+environment are provisioned. `v0.1.0` is published and immutable. After this
+fix merges, the operator must cut `swift-v0.1.1` for the clean artifact.
 The operator/reviewer then approves the protected environment; implementation
 work must not approve or publish.
 
@@ -82,7 +82,7 @@ package:
 ```bash
 cd "$(mktemp -d)" && swift package init --type executable
 # add to Package.swift:
-#   .package(url: "https://github.com/J-Tech-Japan/sekiban-swift", from: "0.1.0")
+#   .package(url: "https://github.com/J-Tech-Japan/sekiban-swift", from: "0.1.1")
 swift package resolve
 ```
 
@@ -90,7 +90,7 @@ swift package resolve
 
 [`src/samples/Sekiban.Dcb.WasmRuntime.PublicSpm.SwiftDecider`](../../src/samples/Sekiban.Dcb.WasmRuntime.PublicSpm.SwiftDecider)
 is the external-consumer proof for this lane: its committed `Package.swift`
-depends on `https://github.com/J-Tech-Japan/sekiban-swift` at exact 0.1.0 with
+depends on `https://github.com/J-Tech-Japan/sekiban-swift` at exact 0.1.1 with
 no path-based references (guard: `scripts/verify-no-local-sekiban-paths.sh`),
 and its smoke validates command execution, tag-state readback, in-memory
 projection queries, and materialized-view catch-up against the public GHCR
@@ -162,9 +162,8 @@ run on their normal hosted Ubuntu shell. The Swift lane's explicit shell is the
 remaining container compatibility boundary.
 
 The failed first run (30876914701) never reached the approval gate. After this
-fix merges to `main`, the operator must first re-prove that
-`J-Tech-Japan/sekiban-swift` is empty with zero remote tags, then re-cut
-`swift-v0.1.0` at the merged commit. Re-run the gate and confirm
+fix merges to `main`, the operator should run the clean dry-run, then cut
+`swift-v0.1.1` at the merged commit. Re-run the gate and confirm
 `mirror-push` is waiting on the `swift-mirror-release` approval gate. Do not
 approve the gate or publish from implementation work.
 

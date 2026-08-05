@@ -51,13 +51,15 @@ if [[ -z "$MODE" ]]; then
 fi
 
 log() { printf '[sync-sekiban-swift-mirror] %s\n' "$*"; }
-fail() { printf '[sync-sekiban-swift-mirror] FAIL: %b\n' "$*" >&2; exit 1; }
+fail() { printf '[sync-sekiban-swift-mirror] FAIL: %s\n' "$*" >&2; exit 1; }
 
 assert_stage_contents() {
   expected_entries=$(printf '%s\n' LICENSE Package.swift README.md Sources Tests | sort)
   actual_entries=$(find "$STAGE_DIR" -mindepth 1 -maxdepth 1 -exec basename {} \; | sort)
   if ! entry_diff=$(diff -u <(printf '%s\n' "$expected_entries") <(printf '%s\n' "$actual_entries")); then
-    fail "staged tree must contain exactly LICENSE, Package.swift, README.md, Sources, Tests; unexpected or missing entries:\n$entry_diff"
+    printf '[sync-sekiban-swift-mirror] FAIL: staged tree must contain exactly LICENSE, Package.swift, README.md, Sources, Tests; unexpected or missing entries:\n' >&2
+    printf '%s\n' "$entry_diff" >&2
+    exit 1
   fi
   log "staged tree contents exactly: LICENSE Package.swift README.md Sources Tests"
 }
