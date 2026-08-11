@@ -81,9 +81,9 @@ release line and destroyed its independent versioning. That trade-off was
 decided deliberately, and reversing it was considered and rejected.
 
 **Use `0.1.1`, not `0.1.0`.** `0.1.0` resolves and builds correctly, but its
-tree carries ~174 KB of SwiftPM build output that was published by mistake.
-`0.1.1` is the same SDK with a clean tree. `0.1.0` is left in place because
-published versions are immutable.
+tree carries about 47.5 MiB across 963 `.build` entries that were published by
+mistake. `0.1.1` is the same SDK with a clean tree. `0.1.0` is left in place
+because published versions are immutable.
 
 ---
 
@@ -96,9 +96,13 @@ can provision.
 
 | Artifact | Registry | Blocked on |
 | --- | --- | --- |
-| `@sekiban/ts`, `@sekiban/as-wasm`, `@sekiban/aspire`, `create-sekiban-wasm` | npm | `@sekiban` scope auth + `npm-release` environment approval |
+| `@sekiban/ts`, `@sekiban/as-wasm`, `@sekiban/aspire` | npm | `@sekiban` scope auth + `npm-release` environment approval |
 | `sekiban/sekiban-wasm-runtime`, `sekiban/sekiban-client` | mooncakes.io | account + `sekiban` scope + `moon publish` auth |
 | `Sekiban.Dcb.WasmRuntime.Templates` (`dotnet new sekiban-wasm-decider`) | NuGet | Trusted Publishing policy for the new package id |
+
+`create-sekiban-wasm` is not lane ready yet: it has no publishing workflow.
+The `npx create-sekiban-wasm` command becomes a public install path only after
+that separate lane is implemented and published.
 
 **Go is a special case: nothing is blocked, only untagged.** It publishes as a
 monorepo subdirectory module — no mirror, no credential, because the repository
@@ -131,8 +135,12 @@ in [`release/release-tag-conventions.md`](release/release-tag-conventions.md).
 | MoonBit | `moonbit-v<version>` | tag push |
 | Go SDK | `src/lib/sekiban-go/v<version>` | tag push |
 
-Every publishing job sits behind a protected GitHub environment with required
-reviewers, so no lane can publish without a human approving that specific run.
+Publishing controls vary by lane. The Swift mirror uses the protected
+`swift-mirror-release` environment with required reviewers. Other workflows
+may name an environment without required-reviewer rules, and the runtime image
+lane publishes directly from its tag/manual trigger without an environment.
+Check the target workflow and current GitHub environment rules before cutting a
+release; an environment name alone does not guarantee a human approval pause.
 
 ---
 
