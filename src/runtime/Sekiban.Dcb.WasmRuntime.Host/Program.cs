@@ -152,7 +152,8 @@ builder.Services.Configure<MessagingOptions>(options =>
 // never fall back to ambient/default identity once the host is configured.
 var configuredServiceId = builder.Configuration["Sekiban:ServiceId"]
     ?? builder.Configuration["SEKIBAN_SERVICE_ID"]
-    ?? DefaultServiceIdProvider.DefaultServiceId;
+    ?? throw new InvalidOperationException(
+        "Sekiban:ServiceId or SEKIBAN_SERVICE_ID is required for an explicit service-scoped MV identity.");
 builder.Services.AddSingleton<IServiceIdProvider>(new FixedServiceIdProvider(configuredServiceId));
 RuntimeHostStorageConfigurationResolver.ConfigureServices(
     builder.Services,

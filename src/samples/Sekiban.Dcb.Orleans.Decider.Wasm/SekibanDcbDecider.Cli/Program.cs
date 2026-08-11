@@ -1574,7 +1574,7 @@ static ServiceProvider BuildServices(
         // Register Cosmos DB services with options
         var cosmosContext = new CosmosDbContext(connectionString, cosmosDatabaseName, options: cosmosOptions);
         services.AddSingleton(cosmosOptions);
-        services.AddSingleton<Sekiban.Dcb.ServiceId.IServiceIdProvider, Sekiban.Dcb.ServiceId.DefaultServiceIdProvider>();
+        services.AddSingleton<Sekiban.Dcb.ServiceId.IServiceIdProvider>(new Sekiban.Dcb.ServiceId.FixedServiceIdProvider(Environment.GetEnvironmentVariable("SEKIBAN_SERVICE_ID") ?? throw new InvalidOperationException("SEKIBAN_SERVICE_ID is required for an explicit service-scoped MV identity.")));
         services.AddSingleton<ICosmosContainerResolver, DefaultCosmosContainerResolver>();
         services.AddSingleton(cosmosContext);
         if (useCache)
@@ -1597,7 +1597,7 @@ static ServiceProvider BuildServices(
         });
 
         // Register event store
-        services.AddSingleton<Sekiban.Dcb.ServiceId.IServiceIdProvider, Sekiban.Dcb.ServiceId.DefaultServiceIdProvider>();
+        services.AddSingleton<Sekiban.Dcb.ServiceId.IServiceIdProvider>(new Sekiban.Dcb.ServiceId.FixedServiceIdProvider(Environment.GetEnvironmentVariable("SEKIBAN_SERVICE_ID") ?? throw new InvalidOperationException("SEKIBAN_SERVICE_ID is required for an explicit service-scoped MV identity.")));
         if (useCache)
         {
             services.AddSingleton<IEventStore>(sp =>
