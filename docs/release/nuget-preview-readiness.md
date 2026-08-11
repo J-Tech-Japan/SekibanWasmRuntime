@@ -1,11 +1,17 @@
 # NuGet Preview 1.0.0-preview.3 Readiness
 
-This is the release-readiness record for the Sekiban.Dcb 10.8.0 dependency
-refresh tracked by [#253]. It prepares the three SekibanWasmRuntime NuGet
-packages for `1.0.0-preview.3`; it does not create a GitHub Release or publish
-packages.
+This is the release-readiness record for the Sekiban.Dcb 10.12.0 dependency
+refresh tracked by [#264]. It prepares the runtime against the dcb-v10.12.0
+baseline; it does not create a GitHub Release or publish packages.
 
 ## Dependency Baseline
+
+For SWR-G078, every centrally managed `Sekiban.Dcb.*` package is pinned to
+`10.12.0`, and `submodules/Sekiban` is aligned to `dcb-v10.12.0`. The package
+and source baselines are intentionally kept together so mixed binary versions
+cannot enter one process.
+
+The 10.8.0 notes below are retained as the previous release record.
 
 - Every centrally managed `Sekiban.Dcb.*` package in
   `Directory.Packages.props` is pinned to `10.8.0`.
@@ -163,3 +169,35 @@ cut GitHub Release `v1.0.0-preview.3` through the existing protected
 explicitly outside this PR.
 
 [#253]: https://github.com/J-Tech-Japan/SekibanWasmRuntime/issues/253
+
+## SWR-G078 10.12.0 Verification
+
+The published 10.12.0 assemblies were used for the compatibility probes. In
+the reservation API, `null` means UNOBSERVED/UNSPECIFIED (no comparison), while
+`""` means AssertEmpty and a non-empty value means ExactMatch. The serialized
+commit contract rejects null; this runtime's normalization to empty is
+load-bearing and intentionally preserves serialized safety.
+
+SEK-G22 is authoritative: when the cache is empty but a non-empty expected
+version is supplied, 10.12.0 re-reads the event store under the reservation
+lock before deciding. This can turn the cached-empty conflict shape into a
+successful exact-match update after reconciliation.
+
+The materialized-view catch-up path was exercised by the passing
+`reports/smoke/public-container-cs-decider-smoke.md` public-container smoke.
+That smoke uses the published `1.0.0-preview.3` runtime image and the 10.2.2
+CsDecider fixture, so it proves the published public-container MV surface still
+catches up; it does not execute the 10.12.0 MV server code.
+The optional `IExecutedUserProvider` remains an opt-in extension point and no
+runtime adoption is required by this refresh.
+
+Mixed-version runtime exchange was not executed. Executed evidence is limited
+to the same-baseline 10.12.0 serialized contract suite (59/59) and
+restore/build/dependency resolution of the preserved 10.2.2/10.1.8 fixtures.
+SEK-G22's cached-empty authoritative re-read is a published 10.12.0
+source-derived finding, not an observed repo-run result. Package binaries in
+one process must remain on one baseline.
+
+The Aspire + Playwright gate ran `weather-clientapi-crud.spec.js` and
+`weather-web-ui-crud.spec.js`; `serialized command execute + commit works` was
+skipped by the existing browser fixture and is named explicitly here.
