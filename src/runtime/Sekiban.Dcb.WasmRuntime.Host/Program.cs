@@ -227,7 +227,8 @@ var materializedViewEnabled = materializedViewRequested
     && builder.Services.AddSekibanWasmMaterializedViewRuntime(
         builder.Configuration,
         manifest.DefaultModulePath,
-        wasmMvRegistrations);
+        wasmMvRegistrations,
+        configuredServiceId);
 if (!materializedViewRequested)
 {
     Console.WriteLine("SEKIBAN_PROJECTION_MODE=memory-only: skipping materialized-view runtime registration.");

@@ -209,6 +209,9 @@ from upstream commits `25c5d8ef` and `c05d4c01`, first released in
 `dcb-v10.11.0`; this repository remains entirely on the existing 10.12.0
 package baseline. `Sekiban:ServiceId` (or `SEKIBAN_SERVICE_ID`) is normalized
 once into an immutable `FixedServiceIdProvider` before MV registration, so the
-hosted and Orleans paths share one explicit identity. Missing, swapped, or
+hosted and Orleans paths share one explicit identity. The host calls
+Sekiban's released `AddSekibanDcbMaterializedViewWorkerForService` API with
+that identity and does not register the ambient worker. Missing, swapped, or
 mismatched identities are rejected before event decode/apply and provider I/O;
-single-service compatibility remains the default identity path.
+the default identity is not an implicit fallback, and single-service
+compatibility must be an explicit caller opt-in.

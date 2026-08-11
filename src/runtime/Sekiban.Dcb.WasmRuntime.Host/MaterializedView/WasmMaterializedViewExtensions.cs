@@ -45,11 +45,13 @@ public static class WasmMaterializedViewExtensions
         IConfiguration configuration,
         string defaultModulePath,
         IReadOnlyList<WasmMvApplyHostRegistration> registrations,
+        string serviceId,
         string connectionStringName = DefaultConnectionStringName)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(registrations);
+        ArgumentException.ThrowIfNullOrWhiteSpace(serviceId);
 
         if (registrations.Count == 0)
         {
@@ -94,7 +96,10 @@ public static class WasmMaterializedViewExtensions
         services.AddSekibanDcbMaterializedViewPostgres(
             configuration,
             connectionStringName: connectionStringName,
-            registerHostedWorker: true);
+            registerHostedWorker: false);
+        // Use Sekiban's released service-bound worker contract. This immutable
+        // binding is what scopes event-source reads and registry positions.
+        services.AddSekibanDcbMaterializedViewWorkerForService(serviceId);
         services.AddSekibanDcbMaterializedViewOrleans();
 
         // Replace Sekiban's default NativeMvApplyHostFactory (which looks up CLR
