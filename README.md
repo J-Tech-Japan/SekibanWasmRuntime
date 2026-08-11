@@ -55,6 +55,10 @@ See [src/internalUsages/README.md](src/internalUsages/README.md) for detailed ar
 
 ## NuGet Packages
 
+> Looking for everything we publish — .NET, Rust, Swift, and the runtime
+> container, plus what is still waiting on a credential? See
+> [docs/public-packages.md](docs/public-packages.md).
+
 The first public packages are preview packages versioned as `1.0.0-preview.*`.
 
 | Package | Install when | Support tier |
