@@ -7,7 +7,7 @@ const appHostKind = process.env.E2E_APPHOST_KIND ?? 'apphost';
 test('serialized command execute + commit works', async ({ playwright }) => {
   test.skip(
     sample === 'rust' || appHostKind === 'generic',
-    'Common runtime host and Rust sample execute commands through ClientApi; serialized command execute is not exposed.'
+    'The generic Aspire host does not expose serialized command execute; the equivalent serialized contract gate runs 59 non-skipped tests.'
   );
 
   const wasmApiBaseUrl = process.env.WASM_API_BASE_URL ?? 'http://127.0.0.1:3000';
