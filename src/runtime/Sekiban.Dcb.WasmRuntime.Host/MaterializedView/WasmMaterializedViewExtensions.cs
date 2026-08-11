@@ -86,8 +86,8 @@ public static class WasmMaterializedViewExtensions
             options.PollInterval = TimeSpan.FromSeconds(1);
         });
 
-        // registerHostedWorker:true enables the MvCatchUpWorker BackgroundService that polls the
-        // event store and drives IMvExecutor.CatchUpOnceAsync outside the Orleans grain. The grain
+        // The released service-bound MvCatchUpWorker polls the event store and drives
+        // IMvExecutor.CatchUpOnceAsync outside the Orleans grain. The grain
         // still handles stream-driven apply when events are published to the Orleans stream, but
         // the worker guarantees progress even when the Orleans stream has no publisher wired up
         // (which is the current state in the WASM runtime host — commits go through the WASM
