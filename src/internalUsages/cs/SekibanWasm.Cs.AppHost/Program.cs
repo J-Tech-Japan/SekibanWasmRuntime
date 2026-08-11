@@ -31,6 +31,7 @@ if (!File.Exists(wasmModulePath))
 
 var wasmServerBuilder = builder
     .AddProject<Sekiban_Dcb_WasmRuntime_Host>("wasmserver")
+    .WithEnvironment("SEKIBAN_SERVICE_ID", Environment.GetEnvironmentVariable("SEKIBAN_SERVICE_ID") ?? "sekiban-wasm-local")
     .WithEnvironment("SEKIBAN_STORAGE_PROVIDER", "postgres")
     // Keep the internal E2E host on the fully consistent Orleans query path.
     // The benchmark/sample AppHost still enables direct snapshot querying when

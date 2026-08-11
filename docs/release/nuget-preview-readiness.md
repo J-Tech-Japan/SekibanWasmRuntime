@@ -215,3 +215,8 @@ that identity and does not register the ambient worker. Missing, swapped, or
 mismatched identities are rejected before event decode/apply and provider I/O;
 the default identity is not an implicit fallback, and single-service
 compatibility must be an explicit caller opt-in.
+
+Repository AppHosts set `SEKIBAN_SERVICE_ID=sekiban-wasm-local` for supported
+local launches. Direct deployments must set either `Sekiban:ServiceId` or
+`SEKIBAN_SERVICE_ID`; missing, empty, invalid, and implicit `default` values
+fail during startup and the error names both supported configuration keys.

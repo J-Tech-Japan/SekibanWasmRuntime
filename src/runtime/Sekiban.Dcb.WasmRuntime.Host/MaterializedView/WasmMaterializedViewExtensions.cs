@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sekiban.Dcb.MaterializedView;
 using Sekiban.Dcb.MaterializedView.Orleans;
 using Sekiban.Dcb.MaterializedView.Postgres;
+using Sekiban.Dcb.ServiceId;
 
 namespace Sekiban.Dcb.WasmRuntime.Host.MaterializedView;
 
@@ -32,6 +33,44 @@ namespace Sekiban.Dcb.WasmRuntime.Host.MaterializedView;
 public static class WasmMaterializedViewExtensions
 {
     public const string DefaultConnectionStringName = "DcbMaterializedViewPostgres";
+    public const string ServiceIdConfigurationKey = "Sekiban:ServiceId";
+    public const string ServiceIdEnvironmentKey = "SEKIBAN_SERVICE_ID";
+
+    /// <summary>
+    ///     Resolves and normalizes the runtime host's one immutable service identity.
+    /// </summary>
+    public static FixedServiceIdProvider ResolveRequiredServiceIdProvider(IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        var configured = configuration[ServiceIdConfigurationKey] ?? configuration[ServiceIdEnvironmentKey];
+        if (string.IsNullOrWhiteSpace(configured))
+        {
+            throw new InvalidOperationException(
+                $"{ServiceIdConfigurationKey} or {ServiceIdEnvironmentKey} is required for an explicit service-scoped MV identity.");
+        }
+
+        try
+        {
+            var provider = new FixedServiceIdProvider(configured);
+            if (string.Equals(
+                    provider.GetCurrentServiceId(),
+                    DefaultServiceIdProvider.DefaultServiceId,
+                    StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"{ServiceIdConfigurationKey} or {ServiceIdEnvironmentKey} cannot use the implicit default ServiceId. " +
+                    $"Use {nameof(MvOptions.AllowDefaultServiceId)} only in an explicit single-service compatibility host.");
+            }
+
+            return provider;
+        }
+        catch (ArgumentException exception)
+        {
+            throw new InvalidOperationException(
+                $"{ServiceIdConfigurationKey} or {ServiceIdEnvironmentKey} must contain a valid explicit ServiceId: {exception.Message}",
+                exception);
+        }
+    }
 
     /// <summary>
     ///     Registers the WASM MV runtime for the given <paramref name="registrations"/>.

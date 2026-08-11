@@ -6,7 +6,8 @@
       "launchBrowser": false,
       "applicationUrl": "http://localhost:5198",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "SEKIBAN_SERVICE_ID": "sekiban-cs-local"
       }
     }
   }

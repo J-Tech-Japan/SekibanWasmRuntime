@@ -32,6 +32,7 @@ var csharpManifestPath = ResolveCSharpManifestPath(csharpWasmModulePath);
 var wasmApiPort = ResolveConfiguredPort(5199, "E2E_WASM_PORT");
 var wasmServerBuilder = builder
     .AddProject<Sekiban_Dcb_WasmRuntime_Host>("wasmserver")
+    .WithEnvironment("SEKIBAN_SERVICE_ID", Environment.GetEnvironmentVariable("SEKIBAN_SERVICE_ID") ?? "sekiban-wasm-local")
     .WithEnvironment("SEKIBAN_STORAGE_PROVIDER", "postgres")
     .WithEnvironment("WASM_MODULE_PATH", csharpWasmModulePath)
     .WithEnvironment("SEKIBAN_MANIFEST_PATH", csharpManifestPath)

@@ -147,14 +147,11 @@ builder.Services.Configure<MessagingOptions>(options =>
     options.ResponseTimeout = queryResponseTimeout;
 });
 
-// Bind the host to one immutable service identity.  The released 10.12.0 MV
-// worker/executor uses this provider for every event-store and registry access;
-// never fall back to ambient/default identity once the host is configured.
-var configuredServiceId = builder.Configuration["Sekiban:ServiceId"]
-    ?? builder.Configuration["SEKIBAN_SERVICE_ID"]
-    ?? throw new InvalidOperationException(
-        "Sekiban:ServiceId or SEKIBAN_SERVICE_ID is required for an explicit service-scoped MV identity.");
-builder.Services.AddSingleton<IServiceIdProvider>(new FixedServiceIdProvider(configuredServiceId));
+// Bind the host to one normalized, immutable service identity. The same exact value is used by
+// event-store access, the Orleans path, and the released 10.12.0 service-bound MV worker.
+var serviceIdProvider = WasmMaterializedViewExtensions.ResolveRequiredServiceIdProvider(builder.Configuration);
+var configuredServiceId = serviceIdProvider.GetCurrentServiceId();
+builder.Services.AddSingleton<IServiceIdProvider>(serviceIdProvider);
 RuntimeHostStorageConfigurationResolver.ConfigureServices(
     builder.Services,
     builder.Configuration,
@@ -202,14 +199,15 @@ builder.Services.AddOpenApi();
 // `DcbMaterializedViewPostgres` connection string is configured, wire:
 //   - Sekiban.Dcb.MaterializedView (base + options)
 //   - Sekiban.Dcb.MaterializedView.Postgres (event-store-reading catch-up executor + registry
-//     store, WITH the hosted MvCatchUpWorker enabled — see registerHostedWorker:true below).
+//     store, with its ambient worker disabled).
+//   - One released service-bound MvCatchUpWorker registered for configuredServiceId.
 //   - Sekiban.Dcb.MaterializedView.Orleans (MaterializedViewGrain activation + stream
 //     subscription — receives events if any publisher pushes to the Orleans stream).
 //   - WasmtimeMaterializedViewExecutor + one WasmBackedMaterializedViewProjector per manifest
 //     entry. The shim implements IMaterializedViewProjector so the existing
 //     `MaterializedViewGrain` + `PostgresMvExecutor` treat it like a CLR projector.
 //
-// Catch-up in this wiring is driven by BOTH paths: the Postgres hosted worker polls the event
+// Catch-up in this wiring is driven by BOTH paths: the service-bound hosted worker polls the event
 // store (guaranteeing progress even without an Orleans event publisher), while the Orleans
 // grain takes over when events arrive on `EventStreamProvider`. The two paths coordinate via
 // MvRegistryStore positions so no double-apply occurs.

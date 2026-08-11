@@ -25,6 +25,7 @@ var storageProvider = AppHostInfrastructure.ResolveStorageProvider();
 
 var runtimeBuilder = builder
     .AddProject<Sekiban_Dcb_WasmRuntime_Host>("runtime")
+    .WithEnvironment("SEKIBAN_SERVICE_ID", Environment.GetEnvironmentVariable("SEKIBAN_SERVICE_ID") ?? "sekiban-wasm-local")
     .WithEnvironment("SEKIBAN_STORAGE_PROVIDER", storageProvider.ToString().ToLowerInvariant())
     .WithEnvironment("WASM_MODULE_PATH", wasmModulePath);
 
