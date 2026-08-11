@@ -172,18 +172,30 @@ explicitly outside this PR.
 
 ## SWR-G078 10.12.0 Verification
 
-The published 10.12.0 assemblies were used for the compatibility probes (the
-submodule checkout is only the source alignment). Tag reservation still treats
-an omitted/empty expected token as `UNSPECIFIED`: empty→empty is the first-write
-case, while empty→existing and non-empty mismatches conflict. Create, update,
-and delete requests preserve the expected-version token; this was checked by
-executing the public client flow rather than inferred from release notes.
+The published 10.12.0 assemblies were used for the compatibility probes. In
+the reservation API, `null` means UNOBSERVED/UNSPECIFIED (no comparison), while
+`""` means AssertEmpty and a non-empty value means ExactMatch. The serialized
+commit contract rejects null; this runtime's normalization to empty is
+load-bearing and intentionally preserves serialized safety.
 
-The materialized-view catch-up path was exercised by the public-container smoke.
+SEK-G22 is authoritative: when the cache is empty but a non-empty expected
+version is supplied, 10.12.0 re-reads the event store under the reservation
+lock before deciding. This can turn the cached-empty conflict shape into a
+successful exact-match update after reconciliation.
+
+The materialized-view catch-up path was exercised by the passing
+`reports/smoke/public-container-cs-decider-smoke.md` public-container smoke,
+which asserts the materialized-view row after commit.
 The optional `IExecutedUserProvider` remains an opt-in extension point and no
 runtime adoption is required by this refresh.
 
-Mixed-version direction: a 10.12.0 client can talk to a 10.8.x server when it
-uses the shared serialized contract and expected token; a 10.8.x client remains
-readable by a 10.12.0 server, but stale empty expected tokens on existing tags
-are rejected. Package binaries in one process must remain on one baseline.
+Mixed-version direction evidence is recorded by the serialized contract probes:
+10.12.0 client → 10.8.x server remains readable with explicit expected tokens;
+10.8.x client → 10.12.0 server remains readable, with the 10.12.0 server's
+SEK-G22 re-read path handling cached-empty/non-empty expected versions. The
+historical 10.1.8/10.2.2 sample pins remain deliberate old-client fixtures.
+Package binaries in one process must remain on one baseline.
+
+The Aspire + Playwright gate ran `weather-clientapi-crud.spec.js` and
+`weather-web-ui-crud.spec.js`; `serialized command execute + commit works` was
+skipped by the existing browser fixture and is named explicitly here.
