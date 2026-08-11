@@ -1,15 +1,11 @@
-# DCB 10.8 / 10.12 mixed-version evidence
+# DCB 10.8 / 10.12 compatibility evidence boundary
 
-The serialized contract black-box suite was executed against the fixed head
-(`scripts/contract/run-serialized-dcb-contract-baseline.sh`, 59/59 passed).
-Both directional compatibility probes use the same V1 envelope and explicit
-consistency tokens:
+Executed evidence is the same-baseline 10.12.0 serialized contract suite
+(59/59 passed), plus restore/build/dependency resolution of the preserved
+10.2.2 and 10.1.8 compatibility fixtures. No bidirectional runtime exchange
+between 10.8.x and 10.12.0 was executed.
 
-| Direction | Executed result |
-| --- | --- |
-| 10.12.0 client → 10.8.x server | V1 envelope and exact expected token remain readable; matching writes pass. |
-| 10.8.x client → 10.12.0 server | V1 envelope remains readable; the 10.12.0 SEK-G22 reservation path re-reads the event store under lock when cache is empty before exact-match evaluation. |
-
-The probes also confirmed serialized null reservations are rejected; clients
-must send an empty string for AssertEmpty. Historical 10.1.8/10.2.2 sample
-pins remain in place as old-client fixtures.
+The documented compatibility directions remain behavioural boundaries, not
+executed results. SEK-G22's cached-empty authoritative event-store re-read
+under reservation lock is a published 10.12.0 source-derived finding, not an
+observation made by this repository's runtime suite.

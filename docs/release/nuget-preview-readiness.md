@@ -184,17 +184,19 @@ lock before deciding. This can turn the cached-empty conflict shape into a
 successful exact-match update after reconciliation.
 
 The materialized-view catch-up path was exercised by the passing
-`reports/smoke/public-container-cs-decider-smoke.md` public-container smoke,
-which asserts the materialized-view row after commit.
+`reports/smoke/public-container-cs-decider-smoke.md` public-container smoke.
+That smoke uses the published `1.0.0-preview.3` runtime image and the 10.2.2
+CsDecider fixture, so it proves the published public-container MV surface still
+catches up; it does not execute the 10.12.0 MV server code.
 The optional `IExecutedUserProvider` remains an opt-in extension point and no
 runtime adoption is required by this refresh.
 
-Mixed-version direction evidence is recorded by the serialized contract probes:
-10.12.0 client → 10.8.x server remains readable with explicit expected tokens;
-10.8.x client → 10.12.0 server remains readable, with the 10.12.0 server's
-SEK-G22 re-read path handling cached-empty/non-empty expected versions. The
-historical 10.1.8/10.2.2 sample pins remain deliberate old-client fixtures.
-Package binaries in one process must remain on one baseline.
+Mixed-version runtime exchange was not executed. Executed evidence is limited
+to the same-baseline 10.12.0 serialized contract suite (59/59) and
+restore/build/dependency resolution of the preserved 10.2.2/10.1.8 fixtures.
+SEK-G22's cached-empty authoritative re-read is a published 10.12.0
+source-derived finding, not an observed repo-run result. Package binaries in
+one process must remain on one baseline.
 
 The Aspire + Playwright gate ran `weather-clientapi-crud.spec.js` and
 `weather-web-ui-crud.spec.js`; `serialized command execute + commit works` was
