@@ -147,7 +147,13 @@ builder.Services.Configure<MessagingOptions>(options =>
     options.ResponseTimeout = queryResponseTimeout;
 });
 
-builder.Services.AddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
+// Bind the host to one immutable service identity.  The released 10.12.0 MV
+// worker/executor uses this provider for every event-store and registry access;
+// never fall back to ambient/default identity once the host is configured.
+var configuredServiceId = builder.Configuration["Sekiban:ServiceId"]
+    ?? builder.Configuration["SEKIBAN_SERVICE_ID"]
+    ?? DefaultServiceIdProvider.DefaultServiceId;
+builder.Services.AddSingleton<IServiceIdProvider>(new FixedServiceIdProvider(configuredServiceId));
 RuntimeHostStorageConfigurationResolver.ConfigureServices(
     builder.Services,
     builder.Configuration,
