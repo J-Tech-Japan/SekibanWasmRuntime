@@ -19,7 +19,7 @@
     submodule-source references.
   -->
   <ItemGroup>
-    <PackageReference Include="Sekiban.Dcb.WithoutResult" Version="10.2.2" />
+    <PackageReference Include="Sekiban.Dcb.WithoutResult" Version="10.12.0" />
   </ItemGroup>
 
 </Project>

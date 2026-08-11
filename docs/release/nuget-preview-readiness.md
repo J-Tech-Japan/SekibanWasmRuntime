@@ -1,11 +1,17 @@
 # NuGet Preview 1.0.0-preview.3 Readiness
 
-This is the release-readiness record for the Sekiban.Dcb 10.8.0 dependency
-refresh tracked by [#253]. It prepares the three SekibanWasmRuntime NuGet
-packages for `1.0.0-preview.3`; it does not create a GitHub Release or publish
-packages.
+This is the release-readiness record for the Sekiban.Dcb 10.12.0 dependency
+refresh tracked by [#264]. It prepares the runtime against the dcb-v10.12.0
+baseline; it does not create a GitHub Release or publish packages.
 
 ## Dependency Baseline
+
+For SWR-G078, every centrally managed `Sekiban.Dcb.*` package is pinned to
+`10.12.0`, and `submodules/Sekiban` is aligned to `dcb-v10.12.0`. The package
+and source baselines are intentionally kept together so mixed binary versions
+cannot enter one process.
+
+The 10.8.0 notes below are retained as the previous release record.
 
 - Every centrally managed `Sekiban.Dcb.*` package in
   `Directory.Packages.props` is pinned to `10.8.0`.
@@ -163,3 +169,21 @@ cut GitHub Release `v1.0.0-preview.3` through the existing protected
 explicitly outside this PR.
 
 [#253]: https://github.com/J-Tech-Japan/SekibanWasmRuntime/issues/253
+
+## SWR-G078 10.12.0 Verification
+
+The published 10.12.0 assemblies were used for the compatibility probes (the
+submodule checkout is only the source alignment). Tag reservation still treats
+an omitted/empty expected token as `UNSPECIFIED`: empty→empty is the first-write
+case, while empty→existing and non-empty mismatches conflict. Create, update,
+and delete requests preserve the expected-version token; this was checked by
+executing the public client flow rather than inferred from release notes.
+
+The materialized-view catch-up path was exercised by the public-container smoke.
+The optional `IExecutedUserProvider` remains an opt-in extension point and no
+runtime adoption is required by this refresh.
+
+Mixed-version direction: a 10.12.0 client can talk to a 10.8.x server when it
+uses the shared serialized contract and expected token; a 10.8.x client remains
+readable by a 10.12.0 server, but stale empty expected tokens on existing tags
+are rejected. Package binaries in one process must remain on one baseline.
