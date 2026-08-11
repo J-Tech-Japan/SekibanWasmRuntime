@@ -48,6 +48,7 @@ if (!File.Exists(wasmModulePath))
 
 var runtimeBuilder = builder
     .AddProject<Sekiban_Dcb_WasmRuntime_Host>("runtime")
+    .WithEnvironment("SEKIBAN_SERVICE_ID", Environment.GetEnvironmentVariable("SEKIBAN_SERVICE_ID") ?? "sekiban-wasm-local")
     .WithReference(postgres, "SekibanDcb")
     .WaitFor(postgres)
     .WithEnvironment("WASM_MODULE_PATH", wasmModulePath);

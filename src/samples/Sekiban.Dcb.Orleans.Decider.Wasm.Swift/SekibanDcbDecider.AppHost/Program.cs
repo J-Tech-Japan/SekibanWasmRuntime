@@ -49,6 +49,7 @@ var swiftManifestPath = ResolveSwiftManifestPath(swiftWasmModulePath);
 var wasmApiPort = AppHostInfrastructure.ResolveConfiguredPort(6299, "E2E_API_PORT");
 var wasmServerBuilder = builder
     .AddProject<Sekiban_Dcb_WasmRuntime_Host>("wasmserver")
+    .WithEnvironment("SEKIBAN_SERVICE_ID", Environment.GetEnvironmentVariable("SEKIBAN_SERVICE_ID") ?? "sekiban-wasm-local")
     .WithEnvironment("SEKIBAN_STORAGE_PROVIDER", "postgres")
     .WithEnvironment("WASM_MODULE_PATH", swiftWasmModulePath)
     .WithEnvironment("SEKIBAN_MANIFEST_PATH", swiftManifestPath)

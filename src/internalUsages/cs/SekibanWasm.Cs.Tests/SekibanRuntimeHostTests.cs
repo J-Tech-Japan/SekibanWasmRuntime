@@ -3,12 +3,24 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Sekiban.Dcb.WasmRuntime.Host;
 using Sekiban.Dcb.WasmRuntime.Wasmtime;
+using Sekiban.Dcb.ServiceId;
 using Xunit;
 
 namespace SekibanWasm.Cs.Tests;
 
 public class SekibanRuntimeHostTests
 {
+    [Fact]
+    public void MaterializedViewServiceBinding_IsImmutableAndValidated()
+    {
+        var provider = new FixedServiceIdProvider("service-a");
+
+        Assert.Equal("service-a", provider.GetCurrentServiceId());
+        Assert.Throws<ArgumentException>(() => new FixedServiceIdProvider(""));
+        Assert.Throws<ArgumentException>(() => new FixedServiceIdProvider(" service-a "));
+        Assert.NotEqual(provider.GetCurrentServiceId(), new FixedServiceIdProvider("service-b").GetCurrentServiceId());
+    }
+
     [Fact]
     public void DynamicJsonEventTypes_ShouldPreserveRawJsonPayload()
     {

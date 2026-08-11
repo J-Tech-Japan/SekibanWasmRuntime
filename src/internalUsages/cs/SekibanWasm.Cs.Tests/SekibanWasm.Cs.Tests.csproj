@@ -30,6 +30,7 @@
     <ProjectReference Include="..\SekibanWasm.Cs.Domain\SekibanWasm.Cs.Domain.csproj" />
     <ProjectReference Include="..\SekibanWasm.Cs.ClientApi\SekibanWasm.Cs.ClientApi.csproj" />
     <ProjectReference Include="..\..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.WithoutResult\Sekiban.Dcb.WithoutResult.csproj" />
+    <ProjectReference Include="..\..\..\..\submodules\Sekiban\dcb\src\Sekiban.Dcb.MaterializedView.Sqlite\Sekiban.Dcb.MaterializedView.Sqlite.csproj" />
   </ItemGroup>
 
   <ItemGroup>

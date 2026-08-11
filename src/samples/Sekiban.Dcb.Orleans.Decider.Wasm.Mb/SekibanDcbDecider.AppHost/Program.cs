@@ -55,6 +55,7 @@ var apiServicePort = AppHostInfrastructure.ResolveConfiguredPort(6197, "E2E_API_
 
 var wasmServerBuilder = builder
     .AddProject<Sekiban_Dcb_WasmRuntime_Host>("wasmserver")
+    .WithEnvironment("SEKIBAN_SERVICE_ID", Environment.GetEnvironmentVariable("SEKIBAN_SERVICE_ID") ?? "sekiban-wasm-local")
     .WithEnvironment("SEKIBAN_STORAGE_PROVIDER", "postgres")
     .WithEnvironment("WASM_MODULE_PATH", moonBitWasmModulePath)
     .WithEnvironment("SEKIBAN_MANIFEST_PATH", moonBitManifestPath)

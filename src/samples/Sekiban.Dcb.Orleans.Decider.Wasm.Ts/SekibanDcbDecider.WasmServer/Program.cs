@@ -56,7 +56,7 @@ builder.UseOrleans(silo =>
 var domainTypes = DomainType.GetDomainTypes();
 builder.Services.AddSingleton(domainTypes);
 
-builder.Services.AddSingleton<Sekiban.Dcb.ServiceId.IServiceIdProvider, Sekiban.Dcb.ServiceId.DefaultServiceIdProvider>();
+builder.Services.AddSingleton<Sekiban.Dcb.ServiceId.IServiceIdProvider>(new Sekiban.Dcb.ServiceId.FixedServiceIdProvider(Environment.GetEnvironmentVariable("SEKIBAN_SERVICE_ID") ?? throw new InvalidOperationException("SEKIBAN_SERVICE_ID is required for an explicit service-scoped MV identity.")));
 builder.Services.AddSekibanDcbPostgresWithAspire("SekibanRustDb");
 
 builder.Services.AddSekibanDcbSharedRuntime();

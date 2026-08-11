@@ -201,3 +201,22 @@ one process must remain on one baseline.
 The Aspire + Playwright gate ran `weather-clientapi-crud.spec.js` and
 `weather-web-ui-crud.spec.js`; `serialized command execute + commit works` was
 skipped by the existing browser fixture and is named explicitly here.
+
+## SWR-G077 service-scoped MV adoption
+
+The host adopts Sekiban's released service-scoped MV worker/executor contract
+from upstream commits `25c5d8ef` and `c05d4c01`, first released in
+`dcb-v10.11.0`; this repository remains entirely on the existing 10.12.0
+package baseline. `Sekiban:ServiceId` (or `SEKIBAN_SERVICE_ID`) is normalized
+once into an immutable `FixedServiceIdProvider` before MV registration, so the
+hosted and Orleans paths share one explicit identity. The host calls
+Sekiban's released `AddSekibanDcbMaterializedViewWorkerForService` API with
+that identity and does not register the ambient worker. Missing, swapped, or
+mismatched identities are rejected before event decode/apply and provider I/O;
+the default identity is not an implicit fallback, and single-service
+compatibility must be an explicit caller opt-in.
+
+Repository AppHosts set `SEKIBAN_SERVICE_ID=sekiban-wasm-local` for supported
+local launches. Direct deployments must set either `Sekiban:ServiceId` or
+`SEKIBAN_SERVICE_ID`; missing, empty, invalid, and implicit `default` values
+fail during startup and the error names both supported configuration keys.
