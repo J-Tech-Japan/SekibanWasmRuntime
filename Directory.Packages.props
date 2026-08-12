@@ -68,7 +68,7 @@
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
 
     <!-- Wasmtime -->
-    <PackageVersion Include="Wasmtime" Version="14.0.0" />
+    <PackageVersion Include="Wasmtime" Version="44.0.0" />
 
     <!-- ILCompiler (WASM publish) -->
     <PackageVersion Include="Microsoft.DotNet.ILCompiler.LLVM" Version="10.0.0-*" />

@@ -29,7 +29,7 @@ package ships its own README with the full options table.
 ### Wasmtime Preview Caveat
 
 `Sekiban.Dcb.WasmRuntime.Wasmtime` is a preview-only package in this release
-line. It currently depends on the `Wasmtime` package version `14.0.0` for
+line. It currently depends on the `Wasmtime` package version `44.0.0` for
 runtime/native assets, with `Compile`, `Build`, and `Analyzers` excluded in the
 generated nuspec, while compiling against the managed Wasmtime source pinned in
 this repository. Treat that dependency shape as provisional until the Wasmtime
