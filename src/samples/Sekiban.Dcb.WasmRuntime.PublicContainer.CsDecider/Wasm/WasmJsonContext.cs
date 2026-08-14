@@ -9,6 +9,9 @@ namespace PublicContainerCsDecider.Wasm;
 // the mv_host_query_rows callback). Source-generated so the AOT WASM guest serializes them
 // without reflection.
 [JsonSerializable(typeof(List<WasmMvMetadata>))]
+[JsonSerializable(typeof(MvSchemaTableDto))]
+[JsonSerializable(typeof(MvSchemaColumnDto))]
+[JsonSerializable(typeof(MvSchemaIndexDto))]
 [JsonSerializable(typeof(MvTableBindingsDto))]
 [JsonSerializable(typeof(MvStatementBatchDto))]
 [JsonSerializable(typeof(MvSerializableEventDto))]

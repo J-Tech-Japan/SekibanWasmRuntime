@@ -39,9 +39,9 @@ public sealed class WasmtimeMaterializedViewExecutor : IWasmMaterializedViewExec
     private readonly WasmMaterializedViewRuntimeOptions _options;
     private readonly ILogger<WasmtimeMaterializedViewExecutor> _logger;
     private readonly WasmtimeRuntime _runtime;
-    private readonly WasmtimeModuleCache _moduleCache;
     private readonly SemaphoreSlim _instanceGate = new(1, 1);
 
+    private Module? _module;
     private Store? _store;
     private Instance? _instance;
     private Memory? _memory;
@@ -60,7 +60,6 @@ public sealed class WasmtimeMaterializedViewExecutor : IWasmMaterializedViewExec
     {
         _options = options;
         _runtime = runtime;
-        _moduleCache = moduleCache;
         _logger = logger;
     }
 
@@ -163,16 +162,24 @@ public sealed class WasmtimeMaterializedViewExecutor : IWasmMaterializedViewExec
     {
         if (_instance is not null) return;
 
-        if (string.IsNullOrWhiteSpace(_options.ModulePath) || !File.Exists(_options.ModulePath))
+        var validatedModule = _options.ValidatedModule
+            ?? throw new InvalidOperationException(
+                "Materialized-view runtime was activated without a validated WASM module. " +
+                "Run WasmMaterializedViewContractValidator before DI activation.");
+
+        if (string.IsNullOrWhiteSpace(validatedModule.ModulePath))
         {
             throw new InvalidOperationException(
-                $"Materialized view WASM module not found at '{_options.ModulePath}'. " +
-                "Set WasmMaterializedViewRuntimeOptions.ModulePath or ensure the manifest points at a valid .wasm file.");
+                "Materialized-view runtime has no validated module path.");
         }
 
-        // Reuse the shared Engine + module cache so we inherit component→core extraction and
-        // avoid loading the same ~35 MB .wasm twice.
-        var module = _moduleCache.GetOrLoad(_options.ModulePath);
+        // Do not call Module.FromFile or the path cache here. The startup validator read and
+        // hashed these exact bytes; instantiation must consume the same immutable snapshot so a
+        // path swap/TOCTOU cannot validate module A and execute module B.
+        _module = Module.FromBytes(
+            _runtime.Engine,
+            Path.GetFileNameWithoutExtension(validatedModule.ModulePath),
+            validatedModule.ModuleBytes);
         _store = new Store(_runtime.Engine);
         _store.SetWasiConfiguration(new WasiConfiguration());
 
@@ -190,7 +197,7 @@ public sealed class WasmtimeMaterializedViewExecutor : IWasmMaterializedViewExec
                 (Caller caller, int sqlPtr, int sqlLen, int paramsPtr, int paramsLen, int rowLimit) =>
                     HandleHostQueryRows(caller, sqlPtr, sqlLen, paramsPtr, paramsLen, rowLimit)));
 
-        _instance = linker.Instantiate(_store, module);
+        _instance = linker.Instantiate(_store, _module);
         _memory = _instance.GetMemory("memory")
             ?? throw new InvalidOperationException("WASM MV module does not export 'memory'.");
 
@@ -211,7 +218,10 @@ public sealed class WasmtimeMaterializedViewExecutor : IWasmMaterializedViewExec
         _mvApplyEvent = _instance.GetFunction<int, int, int, int, int, int, int, long>("mv_apply_event")
             ?? throw new InvalidOperationException("WASM MV module does not export 'mv_apply_event'.");
 
-        _logger.LogInformation("Materialized view Wasmtime instance initialized from {ModulePath}.", _options.ModulePath);
+        _logger.LogInformation(
+            "Materialized view Wasmtime instance initialized from validated module {ModulePath} ({ModuleSha256}).",
+            validatedModule.ModulePath,
+            validatedModule.ModuleSha256);
     }
 
     // ------------------------------------------------------------------------
@@ -226,6 +236,11 @@ public sealed class WasmtimeMaterializedViewExecutor : IWasmMaterializedViewExec
     {
         try
         {
+            var callbackContext = WasmMvQueryCallbackScope.Current
+                ?? throw new WasmMvQueryPolicyException(
+                    "mv_host_query_rows was invoked outside of an active view callback context.",
+                    "query-context");
+
             var callerMemory = caller.GetMemory("memory")
                 ?? throw new InvalidOperationException("WASM caller has no 'memory' export.");
 
@@ -244,10 +259,13 @@ public sealed class WasmtimeMaterializedViewExecutor : IWasmMaterializedViewExec
                 .ToList();
 
             var queryPort = CurrentQueryPort.Value
-                ?? throw new InvalidOperationException(
-                    "mv_host_query_rows was invoked outside of an active apply context.");
+                ?? throw new WasmMvQueryPolicyException(
+                    "mv_host_query_rows was invoked outside of an active apply query port.",
+                    "query-context");
 
-            var resultJson = ExecuteQueryToJson(queryPort, sql, sekibanParams, rowLimit);
+            WasmMvSqlStatementPolicy.ValidateQuery(callbackContext, sql, sekibanParams, rowLimit);
+            var boundedSql = WasmMvSqlStatementPolicy.EnsureBoundedQuery(sql, rowLimit);
+            var resultJson = ExecuteQueryToJson(queryPort, boundedSql, sekibanParams, rowLimit);
             var bytes = Encoding.UTF8.GetBytes(resultJson);
             if (bytes.Length == 0)
             {
@@ -417,6 +435,7 @@ public sealed class WasmtimeMaterializedViewExecutor : IWasmMaterializedViewExec
     {
         _instanceGate.Dispose();
         _store?.Dispose();
+        _module?.Dispose();
         // Engine and module come from the shared WasmtimeRuntime/WasmtimeModuleCache singletons
         // so disposing them here would break other consumers.
     }
@@ -427,5 +446,6 @@ public sealed class WasmtimeMaterializedViewExecutor : IWasmMaterializedViewExec
 public sealed class WasmMaterializedViewRuntimeOptions
 {
     public string ModulePath { get; init; } = string.Empty;
+    public WasmMaterializedViewValidationResult? ValidatedModule { get; init; }
     public long StaticMemoryMaximumSizeBytes { get; init; } = 64L * 1024 * 1024;
 }

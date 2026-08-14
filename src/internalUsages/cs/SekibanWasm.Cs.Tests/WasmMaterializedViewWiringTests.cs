@@ -69,7 +69,8 @@ public sealed class WasmMaterializedViewWiringTests
             configuration,
             "unused.wasm",
             registrations,
-            requestedServiceId));
+            requestedServiceId,
+            validatedModule: WasmMaterializedViewValidationResult.ForTesting("unused.wasm")));
 
         var applyHost = new ContractHost();
         var hostFactory = new ContractHostFactory(applyHost);

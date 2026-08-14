@@ -34,7 +34,7 @@ public struct HostBackedMvQueryPort: MvQueryPort {
     public init() {}
 
     public func queryRows(_ sql: String, _ params: [MvParam]) -> [MvQueryRowDto] {
-        invoke(sql: sql, params: params, rowLimit: Int32.max)?.rows ?? []
+        invoke(sql: sql, params: params, rowLimit: 1000)?.rows ?? []
     }
 
     public func querySingleRow(_ sql: String, _ params: [MvParam]) -> MvQueryRowDto? {

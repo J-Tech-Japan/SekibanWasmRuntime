@@ -28,22 +28,76 @@ namespace Sekiban.Dcb.WasmRuntime.Host.MaterializedView;
 public sealed class WasmMvApplyHost : IMvApplyHost
 {
     private readonly IWasmMaterializedViewExecutor _executor;
+    private readonly string _serviceId;
+    private readonly WasmMvMetadataDto? _metadata;
 
     public WasmMvApplyHost(
         string viewName,
         int viewVersion,
         IReadOnlyList<string> logicalTables,
-        IWasmMaterializedViewExecutor executor)
+        IWasmMaterializedViewExecutor executor,
+        string serviceId,
+        WasmMvMetadataDto? metadata = null)
     {
         ViewName = viewName;
         ViewVersion = viewVersion;
         LogicalTables = logicalTables;
         _executor = executor;
+        _serviceId = serviceId;
+        _metadata = metadata;
     }
 
     public string ViewName { get; }
     public int ViewVersion { get; }
     public IReadOnlyList<string> LogicalTables { get; }
+
+    public IReadOnlyList<MvSchemaTableRequirement> GetSchemaRequirements(IMvTableBindings tables) =>
+        GetSchemaContract(tables)?.Tables ?? [];
+
+    public MvSchemaContract? GetSchemaContract(IMvTableBindings tables)
+    {
+        if (_metadata is null || _metadata.Schema.Count == 0)
+        {
+            // Deliberate verify-only deferral for guests that have not yet emitted a truthful
+            // provider-neutral schema. Sekiban returns its typed SchemaContractUnavailable result.
+            return null;
+        }
+
+        var requirements = new List<MvSchemaTableRequirement>(_metadata.Schema.Count);
+        foreach (var schemaTable in _metadata.Schema)
+        {
+            var binding = tables.RegisterTable(schemaTable.LogicalTable);
+            var columns = schemaTable.Columns
+                .Select(column => new MvSchemaColumnRequirement(
+                    column.Name,
+                    (MvSchemaTypeFamily)(int)column.TypeFamily,
+                    column.IsNullable)
+                {
+                    DefaultSql = column.DefaultSql,
+                    IsGenerated = column.IsGenerated,
+                    GenerationExpression = column.GenerationExpression,
+                    MaxLength = column.MaxLength,
+                    Precision = column.Precision,
+                    Scale = column.Scale
+                })
+                .ToList();
+            requirements.Add(new MvSchemaTableRequirement(
+                schemaTable.LogicalTable,
+                binding.PhysicalName,
+                columns,
+                schemaTable.PrimaryKeyColumns.ToList())
+            {
+                Indexes = schemaTable.Indexes
+                    .Select(index => new MvSchemaIndexRequirement(
+                        index.Name,
+                        index.Columns.ToList(),
+                        index.IsUnique))
+                    .ToList()
+            });
+        }
+
+        return new MvSchemaContract(MvSchemaContract.CurrentFormatVersion, requirements);
+    }
 
     public async Task<IReadOnlyList<MvSqlStatementDto>> InitializeAsync(
         IMvTableBindings tables,
@@ -92,6 +146,12 @@ public sealed class WasmMvApplyHost : IMvApplyHost
             Tags = ev.Tags?.ToList() ?? []
         };
 
+        var callbackContext = new WasmMvQueryCallbackContext(
+            _serviceId,
+            ViewName,
+            ViewVersion,
+            LogicalTables.Select(logical => tables.RegisterTable(logical)).ToList());
+        using var callbackScope = WasmMvQueryCallbackScope.Push(callbackContext);
         var statements = await _executor.ApplyEventAsync(
                 ViewName,
                 ViewVersion,

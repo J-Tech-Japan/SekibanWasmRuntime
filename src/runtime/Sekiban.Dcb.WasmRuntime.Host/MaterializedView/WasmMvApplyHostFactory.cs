@@ -12,17 +12,19 @@ namespace Sekiban.Dcb.WasmRuntime.Host.MaterializedView;
 public sealed class WasmMvApplyHostFactory : IMvApplyHostFactory
 {
     private readonly IWasmMaterializedViewExecutor _executor;
-    private readonly IReadOnlyDictionary<(string ViewName, int ViewVersion), IReadOnlyList<string>> _tables;
+    private readonly IReadOnlyDictionary<(string ViewName, int ViewVersion), WasmMvApplyHostRegistration> _registrationsByIdentity;
     private readonly IReadOnlyList<MvApplyHostRegistration> _registrations;
+    private readonly string _serviceId;
 
     public WasmMvApplyHostFactory(
         IWasmMaterializedViewExecutor executor,
-        IReadOnlyList<WasmMvApplyHostRegistration> registrations)
+        IReadOnlyList<WasmMvApplyHostRegistration> registrations,
+        string serviceId)
     {
         _executor = executor;
-        _tables = registrations.ToDictionary(
-            r => (r.ViewName, r.ViewVersion),
-            r => (IReadOnlyList<string>)r.LogicalTables);
+        _serviceId = serviceId;
+        _registrationsByIdentity = registrations.ToDictionary(
+            r => (r.ViewName, r.ViewVersion));
         _registrations = registrations
             .Select(r => new MvApplyHostRegistration(r.ViewName, r.ViewVersion))
             .OrderBy(r => r.ViewName, StringComparer.Ordinal)
@@ -34,12 +36,18 @@ public sealed class WasmMvApplyHostFactory : IMvApplyHostFactory
 
     public IMvApplyHost Create(string viewName, int viewVersion)
     {
-        if (!_tables.TryGetValue((viewName, viewVersion), out var tables))
+        if (!_registrationsByIdentity.TryGetValue((viewName, viewVersion), out var registration))
         {
             throw new InvalidOperationException(
                 $"WASM materialized view host '{viewName}/{viewVersion}' is not declared in the manifest.");
         }
-        return new WasmMvApplyHost(viewName, viewVersion, tables, _executor);
+        return new WasmMvApplyHost(
+            viewName,
+            viewVersion,
+            registration.LogicalTables,
+            _executor,
+            _serviceId,
+            registration.Metadata);
     }
 }
 
@@ -50,4 +58,5 @@ public sealed class WasmMvApplyHostFactory : IMvApplyHostFactory
 public sealed record WasmMvApplyHostRegistration(
     string ViewName,
     int ViewVersion,
-    IReadOnlyList<string> LogicalTables);
+    IReadOnlyList<string> LogicalTables,
+    WasmMvMetadataDto? Metadata = null);

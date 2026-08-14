@@ -75,6 +75,43 @@ public sealed class SekibanRuntimeManifest
                     $"Projector '{projector.ProjectorName}' module not found at '{projector.ModulePath}'.");
             }
         }
+
+        var identities = new HashSet<(string ViewName, int ViewVersion)>();
+        foreach (var materializedView in MaterializedViews)
+        {
+            if (string.IsNullOrWhiteSpace(materializedView.ViewName))
+            {
+                throw new InvalidOperationException("Each materialized view must define ViewName.");
+            }
+
+            if (materializedView.ViewVersion <= 0)
+            {
+                throw new InvalidOperationException(
+                    $"Materialized view '{materializedView.ViewName}' must define a positive ViewVersion.");
+            }
+
+            if (!identities.Add((materializedView.ViewName, materializedView.ViewVersion)))
+            {
+                throw new InvalidOperationException(
+                    $"Materialized view '{materializedView.ViewName}/{materializedView.ViewVersion}' is declared more than once.");
+            }
+
+            if (materializedView.LogicalTables.Count == 0 ||
+                materializedView.LogicalTables.Any(string.IsNullOrWhiteSpace) ||
+                materializedView.LogicalTables.Count != materializedView.LogicalTables.Distinct(StringComparer.Ordinal).Count())
+            {
+                throw new InvalidOperationException(
+                    $"Materialized view '{materializedView.ViewName}/{materializedView.ViewVersion}' must declare unique logical tables.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(materializedView.ModuleSha256) &&
+                (materializedView.ModuleSha256.Length != 64 ||
+                 !materializedView.ModuleSha256.All(static c => Uri.IsHexDigit(c))))
+            {
+                throw new InvalidOperationException(
+                    $"Materialized view '{materializedView.ViewName}/{materializedView.ViewVersion}' has an invalid ModuleSha256; expected 64 hexadecimal characters.");
+            }
+        }
     }
 
     public WasmProjectorRegistry CreateRegistry()
@@ -212,6 +249,18 @@ public sealed class SekibanRuntimeMaterializedView
     /// </summary>
     public List<string> LogicalTables { get; init; } = [];
 
+    /// <summary>
+    ///     Full SHA-256 of the exact module bytes that the host is expected to instantiate. This
+    ///     is intentionally separate from the internal Wasmtime cache key.
+    /// </summary>
+    public string? ModuleSha256 { get; init; }
+
+    /// <summary>Versioned guest MV JSON ABI expected by the host.</summary>
+    public string? AbiVersion { get; init; }
+
+    /// <summary>Capabilities declared by the guest and deployment.</summary>
+    public List<string> Capabilities { get; init; } = [];
+
     public SekibanRuntimeMaterializedView ResolvePath(string baseDirectory) =>
         new()
         {
@@ -222,7 +271,10 @@ public sealed class SekibanRuntimeMaterializedView
                     : Path.GetFullPath(Path.Combine(baseDirectory, ModulePath)),
             ViewName = ViewName,
             ViewVersion = ViewVersion,
-            LogicalTables = [.. LogicalTables]
+            LogicalTables = [.. LogicalTables],
+            ModuleSha256 = ModuleSha256,
+            AbiVersion = AbiVersion,
+            Capabilities = [.. Capabilities]
         };
 }
 

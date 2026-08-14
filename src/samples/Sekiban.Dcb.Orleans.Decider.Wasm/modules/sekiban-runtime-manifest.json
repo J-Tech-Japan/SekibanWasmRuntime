@@ -89,6 +89,8 @@
     {
       "viewName": "ClassRoomEnrollment",
       "viewVersion": 1,
+      "abiVersion": "sekiban-wasm-mv/1",
+      "capabilities": ["query-rows"],
       "logicalTables": ["classrooms", "students", "enrollments"]
     }
   ]

@@ -78,11 +78,21 @@ public struct MvTableBindingsDto: Codable, Sendable {
 }
 
 public struct WasmMvMetadata: Codable, Sendable {
+    public var abiVersion: String
+    public var capabilities: [String]
     public var viewName: String
     public var viewVersion: Int32
     public var logicalTables: [String]
 
-    public init(viewName: String, viewVersion: Int32, logicalTables: [String]) {
+    public init(
+        viewName: String,
+        viewVersion: Int32,
+        logicalTables: [String],
+        abiVersion: String = "sekiban-wasm-mv/1",
+        capabilities: [String] = ["query-rows"]
+    ) {
+        self.abiVersion = abiVersion
+        self.capabilities = capabilities
         self.viewName = viewName
         self.viewVersion = viewVersion
         self.logicalTables = logicalTables

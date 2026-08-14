@@ -53,6 +53,8 @@ macro_rules! export_mv {
             let metadata: ::std::vec::Vec<$crate::dto::WasmMvMetadata> = __sekiban_mv_registry()
                 .values()
                 .map(|p| $crate::dto::WasmMvMetadata {
+                    abi_version: "sekiban-wasm-mv/1".to_string(),
+                    capabilities: vec!["query-rows".to_string()],
                     view_name: p.view_name().to_string(),
                     view_version: p.view_version(),
                     logical_tables: p.logical_tables().iter().map(|s| s.to_string()).collect(),

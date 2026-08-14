@@ -85,7 +85,8 @@ public static class WasmMaterializedViewExtensions
         string defaultModulePath,
         IReadOnlyList<WasmMvApplyHostRegistration> registrations,
         string serviceId,
-        string connectionStringName = DefaultConnectionStringName)
+        string connectionStringName = DefaultConnectionStringName,
+        WasmMaterializedViewValidationResult? validatedModule = null)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
@@ -109,13 +110,30 @@ public static class WasmMaterializedViewExtensions
                 "WASM materialized view runtime requires a non-empty defaultModulePath.");
         }
 
+        if (validatedModule is null)
+        {
+            throw new InvalidOperationException(
+                "WASM materialized view runtime requires a startup validation result. " +
+                "Call WasmMaterializedViewContractValidator before activating the MV services.");
+        }
+
+        if (!string.Equals(
+                Path.GetFullPath(defaultModulePath),
+                Path.GetFullPath(validatedModule.ModulePath),
+                StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "The materialized-view validation snapshot does not belong to the configured module path.");
+        }
+
         // Dapper's default snake_case → PascalCase mapping is what the MV read endpoints assume,
         // so enable it once globally when MV is active. Safe even if callers also set it.
         DefaultTypeMap.MatchNamesWithUnderscores = true;
 
         services.AddSingleton(new WasmMaterializedViewRuntimeOptions
         {
-            ModulePath = defaultModulePath
+            ModulePath = defaultModulePath,
+            ValidatedModule = validatedModule
         });
         services.AddSingleton<IWasmMaterializedViewExecutor, WasmtimeMaterializedViewExecutor>();
 
@@ -123,6 +141,8 @@ public static class WasmMaterializedViewExtensions
         {
             options.BatchSize = 100;
             options.PollInterval = TimeSpan.FromSeconds(1);
+            options.SqlStatementPolicyMode = MvSqlStatementPolicyMode.Enforced;
+            options.SqlStatementPolicy = new WasmMvSqlStatementPolicy();
         });
 
         // The released service-bound MvCatchUpWorker polls the event store and drives
@@ -150,7 +170,8 @@ public static class WasmMaterializedViewExtensions
         services.Replace(ServiceDescriptor.Singleton<IMvApplyHostFactory>(sp =>
             new WasmMvApplyHostFactory(
                 sp.GetRequiredService<IWasmMaterializedViewExecutor>(),
-                registrations)));
+                registrations,
+                serviceId)));
 
         return true;
     }

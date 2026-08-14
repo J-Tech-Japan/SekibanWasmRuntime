@@ -23,6 +23,8 @@ func Metadata(projectors []Projector) int64 {
 	meta := make([]WasmMvMetadata, 0, len(projectors))
 	for _, p := range projectors {
 		meta = append(meta, WasmMvMetadata{
+			AbiVersion:    "sekiban-wasm-mv/1",
+			Capabilities:  []string{"query-rows"},
 			ViewName:      p.ViewName(),
 			ViewVersion:   p.ViewVersion(),
 			LogicalTables: p.LogicalTables(),

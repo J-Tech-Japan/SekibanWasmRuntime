@@ -23,7 +23,10 @@ internal static class WasmMvRegistry
             {
                 ViewName = projector.ViewName,
                 ViewVersion = projector.ViewVersion,
-                LogicalTables = projector.LogicalTables.ToList()
+                LogicalTables = projector.LogicalTables.ToList(),
+                AbiVersion = WasmMvContract.AbiVersion,
+                Capabilities = [WasmMvContract.QueryRowsCapability],
+                Schema = projector.Schema.ToList()
             })
             .ToList();
         return JsonSerializer.Serialize(list, WasmJsonContext.Default.ListWasmMvMetadata);

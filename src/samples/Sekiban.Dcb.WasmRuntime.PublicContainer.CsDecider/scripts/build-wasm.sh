@@ -75,6 +75,55 @@ fi
 cp "$WASM_FILE" "$MODULES_DIR/$MODULE_NAME"
 echo "[build-wasm] module: $ARTIFACT_DIR/modules/$MODULE_NAME ($(wc -c < "$MODULES_DIR/$MODULE_NAME") bytes)"
 
+# The runtime instantiates the core module embedded in a WASI component. Hash the same effective
+# bytes that Wasmtime receives rather than the outer component container. Core-module guests are
+# hashed directly. `wasm-tools` is intentionally only required for this component artifact path;
+# without it, fail closed instead of publishing a manifest that can never pass the runtime gate.
+effective_module_sha256() {
+  local module_path="$1"
+  local header
+  header="$(od -An -tx1 -N8 "$module_path" | tr -d ' \n')"
+  if [[ "$header" != "0061736d0d000100" ]]; then
+    sha256sum "$module_path" | awk '{print $1}'
+    return 0
+  fi
+
+  command -v wasm-tools >/dev/null 2>&1 || {
+    echo "[build-wasm] ERROR: wasm-tools is required to hash the instantiated core module" >&2
+    return 1
+  }
+
+  local extract_dir
+  extract_dir="$(mktemp -d "${TMPDIR:-/tmp}/swr-g079-component.XXXXXX")"
+  local module_dir="$extract_dir/modules"
+  mkdir -p "$module_dir"
+  if ! wasm-tools component unbundle "$module_path" \
+      --module-dir "$module_dir" -o "$extract_dir/component.wasm" >/dev/null; then
+    rm -rf "$extract_dir"
+    echo "[build-wasm] ERROR: could not extract the instantiated core module" >&2
+    return 1
+  fi
+
+  local core_module_count=0
+  local core_module_path=""
+  while IFS= read -r candidate; do
+    core_module_count=$((core_module_count + 1))
+    core_module_path="$candidate"
+  done < <(find "$module_dir" -maxdepth 1 -name 'unbundled-module*.wasm' -type f | sort)
+  if [[ "$core_module_count" -ne 1 ]]; then
+    rm -rf "$extract_dir"
+    echo "[build-wasm] ERROR: expected exactly one embedded core module, found $core_module_count" >&2
+    return 1
+  fi
+
+  local digest
+  digest="$(sha256sum "$core_module_path" | awk '{print $1}')"
+  rm -rf "$extract_dir"
+  printf '%s' "$digest"
+}
+
+MODULE_SHA256="$(effective_module_sha256 "$MODULES_DIR/$MODULE_NAME")"
+
 # Runtime manifest for the weather Decider domain (mounted into the container).
 cat > "$CONFIG_DIR/sekiban-manifest.json" <<JSON
 {
@@ -110,6 +159,9 @@ cat > "$CONFIG_DIR/sekiban-manifest.json" <<JSON
     {
       "viewName": "WeatherForecast",
       "viewVersion": 1,
+      "abiVersion": "sekiban-wasm-mv/1",
+      "capabilities": ["query-rows"],
+      "moduleSha256": "$MODULE_SHA256",
       "modulePath": "/app/modules/$MODULE_NAME",
       "logicalTables": [
         "weather_forecast"
