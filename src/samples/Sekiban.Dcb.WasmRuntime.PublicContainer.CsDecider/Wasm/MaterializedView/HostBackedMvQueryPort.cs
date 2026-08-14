@@ -29,7 +29,7 @@ internal sealed class HostBackedMvQueryPort : IWasmMvQueryPort
 
     public IReadOnlyList<MvQueryRowDto> QueryRows(string sql, IReadOnlyList<MvParam> parameters)
     {
-        var resultJson = CallHostQuery(sql, parameters, rowLimit: null);
+        var resultJson = CallHostQuery(sql, parameters, rowLimit: WasmMvContract.MaxQueryRows);
         if (string.IsNullOrEmpty(resultJson))
         {
             return Array.Empty<MvQueryRowDto>();
@@ -84,7 +84,7 @@ internal sealed class HostBackedMvQueryPort : IWasmMvQueryPort
             long packed = MvHostImports.mv_host_query_rows(
                 (int)(IntPtr)sqlPtr, sqlBytes.Length,
                 (int)(IntPtr)paramsPtr, paramsBytes.Length,
-                rowLimit ?? -1);
+                rowLimit ?? WasmMvContract.MaxQueryRows);
 
             int resultPtr = (int)(packed >> 32);
             int resultLen = (int)(uint)packed;

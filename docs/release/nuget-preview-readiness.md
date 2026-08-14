@@ -193,19 +193,20 @@ The published package surfaces were compared directly with `dotnet-inspect`:
 
 ### Verify-only adoption decision
 
-**Decision: defer verify-only schema-contract adoption to SWR-G079 (#267).**
-This slice upgrades the baseline but does not implement
-`GetSchemaRequirements`/`GetSchemaContract` in the WASM host. The current
-`WasmMvApplyHost` has manifest logical-table names and delegates initialization
-and SQL generation to the WASM module; it does not have provider-neutral column,
-key, index, type, or generated-column metadata from which a truthful contract
-could be built. Inventing that contract here would absorb SWR-G079's validated
-WASM contract, digest, metadata, and query-callback policy scope.
+**Decision: adopt verify-only for the C# WASM guest in SWR-G079 (#267), while
+deferring it explicitly for Rust, Go, TypeScript, Swift, and MoonBit.** The C#
+`WasmMvApplyHost` maps the guest's provider-neutral column, key, index, type,
+and generated-column metadata to `GetSchemaRequirements`/`GetSchemaContract`,
+and the production WASM runtime explicitly selects `MvInitializationMode.VerifyOnly`.
+The registered-table integration gate proves that a pre-provisioned C# table
+verifies without guest initialization or DDL.
 
-The consequence is intentional and explicit: in a table-registering host,
-omitting the new schema-requirements methods makes 10.14.0 verify-only
-initialization fail closed. Verify-only is therefore not claimed as supported
-by this PR; SWR-G079 must provide the validated contract before it is enabled.
+The consequence for the deferred guests is intentional and explicit: their
+missing schema contract makes 10.14.0 verify-only initialization fail closed
+with `SchemaContractUnavailable`. `CreateOrEnsure` remains available only for
+callers that intentionally configure the DCB compatibility path; it is not the
+production WASM runtime default. No package or release is published by this
+repository change.
 
 ### SortableUniqueId ordering finding
 
@@ -230,9 +231,10 @@ difference was found.
 The package pins and source submodule are kept on one 10.14.0 baseline; mixing
 10.12.0 and 10.14.0 `Sekiban.Dcb.*` binaries in one process is not supported.
 The existing serialized V1 command/query/tag-state contract remains green on
-the upgraded baseline. The new verify-only API is additive at the CLR surface,
-but a host that registers tables without the schema contract still fails closed
-as described above.
+the upgraded baseline. The new verify-only API is additive at the CLR surface.
+A host that registers tables without the schema contract still fails closed as
+described above, while the C# WASM path now provides and verifies its truthful
+contract.
 
 Executed gates:
 

@@ -29,6 +29,8 @@ struct WasmMvTableBindingsDto {
 } derive(ToJson, FromJson, Show, Eq)
 
 struct WasmMvMetadataDto {
+  abiVersion : String
+  capabilities : Array[String]
   viewName : String
   viewVersion : Int
   logicalTables : Array[String]
@@ -213,6 +215,8 @@ fn apply_event_statements(bindings : WasmMvTableBindingsDto, serializable_event 
 fn materialized_view_metadata() -> Int64 {
   let metadata : Array[WasmMvMetadataDto] = [
     WasmMvMetadataDto::{
+      abiVersion: "sekiban-wasm-mv/1",
+      capabilities: ["query-rows"],
       viewName: mv_view_name,
       viewVersion: mv_view_version,
       logicalTables: [mv_classrooms_logical, mv_students_logical, mv_enrollments_logical],

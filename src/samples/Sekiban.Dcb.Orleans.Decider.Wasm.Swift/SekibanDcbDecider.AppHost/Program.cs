@@ -252,6 +252,21 @@ static string ResolveSwiftManifestPath(string wasmModulePath)
         }
     }
 
+    if (root["materializedViews"] is JsonArray materializedViews)
+    {
+        string moduleSha256 = Sekiban.Dcb.WasmRuntime.Host.MaterializedView
+            .WasmMaterializedViewContractValidator.ComputeEffectiveModuleSha256(wasmModulePath);
+        foreach (JsonNode? materializedView in materializedViews)
+        {
+            if (materializedView is JsonObject materializedViewObject)
+            {
+                materializedViewObject["moduleSha256"] = moduleSha256;
+                materializedViewObject["abiVersion"] = "sekiban-wasm-mv/1";
+                materializedViewObject["capabilities"] = new JsonArray("query-rows");
+            }
+        }
+    }
+
     string generatedDirectory = Path.Combine(Directory.GetCurrentDirectory(), ".generated");
     Directory.CreateDirectory(generatedDirectory);
     string generatedPath = Path.Combine(generatedDirectory, "sekiban-runtime-manifest.generated.json");

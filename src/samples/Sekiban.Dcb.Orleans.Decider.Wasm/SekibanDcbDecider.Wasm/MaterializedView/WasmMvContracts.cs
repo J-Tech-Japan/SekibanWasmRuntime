@@ -2,6 +2,13 @@ using System.Text.Json.Serialization;
 
 namespace SekibanDcbDecider.Wasm.MaterializedView;
 
+public static class WasmMvContract
+{
+    public const string AbiVersion = "sekiban-wasm-mv/1";
+    public const string QueryRowsCapability = "query-rows";
+    public const int MaxQueryRows = 1000;
+}
+
 // WASM-internal materialized view contracts. Mirror the concepts in
 // Sekiban.Dcb.MaterializedView (IMaterializedViewProjector / IMvApplyContext) but avoid
 // referencing that assembly from the WASM module — it uses System.Linq.Expressions-backed
@@ -92,6 +99,12 @@ public sealed class MvTableBindingEntry
 /// </summary>
 public sealed class WasmMvMetadata
 {
+    [JsonPropertyName("abiVersion")]
+    public string AbiVersion { get; set; } = WasmMvContract.AbiVersion;
+
+    [JsonPropertyName("capabilities")]
+    public List<string> Capabilities { get; set; } = [WasmMvContract.QueryRowsCapability];
+
     [JsonPropertyName("viewName")]
     public string ViewName { get; set; } = string.Empty;
 
@@ -100,6 +113,43 @@ public sealed class WasmMvMetadata
 
     [JsonPropertyName("logicalTables")]
     public List<string> LogicalTables { get; set; } = new();
+
+    [JsonPropertyName("schema")]
+    public List<MvSchemaTableDto> Schema { get; set; } = new();
+}
+
+public enum MvSchemaTypeFamily
+{
+    Any = 0, String = 1, Integer = 2, Boolean = 3, DateTime = 4, Decimal = 5,
+    FloatingPoint = 6, Binary = 7, Json = 8, Guid = 9
+}
+
+public sealed class MvSchemaColumnDto
+{
+    [JsonPropertyName("name")] public string Name { get; set; } = string.Empty;
+    [JsonPropertyName("typeFamily")] public MvSchemaTypeFamily TypeFamily { get; set; }
+    [JsonPropertyName("isNullable")] public bool IsNullable { get; set; }
+    [JsonPropertyName("defaultSql")] public string? DefaultSql { get; set; }
+    [JsonPropertyName("isGenerated")] public bool? IsGenerated { get; set; }
+    [JsonPropertyName("generationExpression")] public string? GenerationExpression { get; set; }
+    [JsonPropertyName("maxLength")] public int? MaxLength { get; set; }
+    [JsonPropertyName("precision")] public int? Precision { get; set; }
+    [JsonPropertyName("scale")] public int? Scale { get; set; }
+}
+
+public sealed class MvSchemaIndexDto
+{
+    [JsonPropertyName("name")] public string Name { get; set; } = string.Empty;
+    [JsonPropertyName("columns")] public List<string> Columns { get; set; } = new();
+    [JsonPropertyName("isUnique")] public bool IsUnique { get; set; }
+}
+
+public sealed class MvSchemaTableDto
+{
+    [JsonPropertyName("logicalTable")] public string LogicalTable { get; set; } = string.Empty;
+    [JsonPropertyName("columns")] public List<MvSchemaColumnDto> Columns { get; set; } = new();
+    [JsonPropertyName("primaryKeyColumns")] public List<string> PrimaryKeyColumns { get; set; } = new();
+    [JsonPropertyName("indexes")] public List<MvSchemaIndexDto> Indexes { get; set; } = new();
 }
 
 /// <summary>
@@ -170,6 +220,7 @@ public interface IWasmMvProjector
     string ViewName { get; }
     int ViewVersion { get; }
     IReadOnlyList<string> LogicalTables { get; }
+    IReadOnlyList<MvSchemaTableDto> Schema { get; }
 
     IReadOnlyList<MvSqlStatementDto> Initialize(MvTableBindingsDto tables);
 

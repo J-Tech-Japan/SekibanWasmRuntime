@@ -81,7 +81,7 @@ impl HostBackedMvQueryPort {
 
 impl MvQueryPort for HostBackedMvQueryPort {
     fn query_rows(&self, sql: &str, params: &[MvParam]) -> Vec<MvQueryRowDto> {
-        self.invoke(sql, params, i32::MAX)
+        self.invoke(sql, params, 1000)
             .map(|r| r.rows)
             .unwrap_or_default()
     }

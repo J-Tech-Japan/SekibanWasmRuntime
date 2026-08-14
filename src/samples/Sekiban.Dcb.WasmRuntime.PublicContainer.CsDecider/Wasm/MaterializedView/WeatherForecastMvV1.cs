@@ -20,6 +20,25 @@ public sealed class WeatherForecastMvV1 : IWasmMvProjector
     public string ViewName => "WeatherForecast";
     public int ViewVersion => 1;
     public IReadOnlyList<string> LogicalTables => [WeatherForecastLogicalTable];
+    public IReadOnlyList<MvSchemaTableDto> Schema =>
+    [
+        new MvSchemaTableDto
+        {
+            LogicalTable = WeatherForecastLogicalTable,
+            Columns =
+            [
+                new() { Name = "forecast_id", TypeFamily = MvSchemaTypeFamily.String, IsNullable = false },
+                new() { Name = "location", TypeFamily = MvSchemaTypeFamily.String, IsNullable = false },
+                new() { Name = "temperature_c", TypeFamily = MvSchemaTypeFamily.Integer, IsNullable = false },
+                new() { Name = "summary", TypeFamily = MvSchemaTypeFamily.String, IsNullable = true },
+                new() { Name = "created_at", TypeFamily = MvSchemaTypeFamily.DateTime, IsNullable = true },
+                new() { Name = "is_deleted", TypeFamily = MvSchemaTypeFamily.Boolean, IsNullable = false, DefaultSql = "FALSE" },
+                new() { Name = "_last_sortable_unique_id", TypeFamily = MvSchemaTypeFamily.String, IsNullable = false },
+                new() { Name = "_last_applied_at", TypeFamily = MvSchemaTypeFamily.DateTime, IsNullable = false, DefaultSql = "NOW()" }
+            ],
+            PrimaryKeyColumns = ["forecast_id"]
+        }
+    ];
 
     public IReadOnlyList<MvSqlStatementDto> Initialize(MvTableBindingsDto tables)
     {

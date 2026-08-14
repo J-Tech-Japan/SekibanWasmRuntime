@@ -115,6 +115,8 @@ pub struct MvTableBindingEntry {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WasmMvMetadata {
+    pub abi_version: String,
+    pub capabilities: Vec<String>,
     pub view_name: String,
     pub view_version: i32,
     pub logical_tables: Vec<String>,

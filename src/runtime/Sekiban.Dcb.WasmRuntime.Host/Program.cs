@@ -28,7 +28,6 @@ using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Sqlite;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sekiban.Dcb.WasmRuntime;
 using Sekiban.Dcb.WasmRuntime.Host;
 using Sekiban.Dcb.WasmRuntime.Host.MaterializedView;
@@ -102,6 +101,21 @@ if (projectionMode is not ("dual" or "memory-only" or "materialized-view-only"))
 var projectionModeEnabled = projectionMode is "dual" or "memory-only";
 var materializedViewRequested = projectionMode is "dual" or "materialized-view-only";
 Console.WriteLine($"SEKIBAN_PROJECTION_MODE={projectionMode} (multiProjection={projectionModeEnabled}, materializedView={materializedViewRequested})");
+
+// Materialized-view contract validation is intentionally performed before the service
+// provider is built, before the worker/grain can activate, and before any MV database/event
+// work. The validator hashes one byte snapshot, calls mv_metadata in real Wasmtime, and returns
+// the same bytes for the executor to instantiate.
+var materializedViewConnectionConfigured = !string.IsNullOrWhiteSpace(
+    builder.Configuration.GetConnectionString(WasmMaterializedViewExtensions.DefaultConnectionStringName));
+WasmMaterializedViewValidationResult? materializedViewValidation = null;
+if (materializedViewRequested && manifest.MaterializedViews.Count > 0 && materializedViewConnectionConfigured)
+{
+    materializedViewValidation = WasmMaterializedViewContractValidator.Validate(
+        manifest.DefaultModulePath,
+        manifest.MaterializedViews,
+        staticMemoryMaximumSizeBytes);
+}
 
 builder.UseOrleans(silo =>
 {
@@ -218,7 +232,13 @@ WasmMaterializedViewExtensions.ValidateModulePathAlignment(
 
 var wasmMvRegistrations = materializedViewRequested
     ? manifest.MaterializedViews
-        .Select(mv => new WasmMvApplyHostRegistration(mv.ViewName, mv.ViewVersion, mv.LogicalTables.ToList()))
+        .Select(mv => new WasmMvApplyHostRegistration(
+            mv.ViewName,
+            mv.ViewVersion,
+            mv.LogicalTables.ToList(),
+            materializedViewValidation?.Metadata.FirstOrDefault(metadata =>
+                string.Equals(metadata.ViewName, mv.ViewName, StringComparison.Ordinal) &&
+                metadata.ViewVersion == mv.ViewVersion)))
         .ToList()
     : new List<WasmMvApplyHostRegistration>();
 var materializedViewEnabled = materializedViewRequested
@@ -226,7 +246,8 @@ var materializedViewEnabled = materializedViewRequested
         builder.Configuration,
         manifest.DefaultModulePath,
         wasmMvRegistrations,
-        configuredServiceId);
+        configuredServiceId,
+        validatedModule: materializedViewValidation);
 if (!materializedViewRequested)
 {
     Console.WriteLine("SEKIBAN_PROJECTION_MODE=memory-only: skipping materialized-view runtime registration.");

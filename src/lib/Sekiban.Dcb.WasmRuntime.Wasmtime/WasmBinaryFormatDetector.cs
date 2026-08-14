@@ -6,6 +6,16 @@ public static class WasmBinaryFormatDetector
     private static ReadOnlySpan<byte> ModuleVersion => [0x01, 0x00, 0x00, 0x00];
     private static ReadOnlySpan<byte> ComponentVersion => [0x0d, 0x00, 0x01, 0x00];
 
+    public static bool IsCoreModule(ReadOnlySpan<byte> bytes) =>
+        bytes.Length >= 8 &&
+        bytes[..4].SequenceEqual(WasmMagic) &&
+        bytes[4..8].SequenceEqual(ModuleVersion);
+
+    public static bool IsComponent(ReadOnlySpan<byte> bytes) =>
+        bytes.Length >= 8 &&
+        bytes[..4].SequenceEqual(WasmMagic) &&
+        bytes[4..8].SequenceEqual(ComponentVersion);
+
     public static bool IsComponentFile(string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
@@ -20,8 +30,7 @@ public static class WasmBinaryFormatDetector
             return false;
         }
 
-        return header[..4].SequenceEqual(WasmMagic) &&
-               header[4..8].SequenceEqual(ComponentVersion);
+        return IsComponent(header);
     }
 
     public static bool IsCoreModuleFile(string filePath)
@@ -38,7 +47,6 @@ public static class WasmBinaryFormatDetector
             return false;
         }
 
-        return header[..4].SequenceEqual(WasmMagic) &&
-               header[4..8].SequenceEqual(ModuleVersion);
+        return IsCoreModule(header);
     }
 }

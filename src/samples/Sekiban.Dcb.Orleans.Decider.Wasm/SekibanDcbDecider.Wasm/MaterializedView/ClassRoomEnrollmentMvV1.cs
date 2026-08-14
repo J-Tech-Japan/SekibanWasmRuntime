@@ -23,6 +23,50 @@ public sealed class ClassRoomEnrollmentMvV1 : IWasmMvProjector
     public string ViewName => "ClassRoomEnrollment";
     public int ViewVersion => 1;
     public IReadOnlyList<string> LogicalTables => [ClassRoomsLogicalTable, StudentsLogicalTable, EnrollmentsLogicalTable];
+    public IReadOnlyList<MvSchemaTableDto> Schema =>
+    [
+        new MvSchemaTableDto
+        {
+            LogicalTable = ClassRoomsLogicalTable,
+            Columns =
+            [
+                new() { Name = "class_room_id", TypeFamily = MvSchemaTypeFamily.Guid, IsNullable = false },
+                new() { Name = "name", TypeFamily = MvSchemaTypeFamily.String, IsNullable = false },
+                new() { Name = "max_students", TypeFamily = MvSchemaTypeFamily.Integer, IsNullable = false },
+                new() { Name = "enrolled_count", TypeFamily = MvSchemaTypeFamily.Integer, IsNullable = false, DefaultSql = "0" },
+                new() { Name = "_last_sortable_unique_id", TypeFamily = MvSchemaTypeFamily.String, IsNullable = false },
+                new() { Name = "_last_applied_at", TypeFamily = MvSchemaTypeFamily.DateTime, IsNullable = false, DefaultSql = "NOW()" }
+            ],
+            PrimaryKeyColumns = ["class_room_id"]
+        },
+        new MvSchemaTableDto
+        {
+            LogicalTable = StudentsLogicalTable,
+            Columns =
+            [
+                new() { Name = "student_id", TypeFamily = MvSchemaTypeFamily.Guid, IsNullable = false },
+                new() { Name = "name", TypeFamily = MvSchemaTypeFamily.String, IsNullable = false },
+                new() { Name = "max_class_count", TypeFamily = MvSchemaTypeFamily.Integer, IsNullable = false },
+                new() { Name = "enrolled_count", TypeFamily = MvSchemaTypeFamily.Integer, IsNullable = false, DefaultSql = "0" },
+                new() { Name = "_last_sortable_unique_id", TypeFamily = MvSchemaTypeFamily.String, IsNullable = false },
+                new() { Name = "_last_applied_at", TypeFamily = MvSchemaTypeFamily.DateTime, IsNullable = false, DefaultSql = "NOW()" }
+            ],
+            PrimaryKeyColumns = ["student_id"]
+        },
+        new MvSchemaTableDto
+        {
+            LogicalTable = EnrollmentsLogicalTable,
+            Columns =
+            [
+                new() { Name = "student_id", TypeFamily = MvSchemaTypeFamily.Guid, IsNullable = false },
+                new() { Name = "class_room_id", TypeFamily = MvSchemaTypeFamily.Guid, IsNullable = false },
+                new() { Name = "enrolled_at", TypeFamily = MvSchemaTypeFamily.DateTime, IsNullable = false, DefaultSql = "NOW()" },
+                new() { Name = "_last_sortable_unique_id", TypeFamily = MvSchemaTypeFamily.String, IsNullable = false }
+            ],
+            PrimaryKeyColumns = ["student_id", "class_room_id"],
+            Indexes = [new MvSchemaIndexDto { Name = "class_room", Columns = ["class_room_id"], IsUnique = false }]
+        }
+    ];
 
     public IReadOnlyList<MvSqlStatementDto> Initialize(MvTableBindingsDto tables)
     {

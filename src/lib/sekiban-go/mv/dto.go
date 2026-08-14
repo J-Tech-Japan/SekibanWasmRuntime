@@ -77,6 +77,8 @@ type MvSerializableEventDto struct {
 // WasmMvMetadata is one entry returned by mv_metadata so the host can enumerate the
 // projectors a module ships with.
 type WasmMvMetadata struct {
+	AbiVersion    string   `json:"abiVersion"`
+	Capabilities  []string `json:"capabilities"`
 	ViewName      string   `json:"viewName"`
 	ViewVersion   int32    `json:"viewVersion"`
 	LogicalTables []string `json:"logicalTables"`

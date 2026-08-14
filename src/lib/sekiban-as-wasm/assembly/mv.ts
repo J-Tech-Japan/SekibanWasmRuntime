@@ -35,6 +35,8 @@ export class WasmMvTableBindingsDto {
 
 @json
 export class WasmMvMetadataDto {
+  abiVersion: string = "sekiban-wasm-mv/1";
+  capabilities: string[] = ["query-rows"];
   viewName: string = "";
   viewVersion: i32 = 0;
   logicalTables: string[] = [];

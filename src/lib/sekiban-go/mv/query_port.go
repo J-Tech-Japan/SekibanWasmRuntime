@@ -20,7 +20,7 @@ func NewHostBackedQueryPort() HostBackedQueryPort { return HostBackedQueryPort{}
 // silently dropping the error would produce stale projections. Projectors that prefer soft
 // handling should call invokeSoft directly.
 func (HostBackedQueryPort) QueryRows(sql string, params []MvParam) []MvQueryRowDto {
-	result, err := invoke(sql, params, 0x7fffffff)
+	result, err := invoke(sql, params, 1000)
 	if err != nil {
 		panic(fmt.Errorf("mv_host_query_rows failed: %w", err))
 	}

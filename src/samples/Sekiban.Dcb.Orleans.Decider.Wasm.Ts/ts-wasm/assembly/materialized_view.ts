@@ -190,6 +190,8 @@ function applyEventStatements(bindings: WasmMvTableBindingsDto, serializableEven
 export function mv_metadata(): u64 {
   const metadata = new Array<WasmMvMetadataDto>();
   const dto = new WasmMvMetadataDto();
+  dto.abiVersion = "sekiban-wasm-mv/1";
+  dto.capabilities = ["query-rows"];
   dto.viewName = VIEW_NAME;
   dto.viewVersion = VIEW_VERSION;
   dto.logicalTables = [CLASSROOMS_LOGICAL, STUDENTS_LOGICAL, ENROLLMENTS_LOGICAL];
