@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MaterializedView;
 using Sekiban.Dcb.WasmRuntime.Host.MaterializedView;
@@ -79,6 +80,9 @@ public sealed class WasmMaterializedViewWiringTests
         services.Replace(ServiceDescriptor.Singleton<IMvExecutor>(executor));
 
         await using var provider = services.BuildServiceProvider();
+        Assert.Equal(
+            MvInitializationMode.VerifyOnly,
+            provider.GetRequiredService<IOptions<MvOptions>>().Value.InitializationMode);
         var workerDescriptor = Assert.Single(services, descriptor =>
             descriptor.ServiceType == typeof(IHostedService) &&
             descriptor.ImplementationFactory is not null);

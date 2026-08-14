@@ -23,11 +23,11 @@ truthful and can be checked by `VerifyOnly` without executing guest initializati
 Rust, Go, TypeScript, Swift, and MoonBit guests currently expose the common identity/ABI/capability
 metadata but do not yet expose a provider-neutral schema description. The explicit decision for
 this release is **verify-only deferral** for those guests: `GetSchemaContract` returns `null`, the
-empty fallback is treated as `SchemaContractUnavailable`, and the host fails closed. `CreateOrEnsure`
-may still use their returned initialization statements under the enforced SQL policy; no package
-or release is published by this repository change. The deferral remains until each guest can
-truthfully describe every registered table, column family, nullability, key, index, and relevant
-default/generated expression.
+empty fallback is treated as `SchemaContractUnavailable`, and the host fails closed. The production
+WASM runtime explicitly selects `VerifyOnly`; `CreateOrEnsure` remains available only to callers
+that intentionally configure the DCB compatibility path. The deferral remains until each guest
+can truthfully describe every registered table, column family, nullability, key, index, and relevant
+default/generated expression. No package or release is published by this repository change.
 
 ## Host-owned query policy
 
