@@ -1,8 +1,9 @@
 # NuGet Preview 1.0.0-preview.3 Readiness
 
-This is the release-readiness record for the Sekiban.Dcb 10.12.0 dependency
-refresh tracked by [#264]. It prepares the runtime against the dcb-v10.12.0
-baseline; it does not create a GitHub Release or publish packages.
+This is the release-readiness record for the Sekiban.Dcb dependency refreshes
+tracked by [#264] and [#268]. The current runtime baseline is 10.14.0 at
+dcb-v10.14.0; the historical 10.12.0 evidence remains below for comparison.
+This document does not create a GitHub Release or publish packages.
 
 ## Dependency Baseline
 
@@ -169,6 +170,86 @@ cut GitHub Release `v1.0.0-preview.3` through the existing protected
 explicitly outside this PR.
 
 [#253]: https://github.com/J-Tech-Japan/SekibanWasmRuntime/issues/253
+[#264]: https://github.com/J-Tech-Japan/SekibanWasmRuntime/issues/264
+[#268]: https://github.com/J-Tech-Japan/SekibanWasmRuntime/issues/268
+
+## SWR-G080 10.14.0 Verification
+
+### Dependency baseline and published API evidence
+
+All 13 centrally managed `Sekiban.Dcb.*` package pins in
+`Directory.Packages.props` are now `10.14.0`, and `submodules/Sekiban` is
+aligned to tag `dcb-v10.14.0` at commit `a6cd132b`.
+
+The published package surfaces were compared directly with `dotnet-inspect`:
+
+- `Sekiban.Dcb.Core` 10.12.0 → 10.14.0: four additive members/types.
+- `Sekiban.Dcb.Core.Model` 10.12.0 → 10.14.0: additive
+  `ISortableUniqueIdGenerator` and `MonotonicSortableUniqueIdGenerator`.
+- `Sekiban.Dcb.MaterializedView` 10.12.0 → 10.14.0: additive verify-only
+  initialization surface; `IMvApplyHost.GetSchemaRequirements` and
+  `GetSchemaContract` are default interface members, so existing hosts remain
+  source-compatible but do not automatically gain a schema contract.
+
+### Verify-only adoption decision
+
+**Decision: defer verify-only schema-contract adoption to SWR-G079 (#267).**
+This slice upgrades the baseline but does not implement
+`GetSchemaRequirements`/`GetSchemaContract` in the WASM host. The current
+`WasmMvApplyHost` has manifest logical-table names and delegates initialization
+and SQL generation to the WASM module; it does not have provider-neutral column,
+key, index, type, or generated-column metadata from which a truthful contract
+could be built. Inventing that contract here would absorb SWR-G079's validated
+WASM contract, digest, metadata, and query-callback policy scope.
+
+The consequence is intentional and explicit: in a table-registering host,
+omitting the new schema-requirements methods makes 10.14.0 verify-only
+initialization fail closed. Verify-only is therefore not claimed as supported
+by this PR; SWR-G079 must provide the validated contract before it is enabled.
+
+### SortableUniqueId ordering finding
+
+The published 10.14.0 `Sekiban.Dcb.Core.Model` implementation routes
+`SortableUniqueId.GenerateNew()` through a process-shared
+`MonotonicSortableUniqueIdGenerator`. Its logical tick uses an atomic
+compare-and-swap floor, so clock rollback and concurrent allocation cannot
+make a later generated ID sort before an earlier one. The new
+`SortableUniqueIdOrderingTests` regression test generated 256 IDs and verified
+strict ordinal increase and `SortableUniqueId.IsEarlierThan` agreement.
+
+This matches the runtime's ordering assumptions. Tag-state/snapshot wait paths
+carry the token unchanged and compare persisted `LastSortableUniqueId` with the
+requested token using `StringComparison.Ordinal`; the serialized tag-state and
+contract suites continue to pass. List-query item ordering remains domain-owned
+(`GetWeatherForecastListQuery` orders by `CreatedAt`); the sortable ID is a
+consistency/wait boundary, not a replacement for list ordering. No ordering
+difference was found.
+
+### Mixed-version behavior and verification
+
+The package pins and source submodule are kept on one 10.14.0 baseline; mixing
+10.12.0 and 10.14.0 `Sekiban.Dcb.*` binaries in one process is not supported.
+The existing serialized V1 command/query/tag-state contract remains green on
+the upgraded baseline. The new verify-only API is additive at the CLR surface,
+but a host that registers tables without the schema contract still fails closed
+as described above.
+
+Executed gates:
+
+- `dotnet build src/SekibanWasmRuntime.slnx -c Release`: **PASS**, 0 errors
+  (143 existing warnings).
+- `dotnet test src/SekibanWasmRuntime.slnx -c Release --no-restore`: **PASS**,
+  202/202.
+- `scripts/contract/run-serialized-dcb-contract-baseline.sh`: **PASS**, 59/59.
+- `MaterializedViewServiceIsolationTests`: **PASS**, 2/2.
+- `SortableUniqueIdOrderingTests`: **PASS**, 1/1 (included in the full suite).
+- `E2E_SAMPLE=cs bash scripts/e2e-aspire-playwright.sh`: **PASS**, 2 passed,
+  1 skipped by the existing serialized-command browser fixture.
+- `grep -c '10\.12\.0' Directory.Packages.props`: 0.
+- `git -C submodules/Sekiban describe --tags`: `dcb-v10.14.0`.
+- `git diff --check`: clean.
+
+No tag, GitHub Release, or package publish was performed.
 
 ## SWR-G078 10.12.0 Verification
 
