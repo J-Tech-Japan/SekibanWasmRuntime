@@ -17,6 +17,9 @@ All three packages are currently preview packages versioned as
 The Wasmtime package is included in the preview matrix while native asset
 packaging and host policy are finalized.
 
+The current published package line is `1.0.0-preview.5`. <!-- release-lane: current-package-version -->
+The current Sekiban.Dcb baseline is `10.14.0`. <!-- release-lane: current-dcb-version -->
+
 Install with prerelease resolution enabled:
 
 ```bash
@@ -169,7 +172,7 @@ platforms with
 `docker buildx imagetools inspect ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:<tag>`.
 Preview 2 (`1.0.0-preview.2`) is multi-arch but **shim-less** (it predates the
 WASI preview2 shim fix), so `list-query` / materialized-view paths fail against
-it. **Use `1.0.0-preview.3` — the verified, recommended public runtime tag.** It
+it. **Use `1.0.0-preview.3` — the verified, recommended public runtime tag.** <!-- release-lane: current-runtime-image-version --> It
 is a published `linux/amd64` + `linux/arm64` manifest list
 (digest `sha256:8bdebccd…`) whose images both carry `/app/libwasmtime.so` **and**
 `/app/libwasmtime_preview2_shim.so`, the moving `preview` tag points at the same
@@ -181,7 +184,7 @@ and Materialized View catch-up). See the verification evidence in
 The GHCR runtime-host **container** tag and the **NuGet** package versions are
 independent lanes and move on their own cadence: the latest verified runtime-host
 container tag is **`1.0.0-preview.3`**, while the latest public NuGet packages
-(`Sekiban.Dcb.WasmRuntime`, `…Remote`, `…Wasmtime`) are **`1.0.0-preview.1`**. Do
+(`Sekiban.Dcb.WasmRuntime`, `…Remote`, `…Wasmtime`) are **`1.0.0-preview.5`**. Do
 not assume the two share a version number.
 
 Rust support now has two lanes. Existing repo-development samples continue to

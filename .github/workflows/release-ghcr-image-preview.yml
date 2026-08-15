@@ -17,6 +17,10 @@ on:
   pull_request:
     paths:
       - '.github/workflows/release-ghcr-image-preview.yml'
+      - 'scripts/release/**'
+      - 'docs/nuget/**'
+      - 'docs/release/**'
+      - 'README.md'
       - 'src/runtime/Sekiban.Dcb.WasmRuntime.Host/Dockerfile'
       - 'docker/sekiban-wasm-runtime/**'
   push:
@@ -176,6 +180,19 @@ jobs:
             echo 'EOF'
           } >> "$GITHUB_OUTPUT"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Consumer version accuracy (runtime-host release lane)
+        env:
+          RUNTIME_PACKAGE_VERSION: '1.0.0-preview.5'
+          SEKIBAN_DCB_VERSION: '10.14.0'
+          RUNTIME_IMAGE_VERSION: ${{ steps.tags.outputs.version }}
+        run: |
+          set -euo pipefail
+          python3 scripts/release/check-consumer-version-accuracy.py \
+            --package-version "$RUNTIME_PACKAGE_VERSION" \
+            --dcb-version "$SEKIBAN_DCB_VERSION" \
+            --runtime-image-version "$RUNTIME_IMAGE_VERSION" \
+            --skip-package-artifact
 
       - name: Log publish plan
         env:

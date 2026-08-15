@@ -24,7 +24,7 @@ on:
       package_version:
         description: 'Preview package version to inspect'
         required: true
-        default: '1.0.0-preview.1'
+        default: '1.0.0-preview.5'
   release:
     types: [published]
 
@@ -45,7 +45,7 @@ jobs:
       github.event_name != 'release' ||
       startsWith(github.event.release.tag_name, 'v')
     env:
-      RAW_PACKAGE_VERSION: ${{ github.event.release.tag_name || inputs.package_version || '1.0.0-preview.1' }}
+      RAW_PACKAGE_VERSION: ${{ github.event.release.tag_name || inputs.package_version || '1.0.0-preview.5' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -55,6 +55,20 @@ jobs:
         with:
           dotnet-version: '10.0.x'
           dotnet-quality: 'preview'
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Resolve runtime-host image version from registry
+        id: runtime-image
+        env:
+          IMAGE_NAME: ghcr.io/j-tech-japan/sekiban-wasm-runtime-host
+          RUNTIME_IMAGE_TAG: preview
+        run: |
+          set -euo pipefail
+          version="$(scripts/release/resolve-runtime-host-image-version.sh)"
+          echo "RUNTIME_IMAGE_VERSION=${version}" >> "$GITHUB_ENV"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "Registry ${IMAGE_NAME}:${RUNTIME_IMAGE_TAG} advertises runtime version ${version}"
 
       - name: Resolve package version
         run: |
@@ -70,6 +84,16 @@ jobs:
 
       - name: Package inspection
         run: scripts/release/inspect-nuget-packages.sh
+
+      - name: Consumer version accuracy
+        env:
+          RUNTIME_IMAGE_VERSION: ${{ steps.runtime-image.outputs.version }}
+        run: scripts/release/check-consumer-version-accuracy.sh "$PACKAGE_VERSION"
+
+      - name: Consumer version assertion regression
+        env:
+          RUNTIME_IMAGE_VERSION: ${{ steps.runtime-image.outputs.version }}
+        run: scripts/release/test-consumer-version-accuracy.sh
 
       - name: Consumer smoke
         run: scripts/release/consumer-smoke-local-packages.sh

@@ -6,6 +6,9 @@ logic through WebAssembly contracts.
 These packages are published as `1.0.0-preview.*` while the public runtime
 contract, package split, and Wasmtime host policy are finalized.
 
+The current published package line is `1.0.0-preview.5`. <!-- release-lane: current-package-version -->
+The current Sekiban.Dcb baseline is `10.14.0`. <!-- release-lane: current-dcb-version -->
+
 ## Package Selection
 
 Install `Sekiban.Dcb.WasmRuntime` when you need the shared runtime contracts,

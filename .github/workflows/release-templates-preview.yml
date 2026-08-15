@@ -15,6 +15,7 @@ on:
       - '.github/workflows/release-templates-preview.yml'
       - 'templates/**'
       - 'scripts/templates/**'
+      - 'scripts/release/**'
       - 'docs/nuget/templates-package-readme.md'
       - 'docs/templates/**'
   workflow_dispatch:
@@ -23,6 +24,14 @@ on:
         description: 'Templates package version to validate (and publish when publish=true)'
         required: true
         default: '1.0.0-preview.1'
+      runtime_package_version:
+        description: 'Runtime package version asserted by the Templates README'
+        required: true
+        default: '1.0.0-preview.5'
+      dcb_version:
+        description: 'Sekiban.Dcb baseline asserted by the Templates README'
+        required: true
+        default: '10.14.0'
       publish:
         description: 'Emergency manual publish to NuGet after checks (normally publish via a templates-v* GitHub Release)'
         type: boolean
@@ -37,6 +46,8 @@ permissions:
 env:
   # templates-v* release tag wins; workflow_dispatch input is the fallback.
   RAW_PACKAGE_VERSION: ${{ github.event.release.tag_name || inputs.package_version || '1.0.0-preview.1' }}
+  RUNTIME_PACKAGE_VERSION: ${{ inputs.runtime_package_version || '1.0.0-preview.5' }}
+  SEKIBAN_DCB_VERSION: ${{ inputs.dcb_version || '10.14.0' }}
 
 jobs:
   validate:
@@ -55,6 +66,8 @@ jobs:
           dotnet-version: '10.0.x'
           dotnet-quality: 'preview'
 
+      - uses: docker/setup-buildx-action@v3
+
       - name: Resolve package version
         run: |
           set -euo pipefail
@@ -68,10 +81,32 @@ jobs:
           dotnet pack templates/Sekiban.Dcb.WasmRuntime.Templates/Sekiban.Dcb.WasmRuntime.Templates.csproj \
             -c Release -o artifacts/packages "-p:Version=${TEMPLATE_PACKAGE_VERSION}"
 
+      - name: Resolve runtime-host image version from registry
+        id: runtime-image
+        env:
+          IMAGE_NAME: ghcr.io/j-tech-japan/sekiban-wasm-runtime-host
+          RUNTIME_IMAGE_TAG: preview
+        run: |
+          set -euo pipefail
+          version="$(scripts/release/resolve-runtime-host-image-version.sh)"
+          echo "RUNTIME_IMAGE_VERSION=${version}" >> "$GITHUB_ENV"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "Registry ${IMAGE_NAME}:${RUNTIME_IMAGE_TAG} advertises runtime version ${version}"
+
+      - name: Consumer README accuracy (produced Templates nupkg)
+        env:
+          RUNTIME_IMAGE_VERSION: ${{ steps.runtime-image.outputs.version }}
+        run: scripts/release/check-template-package-readme.sh
+
       - name: Generation test (pack, install, generate, build, residue check)
         env:
           TEMPLATE_TEST_PACKAGE_VERSION: ${{ env.TEMPLATE_PACKAGE_VERSION }}
         run: bash scripts/templates/test-sekiban-wasm-decider.sh
+
+      - name: Consumer version assertion regression
+        env:
+          RUNTIME_IMAGE_VERSION: ${{ steps.runtime-image.outputs.version }}
+        run: scripts/release/test-consumer-version-accuracy.sh
 
       - name: Whitespace check
         run: git diff --check
@@ -111,6 +146,8 @@ jobs:
           dotnet-version: '10.0.x'
           dotnet-quality: 'preview'
 
+      - uses: docker/setup-buildx-action@v3
+
       - name: Resolve package version
         run: |
           set -euo pipefail
@@ -123,6 +160,24 @@ jobs:
           set -euo pipefail
           dotnet pack templates/Sekiban.Dcb.WasmRuntime.Templates/Sekiban.Dcb.WasmRuntime.Templates.csproj \
             -c Release -o artifacts/publish "-p:Version=${TEMPLATE_PACKAGE_VERSION}"
+
+      - name: Resolve runtime-host image version from registry
+        id: runtime-image
+        env:
+          IMAGE_NAME: ghcr.io/j-tech-japan/sekiban-wasm-runtime-host
+          RUNTIME_IMAGE_TAG: preview
+        run: |
+          set -euo pipefail
+          version="$(scripts/release/resolve-runtime-host-image-version.sh)"
+          echo "RUNTIME_IMAGE_VERSION=${version}" >> "$GITHUB_ENV"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "Registry ${IMAGE_NAME}:${RUNTIME_IMAGE_TAG} advertises runtime version ${version}"
+
+      - name: Consumer README accuracy (produced Templates nupkg)
+        env:
+          TEMPLATE_PACKAGE_DIR: artifacts/publish
+          RUNTIME_IMAGE_VERSION: ${{ steps.runtime-image.outputs.version }}
+        run: scripts/release/check-template-package-readme.sh
 
       - name: NuGet login via Trusted Publishing
         id: nuget-login
