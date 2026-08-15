@@ -36,6 +36,10 @@ jobs:
         run: ./build/scripts/build-rust-wasm.sh
       - name: Build primary sample WASM modules
         run: ./scripts/build-samples-wasm.sh --primary
+      - name: Verify serialized DCB V1 suite isolation
+        run: bash scripts/contract/check-serialized-dcb-v1-isolation.sh
+      - name: Serialized DCB V1 external black-box conformance
+        run: bash scripts/contract/run-serialized-dcb-v1-ci.sh
 
       - name: Test
         run: dotnet test src/SekibanWasmRuntime.ci.slnx -c Release --no-build
