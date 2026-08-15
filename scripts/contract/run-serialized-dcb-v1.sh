@@ -193,7 +193,7 @@ proxy_pid=0
   printf -- '- External invocation proven: **true** (fresh Git repository, different root, suite cwd recorded in JSON; temporary root is removed after the run)\n'
   printf -- '- HTTP-only suite: **true** (Python standard library; no local implementation import)\n'
   printf -- '- Restart lifecycle command executed: **true**\n'
-  printf -- '- Deliberately broken tag implementation (HTTP proxy) failed as expected: **true**\n'
+  printf -- '- Deliberately broken commit tag comparison (HTTP proxy) failed as expected: **true**\n'
   printf -- '- Target: %s\n' "$base_url"
   printf -- '- Suite source: conformance/serialized-dcb-v1/suite.py\n\n'
   printf '## Scenario markers\n\n'

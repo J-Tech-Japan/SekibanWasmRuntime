@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deliberately broken HTTP target used only for the negative conformance proof."""
+"""Deliberately broken commit-consistency target for the negative proof."""
 
 from __future__ import annotations
 
@@ -19,6 +19,16 @@ class ForwardingHandler(http.server.BaseHTTPRequestHandler):
         host, port = self.upstream
         connection = http.client.HTTPConnection(host, port, timeout=60)
         try:
+            path = self.path.split("?", 1)[0]
+            if path == "/api/sekiban/serialized/commit":
+                decoded = json.loads(body.decode("utf-8"))
+                consistency_tags = decoded.get("consistencyTags")
+                if isinstance(consistency_tags, list) and consistency_tags:
+                    # Deliberately broken implementation: drop the caller's
+                    # consistency assertions, so stale exact/empty writes are
+                    # accepted instead of rejected by the target.
+                    decoded["consistencyTags"] = []
+                    body = json.dumps(decoded, separators=(",", ":")).encode("utf-8")
             headers = {
                 key: value
                 for key, value in self.headers.items()
@@ -27,11 +37,6 @@ class ForwardingHandler(http.server.BaseHTTPRequestHandler):
             connection.request(self.command, self.path, body=body, headers=headers)
             response = connection.getresponse()
             response_body = response.read()
-            if self.path.split("?", 1)[0] == "/api/sekiban/serialized/tag-latest-sortable" and response.status == 200:
-                decoded = json.loads(response_body.decode("utf-8"))
-                if decoded.get("exists") and isinstance(decoded.get("lastSortableUniqueId"), str):
-                    decoded["lastSortableUniqueId"] += "-BROKEN"
-                    response_body = json.dumps(decoded, separators=(",", ":")).encode("utf-8")
 
             self.send_response(response.status, response.reason)
             for key, value in response.getheaders():
@@ -54,7 +59,7 @@ class ForwardingHandler(http.server.BaseHTTPRequestHandler):
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run a deliberately broken tag-latest HTTP proxy.")
+    parser = argparse.ArgumentParser(description="Run a deliberately broken commit-consistency HTTP proxy.")
     parser.add_argument("--upstream", required=True)
     parser.add_argument("--port", required=True, type=int)
     args = parser.parse_args()

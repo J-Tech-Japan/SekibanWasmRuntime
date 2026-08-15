@@ -365,15 +365,22 @@ class Conformance:
     def broken_tag_negative(self, state_path: Path) -> None:
         state = load_json(state_path)
         tag = str(state["tag"])
-        expected = str(state.get("headAfterRestart", state["head"]))
-        exists, actual = self.latest("broken-tag-http-read", tag)
+        check("headAfterRestart" in state, "broken-tag negative requires the after-restart state")
+        stale_head = str(state["head"])
+        current_head = str(state["headAfterRestart"])
+        check(stale_head != current_head, "broken-tag negative did not receive a stale exact-match head")
+        body = self.commit_body(
+            f"{state['token']}-broken-commit",
+            [tag],
+            {tag: stale_head},
+        )
         try:
-            check(exists and actual == expected, "deliberately broken tag response was accepted")
+            self.expect_conflict("broken-commit-exact-conflict", body)
         except CheckFailure as error:
             print(f"BROKEN_TAG_NEGATIVE=EXPECTED_FAILURE detail={error}")
             self.scenarios["broken_tag_negative"] = "PASS"
             raise
-        raise CheckFailure("deliberately broken target did not alter the tag response")
+        raise CheckFailure("deliberately broken target still rejected a stale exact-match commit")
 
 
 def write_report(path: Path | None, conformance: Conformance, result: str, error: str | None = None) -> None:

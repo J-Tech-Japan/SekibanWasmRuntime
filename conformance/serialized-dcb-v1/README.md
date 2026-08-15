@@ -58,9 +58,9 @@ response in its JSON report.
 ## Negative proof
 
 The portable artifact includes a deliberately broken HTTP forwarding target.
-It changes only `lastSortableUniqueId` in successful tag-latest responses. The
-harness starts that target in front of the real implementation and expects the
-suite's restart comparison to exit non-zero:
+It drops non-empty `consistencyTags` from commit requests. A stale exact-match
+commit is therefore accepted by the broken target, and the suite's required
+commit-conflict assertion exits non-zero:
 
 ~~~sh
 python3 broken-tag-proxy.py \
@@ -73,8 +73,11 @@ python3 suite.py \
   --state-file .artifacts/dcb-v1-state.json
 ~~~
 
-The expected output contains `BROKEN_TAG_NEGATIVE=EXPECTED_FAILURE`. If the
-process exits zero, or the proxy is not used, the negative proof is a failure.
+The command must run after the normal before/restart phases so the state file
+contains a newer `headAfterRestart` than `head`. The expected output contains
+`BROKEN_TAG_NEGATIVE=EXPECTED_FAILURE` and the failure detail shows the stale
+commit received HTTP 200 instead of a conflict. If the process exits zero, or
+the proxy is not used, the negative proof is a failure.
 The repository runner performs this lifecycle automatically and records the
 non-zero status separately from the passing conformance phases.
 
