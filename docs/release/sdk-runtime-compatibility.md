@@ -9,6 +9,8 @@ with different SDKs interoperate on the same runtime image.
 
 Runtime image: `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host`.
 
+The registry-verified current runtime-host tag is `1.0.0-preview.3`. <!-- release-lane: current-runtime-image-version -->
+
 | SDK | Version | Distribution | Runtime image | Status | Evidence |
 | --- | --- | --- | --- | --- | --- |
 | Rust `sekiban-core` / `sekiban-derive` / `sekiban-wasm` / `sekiban-mv` / `sekiban-executor` | 0.1.0 | crates.io | `1.0.0-preview.3` | Published | crates.io consumer sample + public-container proof (SWR-G054..G056), `rust-crate-preview-readiness.md` |
@@ -19,7 +21,7 @@ Runtime image: `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host`.
 | Swift `sekiban-swift` (products `SekibanWasm`, `SekibanMv`) | 0.1.0 (published, superseded) and 0.1.1 (published, clean) | Mirror repo `github.com/J-Tech-Japan/sekiban-swift`; both tags are immutable and consumers should select `v0.1.1` | `1.0.0-preview.3` | Published | SWR-G076 redirects SwiftPM scratch output outside the staged tree and asserts the exact published contents; the `v0.1.1` mirror tree contains exactly `LICENSE`, `Package.swift`, `README.md`, `Sources`, and `Tests`, while `v0.1.0` remains documented so publication history is not erased |
 | MoonBit `sekiban/sekiban-wasm-runtime` + `sekiban/sekiban-client` | 0.1.0 | mooncakes.io (account/`sekiban` scope + tag `moonbit-v0.1.0` pending, human-gated) | `1.0.0-preview.3` | Lane prepared | Metadata gate + moon check/test + `moon package` dry-run producing the publish zips (SWR-G064), `moonbit-package-release-lane.md`; in-repo MoonBit sample pairs both packages; public-container consumer proof follows in SWR-G065 |
 
-Framework baseline: all rows above sit on Sekiban.Dcb `10.8.0` and speak the V1
+Framework baseline: all rows above sit on Sekiban.Dcb `10.14.0` and speak the V1
 serialized commit envelope. The package-ground-truth finding and mixed-version
 behavior are documented in
 [`nuget-preview-readiness.md`](nuget-preview-readiness.md). The original

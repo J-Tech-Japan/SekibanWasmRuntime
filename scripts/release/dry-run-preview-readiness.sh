@@ -4,7 +4,7 @@ set -uo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
 repo_root="$(pwd)"
-package_version="${PACKAGE_VERSION:-${1:-1.0.0-preview.1}}"
+package_version="${PACKAGE_VERSION:-${1:-1.0.0-preview.5}}"
 package_version="${package_version#v}"
 
 if [[ ! "$package_version" =~ ^1\.0\.0-preview\.[0-9A-Za-z.-]+$ ]]; then
@@ -150,6 +150,16 @@ run_step \
   "Pack and package inspection" \
   "Packed and inspected the three public package candidates with preview metadata." \
   "PACKAGE_VERSION='$package_version' NUGET_OUTPUT_DIR='$nuget_dir' RELEASE_REPORT_DIR='$artifact_report_dir' scripts/release/inspect-nuget-packages.sh '$package_version'"
+
+run_step \
+  "Consumer version accuracy" \
+  "Current consumer documents and the README files extracted from the produced nupkgs match the release inputs." \
+  "PACKAGE_VERSION='$package_version' NUGET_OUTPUT_DIR='$nuget_dir' RUNTIME_IMAGE_VERSION='1.0.0-preview.3' scripts/release/check-consumer-version-accuracy.sh '$package_version'"
+
+run_step \
+  "Consumer version assertion regression" \
+  "The intentionally wrong fixture fails and names the offending document." \
+  "scripts/release/test-consumer-version-accuracy.sh"
 
 run_step \
   "Consumer smoke" \

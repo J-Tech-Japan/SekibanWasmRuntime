@@ -9,11 +9,16 @@
 dotnet new install Sekiban.Dcb.WasmRuntime.Templates
 ```
 
+The generated app uses the current runtime package line `1.0.0-preview.5`. <!-- release-lane: current-package-version -->
+That line is on the current Sekiban.Dcb baseline `10.14.0`. <!-- release-lane: current-dcb-version -->
+
 ## sekiban-wasm-decider
 
 Generates an Aspire solution that hosts the **public runtime container**
 (`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3`) with a
 Postgres event store:
+
+The registry-verified runtime-host tag is `1.0.0-preview.3`. <!-- release-lane: current-runtime-image-version -->
 
 - a Decider-pattern weather domain on the public `Sekiban.Dcb.WithoutResult`
   package (events, commands, tag projector, multi-projection, queries);

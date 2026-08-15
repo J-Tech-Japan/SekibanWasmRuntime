@@ -73,6 +73,9 @@ jobs:
           TEMPLATE_TEST_PACKAGE_VERSION: ${{ env.TEMPLATE_PACKAGE_VERSION }}
         run: bash scripts/templates/test-sekiban-wasm-decider.sh
 
+      - name: Consumer version assertion regression
+        run: scripts/release/test-consumer-version-accuracy.sh
+
       - name: Whitespace check
         run: git diff --check
 
