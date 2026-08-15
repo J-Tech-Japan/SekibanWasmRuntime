@@ -22,6 +22,14 @@ trap 'rm -rf "$tmp_dir"' EXIT
 rm -rf "$artifact_root"
 mkdir -p "$nuget_dir" "$artifact_report_dir" "$(dirname "$report_path")"
 
+runtime_image_version="${RUNTIME_IMAGE_VERSION:-}"
+if [[ -z "$runtime_image_version" ]]; then
+  if ! runtime_image_version="$(RUNTIME_IMAGE_TAG=preview scripts/release/resolve-runtime-host-image-version.sh)"; then
+    printf 'Could not resolve the runtime-host version from the registry.\n' >&2
+    exit 1
+  fi
+fi
+
 fail_count=0
 warn_count=0
 step_rows=()
@@ -147,6 +155,11 @@ PY
 write_header
 
 run_step \
+  "Runtime image registry input" \
+  "Resolved the runtime-host version from the public registry moving tag." \
+  "RUNTIME_IMAGE_TAG='preview' scripts/release/resolve-runtime-host-image-version.sh"
+
+run_step \
   "Pack and package inspection" \
   "Packed and inspected the three public package candidates with preview metadata." \
   "PACKAGE_VERSION='$package_version' NUGET_OUTPUT_DIR='$nuget_dir' RELEASE_REPORT_DIR='$artifact_report_dir' scripts/release/inspect-nuget-packages.sh '$package_version'"
@@ -154,7 +167,7 @@ run_step \
 run_step \
   "Consumer version accuracy" \
   "Current consumer documents and the README files extracted from the produced nupkgs match the release inputs." \
-  "PACKAGE_VERSION='$package_version' NUGET_OUTPUT_DIR='$nuget_dir' RUNTIME_IMAGE_VERSION='1.0.0-preview.3' scripts/release/check-consumer-version-accuracy.sh '$package_version'"
+  "PACKAGE_VERSION='$package_version' NUGET_OUTPUT_DIR='$nuget_dir' RUNTIME_IMAGE_VERSION='$runtime_image_version' scripts/release/check-consumer-version-accuracy.sh '$package_version'"
 
 run_step \
   "Consumer version assertion regression" \

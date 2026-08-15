@@ -5,8 +5,12 @@ cd "$(git rev-parse --show-toplevel)"
 
 package_version="${PACKAGE_VERSION:-${1:-1.0.0-preview.5}}"
 package_version="${package_version#v}"
-runtime_image_version="${RUNTIME_IMAGE_VERSION:-1.0.0-preview.3}"
+runtime_image_version="${RUNTIME_IMAGE_VERSION:-}"
 nuget_dir="${NUGET_OUTPUT_DIR:-artifacts/nuget}"
+
+if [[ -z "$runtime_image_version" ]]; then
+  runtime_image_version="$(RUNTIME_IMAGE_TAG=preview scripts/release/resolve-runtime-host-image-version.sh)"
+fi
 
 if [[ ! "$package_version" =~ ^1\.0\.0-preview\.[0-9A-Za-z.-]+$ ]]; then
   printf 'Package version must be 1.0.0-preview.*; got %s\n' "$package_version" >&2

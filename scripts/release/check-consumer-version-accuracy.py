@@ -110,6 +110,52 @@ def dependency_values(metadata: ET.Element, namespace: dict[str, str]) -> list[t
     return values
 
 
+def inspect_one_package(
+    package: Path,
+    expected_package_version: str | None,
+    expected_package_id: str | None = None,
+    expected_artifact_version: str | None = None,
+) -> tuple[list[str], set[str], list[tuple[str, str]]]:
+    errors: list[str] = []
+    observed_dcb_versions: set[str] = set()
+    package_readmes: list[tuple[str, str]] = []
+    try:
+        with zipfile.ZipFile(package) as zf:
+            package_id, metadata, namespace = nuspec_metadata(zf)
+            names = set(zf.namelist())
+
+            version_element = metadata.find("n:version", namespace) if namespace else metadata.find("version")
+            package_version = (version_element.text or "").strip() if version_element is not None else ""
+            version_expectation = expected_artifact_version or expected_package_version
+            if version_expectation is not None and package_version != version_expectation:
+                errors.append(
+                    f"{package.name}: package metadata version {package_version!r}; "
+                    f"expected {version_expectation!r}"
+                )
+            if expected_package_id is not None and package_id != expected_package_id:
+                errors.append(
+                    f"{package.name}: package id {package_id!r}; expected {expected_package_id!r}"
+                )
+
+            if "README.md" not in names:
+                errors.append(f"{package.name}: README.md is missing from the nupkg")
+            else:
+                package_readmes.append((f"{package.name}!README.md", zf.read("README.md").decode("utf-8")))
+
+            for dependency_id, raw_version in dependency_values(metadata, namespace):
+                versions = DCB_VERSION_RE.findall(raw_version)
+                if not versions:
+                    errors.append(
+                        f"{package.name}: dependency {dependency_id} has no concrete DCB version in {raw_version!r}"
+                    )
+                else:
+                    observed_dcb_versions.update(versions)
+    except (OSError, ValueError, ET.ParseError, UnicodeDecodeError, zipfile.BadZipFile) as error:
+        errors.append(f"{package.name}: cannot inspect package: {error}")
+
+    return errors, observed_dcb_versions, package_readmes
+
+
 def inspect_packages(
     package_dir: Path,
     expected_package_version: str,
@@ -125,34 +171,13 @@ def inspect_packages(
         return [f"{package_dir}: no .nupkg files found"], observed_dcb_versions, package_readmes
 
     for package in packages:
-        try:
-            with zipfile.ZipFile(package) as zf:
-                package_id, metadata, namespace = nuspec_metadata(zf)
-                names = set(zf.namelist())
-
-                version_element = metadata.find("n:version", namespace) if namespace else metadata.find("version")
-                package_version = (version_element.text or "").strip() if version_element is not None else ""
-                if package_version != expected_package_version:
-                    errors.append(
-                        f"{package.name}: package metadata version {package_version!r}; "
-                        f"expected {expected_package_version!r}"
-                    )
-
-                if "README.md" not in names:
-                    errors.append(f"{package.name}: README.md is missing from the nupkg")
-                else:
-                    package_readmes.append((f"{package.name}!README.md", zf.read("README.md").decode("utf-8")))
-
-                for dependency_id, raw_version in dependency_values(metadata, namespace):
-                    versions = DCB_VERSION_RE.findall(raw_version)
-                    if not versions:
-                        errors.append(
-                            f"{package.name}: dependency {dependency_id} has no concrete DCB version in {raw_version!r}"
-                        )
-                    else:
-                        observed_dcb_versions.update(versions)
-        except (OSError, ValueError, ET.ParseError, UnicodeDecodeError, zipfile.BadZipFile) as error:
-            errors.append(f"{package.name}: cannot inspect package: {error}")
+        package_errors, package_dcb_versions, package_readme = inspect_one_package(
+            package,
+            expected_package_version,
+        )
+        errors.extend(package_errors)
+        observed_dcb_versions.update(package_dcb_versions)
+        package_readmes.extend(package_readme)
 
     if expected_dcb_version is not None and observed_dcb_versions != {expected_dcb_version}:
         errors.append(
@@ -171,10 +196,36 @@ def inspect_packages(
     return errors, observed_dcb_versions, package_readmes
 
 
+def inspect_package_files(
+    package_files: list[Path],
+    expected_package_id: str,
+    expected_artifact_version: str,
+) -> tuple[list[str], list[tuple[str, str]]]:
+    errors: list[str] = []
+    package_readmes: list[tuple[str, str]] = []
+    if not package_files:
+        return ["no package files were supplied"], package_readmes
+
+    for package in package_files:
+        package_errors, _, package_readme = inspect_one_package(
+            package,
+            expected_package_version=None,
+            expected_package_id=expected_package_id,
+            expected_artifact_version=expected_artifact_version,
+        )
+        errors.extend(package_errors)
+        package_readmes.extend(package_readme)
+    return errors, package_readmes
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--package-version", required=True)
-    parser.add_argument("--package-dir", type=Path)
+    package_artifact = parser.add_mutually_exclusive_group()
+    package_artifact.add_argument("--package-dir", type=Path)
+    package_artifact.add_argument("--package-file", action="append", type=Path, dest="package_files")
+    parser.add_argument("--package-id")
+    parser.add_argument("--artifact-version")
     parser.add_argument("--dcb-version")
     parser.add_argument("--runtime-image-version", required=True)
     parser.add_argument("--document", action="append", type=Path, dest="documents")
@@ -195,8 +246,20 @@ def main() -> int:
     observed_dcb_versions: set[str] = set()
 
     if not args.skip_package_artifact:
-        if args.package_dir is None:
-            errors.append("--package-dir is required unless --skip-package-artifact is used")
+        if args.package_files is not None:
+            if args.package_id is None:
+                errors.append("--package-id is required with --package-file")
+            if args.artifact_version is None:
+                errors.append("--artifact-version is required with --package-file")
+            if args.package_id is not None and args.artifact_version is not None:
+                package_errors, package_readmes = inspect_package_files(
+                    args.package_files,
+                    args.package_id,
+                    args.artifact_version,
+                )
+                errors.extend(package_errors)
+        elif args.package_dir is None:
+            errors.append("--package-dir or --package-file is required unless --skip-package-artifact is used")
         else:
             package_errors, observed_dcb_versions, package_readmes = inspect_packages(
                 args.package_dir,
@@ -206,6 +269,8 @@ def main() -> int:
                 root,
             )
             errors.extend(package_errors)
+    elif args.package_files is not None:
+        errors.append("--package-file cannot be combined with --skip-package-artifact")
 
     if not expected["current-dcb-version"] and len(observed_dcb_versions) == 1:
         expected["current-dcb-version"] = next(iter(observed_dcb_versions))
@@ -238,7 +303,10 @@ def main() -> int:
         errors.extend(package_errors)
 
     print(f"Package version: {args.package_version}")
-    print(f"DCB version from produced package metadata: {expected['current-dcb-version'] or '(none)'}")
+    if observed_dcb_versions:
+        print(f"DCB version from produced package metadata: {expected['current-dcb-version']}")
+    else:
+        print(f"DCB version release input: {expected['current-dcb-version'] or '(none)'}")
     print(f"Runtime image version: {args.runtime_image_version}")
     print(f"Checked marked documents: {len(documents)}")
     print(f"Checked packaged READMEs: {len(package_readmes)}")

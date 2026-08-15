@@ -8,11 +8,15 @@ trap 'rm -rf "$fixture_dir"' EXIT
 
 fixture="$fixture_dir/current.md"
 cp docs/public-packages.md "$fixture"
+runtime_image_version="${RUNTIME_IMAGE_VERSION:-}"
+if [[ -z "$runtime_image_version" ]]; then
+  runtime_image_version="$(RUNTIME_IMAGE_TAG=preview scripts/release/resolve-runtime-host-image-version.sh)"
+fi
 
 python3 scripts/release/check-consumer-version-accuracy.py \
   --package-version 1.0.0-preview.5 \
   --dcb-version 10.14.0 \
-  --runtime-image-version 1.0.0-preview.3 \
+  --runtime-image-version "$runtime_image_version" \
   --document "$fixture" \
   --skip-package-artifact >/dev/null
 
@@ -29,7 +33,7 @@ PY
 if output=$(python3 scripts/release/check-consumer-version-accuracy.py \
   --package-version 1.0.0-preview.5 \
   --dcb-version 10.14.0 \
-  --runtime-image-version 1.0.0-preview.3 \
+  --runtime-image-version "$runtime_image_version" \
   --document "$fixture" \
   --skip-package-artifact 2>&1); then
   echo "expected the wrong-version fixture to fail" >&2

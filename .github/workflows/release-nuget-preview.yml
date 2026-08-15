@@ -56,6 +56,20 @@ jobs:
           dotnet-version: '10.0.x'
           dotnet-quality: 'preview'
 
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Resolve runtime-host image version from registry
+        id: runtime-image
+        env:
+          IMAGE_NAME: ghcr.io/j-tech-japan/sekiban-wasm-runtime-host
+          RUNTIME_IMAGE_TAG: preview
+        run: |
+          set -euo pipefail
+          version="$(scripts/release/resolve-runtime-host-image-version.sh)"
+          echo "RUNTIME_IMAGE_VERSION=${version}" >> "$GITHUB_ENV"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "Registry ${IMAGE_NAME}:${RUNTIME_IMAGE_TAG} advertises runtime version ${version}"
+
       - name: Resolve package version
         run: |
           version="${RAW_PACKAGE_VERSION#v}"
@@ -73,10 +87,12 @@ jobs:
 
       - name: Consumer version accuracy
         env:
-          RUNTIME_IMAGE_VERSION: '1.0.0-preview.3'
+          RUNTIME_IMAGE_VERSION: ${{ steps.runtime-image.outputs.version }}
         run: scripts/release/check-consumer-version-accuracy.sh "$PACKAGE_VERSION"
 
       - name: Consumer version assertion regression
+        env:
+          RUNTIME_IMAGE_VERSION: ${{ steps.runtime-image.outputs.version }}
         run: scripts/release/test-consumer-version-accuracy.sh
 
       - name: Consumer smoke
