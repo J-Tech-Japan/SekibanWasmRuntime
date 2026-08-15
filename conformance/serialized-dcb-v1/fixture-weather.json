@@ -1,0 +1,18 @@
+{
+  "eventPayloadName": "WeatherForecastCreated",
+  "payloadTemplate": "{\"forecastId\":\"{id}\",\"location\":\"Tokyo\",\"temperatureC\":21,\"summary\":\"SWR-G082\",\"createdAt\":\"{timestamp}\"}",
+  "tagTemplate": "weather:{id}",
+  "tagGroupTemplate": "weather",
+  "tagContentTemplate": "{id}",
+  "tagProjector": "WeatherForecastProjector",
+  "tagStateIdTemplate": "weather:{id}:WeatherForecastProjector",
+  "tagStateLastIdKey": "lastSortedUniqueId",
+  "scalarQuery": {
+    "queryType": "GetWeatherForecastCountQuery",
+    "queryParamsJson": "{}"
+  },
+  "listQuery": {
+    "queryType": "GetWeatherForecastListQuery",
+    "queryParamsJson": "{\"PageNumber\":1,\"PageSize\":20}"
+  }
+}
