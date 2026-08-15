@@ -4,12 +4,12 @@ The release lane checks the instructions that reach consumers, including the
 README copied into each produced NuGet package. The check is driven by inline
 assertion markers rather than a filename allowlist:
 
-- `<!-- release-lane: current-package-version -->` marks a current package
+- `&lt;!-- release-lane: current-package-version --&gt;` marks a current package
   version that must equal the version supplied to the lane (`PACKAGE_VERSION`).
-- `<!-- release-lane: current-dcb-version -->` marks a current Sekiban.Dcb
+- `&lt;!-- release-lane: current-dcb-version --&gt;` marks a current Sekiban.Dcb
   baseline that must equal the concrete dependency version found in the
   produced nupkg.
-- `<!-- release-lane: current-runtime-image-version -->` marks the current
+- `&lt;!-- release-lane: current-runtime-image-version --&gt;` marks the current
   runtime-host tag. The lane input is the registry-verified tag, not a Git tag
   or another document.
 
