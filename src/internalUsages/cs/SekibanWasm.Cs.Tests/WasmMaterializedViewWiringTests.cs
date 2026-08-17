@@ -1,10 +1,15 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.InMemory;
 using Sekiban.Dcb.MaterializedView;
+using Sekiban.Dcb.MaterializedView.Sqlite;
 using Sekiban.Dcb.WasmRuntime.Host.MaterializedView;
+using SekibanWasm.Cs.Domain;
 using Xunit;
 
 namespace SekibanWasm.Cs.Tests;
@@ -80,9 +85,10 @@ public sealed class WasmMaterializedViewWiringTests
         services.Replace(ServiceDescriptor.Singleton<IMvExecutor>(executor));
 
         await using var provider = services.BuildServiceProvider();
-        Assert.Equal(
-            MvInitializationMode.VerifyOnly,
-            provider.GetRequiredService<IOptions<MvOptions>>().Value.InitializationMode);
+        var options = provider.GetRequiredService<IOptions<MvOptions>>().Value;
+        Assert.Equal(MvInitializationMode.VerifyAndExecute, options.InitializationMode);
+        Assert.Equal(MvSqlStatementPolicyMode.Enforced, options.SqlStatementPolicyMode);
+        Assert.IsType<WasmMvSqlStatementPolicy>(options.SqlStatementPolicy);
         var workerDescriptor = Assert.Single(services, descriptor =>
             descriptor.ServiceType == typeof(IHostedService) &&
             descriptor.ImplementationFactory is not null);
@@ -102,6 +108,75 @@ public sealed class WasmMaterializedViewWiringTests
         finally
         {
             await worker.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task VerifyOnlyWorker_LogsInspectionStateAndDoesNotEnterCatchUp()
+    {
+        const string serviceId = "tenant-a";
+        var host = new ContractHost();
+        var executor = new CapturingExecutor();
+        var logger = new InspectionStateLogger();
+        var worker = new MvCatchUpWorker(
+            new ContractHostFactory(host),
+            executor,
+            Options.Create(new MvOptions
+            {
+                ServiceId = serviceId,
+                InitializationMode = MvInitializationMode.VerifyOnly
+            }),
+            logger,
+            serviceId);
+
+        await worker.StartAsync(CancellationToken.None);
+        try
+        {
+            var message = await logger.InspectionStateLogged.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal(
+                "Materialized-view worker verified the pre-provisioned contract and will not run a mutating catch-up lifecycle.",
+                message);
+        }
+        finally
+        {
+            await worker.StopAsync(CancellationToken.None);
+        }
+
+        Assert.Single(executor.InitializeCalls);
+        Assert.Empty(executor.CatchUpCalls);
+    }
+
+    [Fact]
+    public async Task VerifyOnlyOptions_RejectDirectExecutorCallsWithTypedBoundary()
+    {
+        const string serviceId = "tenant-a";
+        var databasePath = Path.Combine(Path.GetTempPath(), $"swr-g083-wiring-{Guid.NewGuid():N}.db");
+        try
+        {
+            var connectionString = $"Data Source={databasePath}";
+            var executor = new SqliteMvExecutor(
+                new InMemoryEventStoreFactory(DomainType.GetDomainTypes().EventTypes),
+                new SqliteMvRegistryStore(connectionString),
+                Options.Create(new MvOptions
+                {
+                    ServiceId = serviceId,
+                    InitializationMode = MvInitializationMode.VerifyOnly
+                }),
+                NullLogger<SqliteMvExecutor>.Instance,
+                connectionString);
+            var host = new ContractHost();
+
+            var catchUp = await Assert.ThrowsAsync<MvTransitionNotAllowedException>(() =>
+                executor.CatchUpOnceAsync(host));
+            var apply = await Assert.ThrowsAsync<MvTransitionNotAllowedException>(() =>
+                executor.ApplySerializableEventsAsync(host, []));
+
+            AssertVerifyOnlyRefusal(catchUp, MvTransition.CatchUp, serviceId);
+            AssertVerifyOnlyRefusal(apply, MvTransition.Apply, serviceId);
+        }
+        finally
+        {
+            File.Delete(databasePath);
         }
     }
 
@@ -180,4 +255,51 @@ public sealed class WasmMaterializedViewWiringTests
     }
 
     private sealed record Call(IMvApplyHost Host, string? ServiceId);
+
+    private static void AssertVerifyOnlyRefusal(
+        MvTransitionNotAllowedException exception,
+        MvTransition transition,
+        string serviceId)
+    {
+        Assert.Equal(MvInitializationMode.VerifyOnly, exception.Mode);
+        Assert.Equal(transition, exception.Transition);
+        Assert.Equal(MvTransitionNotAllowedReason.VerifyOnly, exception.Reason);
+        Assert.Equal(serviceId, exception.ServiceId);
+        Assert.Equal("ContractView", exception.ViewName);
+        Assert.Equal(1, exception.ViewVersion);
+    }
+
+    private sealed class InspectionStateLogger : ILogger<MvCatchUpWorker>
+    {
+        public TaskCompletionSource<string> InspectionStateLogged { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => NullScope.Instance;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            var message = formatter(state, exception);
+            if (logLevel == LogLevel.Information &&
+                message.Contains("will not run a mutating catch-up lifecycle", StringComparison.Ordinal))
+            {
+                InspectionStateLogged.TrySetResult(message);
+            }
+        }
+    }
+
+    private sealed class NullScope : IDisposable
+    {
+        public static NullScope Instance { get; } = new();
+
+        public void Dispose()
+        {
+        }
+    }
 }

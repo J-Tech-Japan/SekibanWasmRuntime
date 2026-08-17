@@ -1,9 +1,31 @@
 # NuGet Preview 1.0.0-preview.3 Readiness
 
 This is the release-readiness record for the Sekiban.Dcb dependency refreshes
-tracked by [#264] and [#268]. The current runtime baseline is 10.14.0 at
-dcb-v10.14.0; the historical 10.12.0 evidence remains below for comparison.
-This document does not create a GitHub Release or publish packages.
+tracked by [#264] and [#268]. The current runtime baseline is 10.15.0 at
+dcb-v10.15.0; the historical 10.14.0 and 10.12.0 evidence remains below for
+comparison. This document does not create a GitHub Release or publish packages.
+
+## SWR-G083 10.15.0 verified-execution adoption
+
+All 13 centrally managed `Sekiban.Dcb.*` package pins in
+`Directory.Packages.props` are `10.15.0`, and `submodules/Sekiban` is aligned
+to tag `dcb-v10.15.0` at commit `714cae1ce71d579de7f79015dcd9f1a06952b672`.
+
+The production WASM materialized-view host selects
+`MvInitializationMode.VerifyAndExecute`, retaining the explicit enforced
+`WasmMvSqlStatementPolicy`. This preserves host ownership of schema and
+registry provisioning: startup verifies their pre-provisioned contract, then
+the runtime may execute only policy-authorized projector DML and checkpoint /
+lifecycle DML. It does not acquire CREATE, ALTER, or DROP ownership.
+`VerifyOnly` remains the supported inspection-state choice for callers that
+want verification without a mutating catch-up lifecycle.
+
+The PostgreSQL integration gate creates a DDL-denied runtime role and, before
+asserting progress, proves `CREATE`, `ALTER`, and `DROP` each fail with SQLSTATE
+`42501` on the same connection string used for verified execution. It then
+measures one applied event advancing the registry checkpoint. A policy-rejected
+batch is also required to leave projection rows, registry/status, and the
+active pointer unchanged.
 
 ## Dependency Baseline
 

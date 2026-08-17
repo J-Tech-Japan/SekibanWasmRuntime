@@ -21,7 +21,7 @@ instead — `Sekiban.Dcb.WasmRuntime`, `.Remote`, or `.Wasmtime` (see
 [Related packages](#related-packages)).
 
 The current published package line is `1.0.0-preview.5`. <!-- release-lane: current-package-version -->
-The current Sekiban.Dcb baseline is `10.14.0`. <!-- release-lane: current-dcb-version -->
+The current Sekiban.Dcb baseline is `10.15.0`. <!-- release-lane: current-dcb-version -->
 
 ## Usage
 

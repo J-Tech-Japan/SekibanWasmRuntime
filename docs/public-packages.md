@@ -69,7 +69,7 @@ retained and is the value checked by the release-lane marker.
 ```
 
 The current published NuGet package line is `1.0.0-preview.5`. <!-- release-lane: current-package-version -->
-The current Sekiban.Dcb baseline is `10.14.0`. <!-- release-lane: current-dcb-version -->
+The current Sekiban.Dcb baseline is `10.15.0`. <!-- release-lane: current-dcb-version -->
 
 | Package | What it is |
 | --- | --- |
@@ -77,7 +77,7 @@ The current Sekiban.Dcb baseline is `10.14.0`. <!-- release-lane: current-dcb-ve
 | `Sekiban.Dcb.WasmRuntime.Remote` | `RemoteSekibanExecutor` — typed client over the serialized HTTP contract |
 | `Sekiban.Dcb.WasmRuntime.Aspire` | `AddSekibanWasmRuntime(name, opts)` for a C# Aspire AppHost |
 
-All three sit on Sekiban.Dcb `10.14.0`. `Sekiban.Cloud.Client 1.0.0-preview.1` is
+All three sit on Sekiban.Dcb `10.15.0`. `Sekiban.Cloud.Client 1.0.0-preview.1` is
 also on NuGet but predates that baseline.
 
 ### Rust — crates.io
