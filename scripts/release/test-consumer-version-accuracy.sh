@@ -15,7 +15,7 @@ fi
 
 python3 scripts/release/check-consumer-version-accuracy.py \
   --package-version 1.0.0-preview.5 \
-  --dcb-version 10.15.0 \
+  --dcb-version 10.16.0 \
   --runtime-image-version "$runtime_image_version" \
   --document "$fixture" \
   --skip-package-artifact >/dev/null
@@ -32,7 +32,7 @@ PY
 
 if output=$(python3 scripts/release/check-consumer-version-accuracy.py \
   --package-version 1.0.0-preview.5 \
-  --dcb-version 10.15.0 \
+  --dcb-version 10.16.0 \
   --runtime-image-version "$runtime_image_version" \
   --document "$fixture" \
   --skip-package-artifact 2>&1); then

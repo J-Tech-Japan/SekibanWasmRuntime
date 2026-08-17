@@ -31,7 +31,7 @@ on:
       dcb_version:
         description: 'Sekiban.Dcb baseline asserted by the Templates README'
         required: true
-        default: '10.15.0'
+        default: '10.16.0'
       publish:
         description: 'Emergency manual publish to NuGet after checks (normally publish via a templates-v* GitHub Release)'
         type: boolean
@@ -47,7 +47,7 @@ env:
   # templates-v* release tag wins; workflow_dispatch input is the fallback.
   RAW_PACKAGE_VERSION: ${{ github.event.release.tag_name || inputs.package_version || '1.0.0-preview.1' }}
   RUNTIME_PACKAGE_VERSION: ${{ inputs.runtime_package_version || '1.0.0-preview.5' }}
-  SEKIBAN_DCB_VERSION: ${{ inputs.dcb_version || '10.15.0' }}
+  SEKIBAN_DCB_VERSION: ${{ inputs.dcb_version || '10.16.0' }}
 
 jobs:
   validate:
