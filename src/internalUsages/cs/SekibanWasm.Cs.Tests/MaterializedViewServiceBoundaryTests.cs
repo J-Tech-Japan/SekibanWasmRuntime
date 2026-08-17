@@ -50,6 +50,32 @@ public sealed class MaterializedViewServiceBoundaryTests
     }
 
     [Fact]
+    public async Task PostgresExecutor_VerifyOnlyRefusesDirectMutatingCallsWithTypedBoundary()
+    {
+        var sourceFactory = new ThrowingEventStoreFactory();
+        var registry = new CountingRegistryStore();
+        var host = new BoundaryHost();
+        var executor = CreateExecutor(
+            sourceFactory,
+            registry,
+            new MvOptions
+            {
+                ServiceId = "bound-service",
+                InitializationMode = MvInitializationMode.VerifyOnly
+            });
+
+        var catchUp = await Assert.ThrowsAsync<MvTransitionNotAllowedException>(() =>
+            executor.CatchUpOnceAsync(host));
+        var apply = await Assert.ThrowsAsync<MvTransitionNotAllowedException>(() =>
+            executor.ApplySerializableEventsAsync(host, []));
+
+        AssertVerifyOnlyRefusal(catchUp, MvTransition.CatchUp);
+        AssertVerifyOnlyRefusal(apply, MvTransition.Apply);
+        Assert.Equal(0, registry.EnsureCalls);
+        Assert.Equal(0, sourceFactory.CreateCalls);
+    }
+
+    [Fact]
     public void CatchUpWorker_RejectsMissingMismatchedAndImplicitDefaultServiceIdsInConstructor()
     {
         var factory = new BoundaryHostFactory();
@@ -96,6 +122,18 @@ public sealed class MaterializedViewServiceBoundaryTests
             Options.Create(options),
             NullLogger<PostgresMvExecutor>.Instance,
             "Host=unused;Database=unused");
+
+    private static void AssertVerifyOnlyRefusal(
+        MvTransitionNotAllowedException exception,
+        MvTransition transition)
+    {
+        Assert.Equal(MvInitializationMode.VerifyOnly, exception.Mode);
+        Assert.Equal(transition, exception.Transition);
+        Assert.Equal(MvTransitionNotAllowedReason.VerifyOnly, exception.Reason);
+        Assert.Equal("bound-service", exception.ServiceId);
+        Assert.Equal("Boundary", exception.ViewName);
+        Assert.Equal(1, exception.ViewVersion);
+    }
 
     private sealed class ThrowingEventStoreFactory : IEventStoreFactory
     {

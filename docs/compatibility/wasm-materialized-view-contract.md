@@ -14,20 +14,23 @@ grain, database, or event work starts. Core modules are hashed as-is; component 
 reduced from the one source snapshot and the extracted core bytes passed to Wasmtime are hashed.
 The manifest therefore always carries the digest of the bytes actually instantiated.
 
-## Verify-only schema decision
+## Verified-execution schema decision
 
-The C# guests emit provider-neutral schema metadata and the host maps it to DCB 10.14's
+The C# guests emit provider-neutral schema metadata and the host maps it to DCB 10.15's
 `GetSchemaContract`/`GetSchemaRequirements` contract. Their registered-table contract is therefore
-truthful and can be checked by `VerifyOnly` without executing guest initialization.
+truthful and is verified before the host enters the `VerifyAndExecute` lifecycle.
 
 Rust, Go, TypeScript, Swift, and MoonBit guests currently expose the common identity/ABI/capability
 metadata but do not yet expose a provider-neutral schema description. The explicit decision for
-this release is **verify-only deferral** for those guests: `GetSchemaContract` returns `null`, the
-empty fallback is treated as `SchemaContractUnavailable`, and the host fails closed. The production
-WASM runtime explicitly selects `VerifyOnly`; `CreateOrEnsure` remains available only to callers
-that intentionally configure the DCB compatibility path. The deferral remains until each guest
-can truthfully describe every registered table, column family, nullability, key, index, and relevant
-default/generated expression. No package or release is published by this repository change.
+this release is **verified-execution deferral** for those guests: `GetSchemaContract` returns
+`null`, the empty fallback is treated as `SchemaContractUnavailable`, and the host fails closed
+before any lifecycle DML. The production WASM runtime explicitly selects `VerifyAndExecute`: it
+verifies host-provisioned schema and registry bindings, then runs projector/checkpoint DML through
+the enforced `WasmMvSqlStatementPolicy` without taking CREATE/ALTER/DROP ownership. `CreateOrEnsure`
+remains available only to callers that intentionally configure the DCB compatibility path. The
+deferral remains until each guest can truthfully describe every registered table, column family,
+nullability, key, index, and relevant default/generated expression. No package or release is
+published by this repository change.
 
 ## Host-owned query policy
 
@@ -36,7 +39,7 @@ callback is read-only, must be a single parameterized `SELECT`, may reference on
 physical tables, and is bounded to at most 1,000 rows. Comments, DDL/DML, transaction control,
 catalog/framework tables, cross-view references, missing parameters, and invalid row limits are
 rejected before the query port is called. Returned initialization/apply statements are sent
-through DCB 10.14's enforced `MvPolicyEnforcingQueryPort`/statement-policy path; this repository
+through DCB 10.15's enforced `MvPolicyEnforcingQueryPort`/statement-policy path; this repository
 does not duplicate that framework statement policy.
 
 The module digest, ABI, capabilities, metadata convergence, real Wasmtime export/metadata call,

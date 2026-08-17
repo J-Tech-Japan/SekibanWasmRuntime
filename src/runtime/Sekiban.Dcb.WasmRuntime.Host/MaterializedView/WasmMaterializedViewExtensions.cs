@@ -142,9 +142,10 @@ public static class WasmMaterializedViewExtensions
             options.BatchSize = 100;
             options.PollInterval = TimeSpan.FromSeconds(1);
             // WASM guests are deployed against host-owned, pre-provisioned MV infrastructure.
-            // Keep the DCB compatibility default (CreateOrEnsure) for callers that explicitly
-            // choose it, but make this production runtime's ownership boundary unambiguous.
-            options.InitializationMode = MvInitializationMode.VerifyOnly;
+            // Verify that contract first, then execute projector/checkpoint lifecycle DML through
+            // the explicit enforced policy without acquiring any DDL ownership. CreateOrEnsure
+            // remains the compatibility default for callers that intentionally choose it.
+            options.InitializationMode = MvInitializationMode.VerifyAndExecute;
             options.SqlStatementPolicyMode = MvSqlStatementPolicyMode.Enforced;
             options.SqlStatementPolicy = new WasmMvSqlStatementPolicy();
         });

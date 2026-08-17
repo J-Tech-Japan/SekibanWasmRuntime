@@ -78,6 +78,39 @@ public sealed class MaterializedViewServiceIsolationTests
     }
 
     [Fact]
+    public async Task VerifyOnlyExecutor_RefusesDirectCatchUpAndApplyWithTypedBoundary()
+    {
+        var databasePath = CreateDatabasePath();
+        try
+        {
+            var connectionString = $"Data Source={databasePath}";
+            var domainTypes = DomainType.GetDomainTypes();
+            var sourceFactory = new InMemoryEventStoreFactory(domainTypes.EventTypes);
+            var registry = new SqliteMvRegistryStore(connectionString);
+            var projector = new IsolationProjector();
+            var host = new NativeMvApplyHost(projector, domainTypes.EventTypes, MvDbType.Sqlite);
+            var executor = CreateScopedExecutor(
+                sourceFactory,
+                registry,
+                connectionString,
+                ServiceA,
+                MvInitializationMode.VerifyOnly);
+
+            var catchUp = await Assert.ThrowsAsync<MvTransitionNotAllowedException>(() =>
+                executor.CatchUpOnceAsync(host));
+            var apply = await Assert.ThrowsAsync<MvTransitionNotAllowedException>(() =>
+                executor.ApplySerializableEventsAsync(host, []));
+
+            AssertVerifyOnlyRefusal(catchUp, MvTransition.CatchUp);
+            AssertVerifyOnlyRefusal(apply, MvTransition.Apply);
+        }
+        finally
+        {
+            File.Delete(databasePath);
+        }
+    }
+
+    [Fact]
     public async Task LegacyAmbientExecutor_KillingControlContaminatesFirstServicePass()
     {
         var databasePath = CreateDatabasePath();
@@ -147,18 +180,32 @@ public sealed class MaterializedViewServiceIsolationTests
         IEventStoreFactory sourceFactory,
         IMvRegistryStore registry,
         string connectionString,
-        string serviceId) =>
+        string serviceId,
+        MvInitializationMode initializationMode = MvInitializationMode.CreateOrEnsure) =>
         new(
             sourceFactory,
             registry,
             Options.Create(new MvOptions
             {
                 ServiceId = serviceId,
+                InitializationMode = initializationMode,
                 BatchSize = 100,
                 SafeWindowMs = 0
             }),
             NullLogger<SqliteMvExecutor>.Instance,
             connectionString);
+
+    private static void AssertVerifyOnlyRefusal(
+        MvTransitionNotAllowedException exception,
+        MvTransition transition)
+    {
+        Assert.Equal(MvInitializationMode.VerifyOnly, exception.Mode);
+        Assert.Equal(transition, exception.Transition);
+        Assert.Equal(MvTransitionNotAllowedReason.VerifyOnly, exception.Reason);
+        Assert.Equal(ServiceA, exception.ServiceId);
+        Assert.Equal(IsolationProjector.ViewNameValue, exception.ViewName);
+        Assert.Equal(1, exception.ViewVersion);
+    }
 
     private static SerializableEvent CreateForecastEvent(
         string forecastId,

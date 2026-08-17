@@ -7,6 +7,20 @@ on:
 jobs:
   build-test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: sekiban_mv_tests
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d sekiban_mv_tests"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
         with:
@@ -42,6 +56,8 @@ jobs:
         run: bash scripts/contract/run-serialized-dcb-v1-ci.sh
 
       - name: Test
+        env:
+          SEKIBAN_MV_TEST_POSTGRES_CONNECTION_STRING: Host=localhost;Port=5432;Database=sekiban_mv_tests;Username=postgres;Password=postgres;Pooling=false
         run: dotnet test src/SekibanWasmRuntime.ci.slnx -c Release --no-build
 
       - name: E2E (Aspire + Playwright, CS)
