@@ -7,7 +7,7 @@ These packages are published as `1.0.0-preview.*` while the public runtime
 contract, package split, and Wasmtime host policy are finalized.
 
 The current published package line is `1.0.0-preview.5`. <!-- release-lane: current-package-version -->
-The current Sekiban.Dcb baseline is `10.15.0`. <!-- release-lane: current-dcb-version -->
+The current Sekiban.Dcb baseline is `10.16.0`. <!-- release-lane: current-dcb-version -->
 
 ## Package Selection
 

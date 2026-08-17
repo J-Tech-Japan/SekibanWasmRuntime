@@ -1,9 +1,29 @@
 # NuGet Preview 1.0.0-preview.3 Readiness
 
 This is the release-readiness record for the Sekiban.Dcb dependency refreshes
-tracked by [#264] and [#268]. The current runtime baseline is 10.15.0 at
-dcb-v10.15.0; the historical 10.14.0 and 10.12.0 evidence remains below for
+tracked by [#264], [#268], and #277. The current runtime baseline is 10.16.0 at
+dcb-v10.16.0; the historical 10.15.0, 10.14.0, and 10.12.0 evidence remains below for
 comparison. This document does not create a GitHub Release or publish packages.
+
+## SWR-G084 10.16.0 projection-status heartbeat adoption
+
+All 13 centrally managed `Sekiban.Dcb.*` package pins in
+`Directory.Packages.props` are `10.16.0`, and `submodules/Sekiban` is aligned
+to tag `dcb-v10.16.0` at commit `7190714b8a3a9479a3afa7cb1bd6e2cfb54d0dfc`.
+
+The published 10.16.0 assemblies expose the recovered PostgreSQL projection
+status store contract. The host integration test resolves the store through
+`RuntimeHostStorageConfigurationResolver`, writes three heartbeat cycles to
+real PostgreSQL, rereads the durable row after each write, and observes
+`Sequence` advancing as `1 → 2 → 3`; a success-shaped write without readback
+would not satisfy this gate.
+
+The repository's serialized DCB V1 suite was run externally against the
+upgraded host from a fresh temporary Git repository. Both passing phases and
+the deliberately broken-tag negative proof are recorded in
+`reports/compatibility/serialized-dcb-v1-conformance.md`. F-006 is recorded in
+the serialized findings ledger as a path-scope clarification with no V1-boundary
+divergence. No preview.6 publish was performed.
 
 ## SWR-G083 10.15.0 verified-execution adoption
 
