@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
 
-package_version="${PACKAGE_VERSION:-${1:-1.0.0-preview.5}}"
+package_version="${PACKAGE_VERSION:-${1:-1.0.0-preview.6}}"
 package_version="${package_version#v}"
 runtime_image_version="${RUNTIME_IMAGE_VERSION:-}"
 nuget_dir="${NUGET_OUTPUT_DIR:-artifacts/nuget}"

@@ -17,7 +17,7 @@ All three packages are currently preview packages versioned as
 The Wasmtime package is included in the preview matrix while native asset
 packaging and host policy are finalized.
 
-The current published package line is `1.0.0-preview.5`. <!-- release-lane: current-package-version -->
+The current published package line is `1.0.0-preview.6`. <!-- release-lane: current-package-version -->
 The current Sekiban.Dcb baseline is `10.16.0`. <!-- release-lane: current-dcb-version -->
 
 Install with prerelease resolution enabled:
@@ -184,7 +184,7 @@ and Materialized View catch-up). See the verification evidence in
 The GHCR runtime-host **container** tag and the **NuGet** package versions are
 independent lanes and move on their own cadence: the latest verified runtime-host
 container tag is **`1.0.0-preview.3`**, while the latest public NuGet packages
-(`Sekiban.Dcb.WasmRuntime`, `…Remote`, `…Wasmtime`) are **`1.0.0-preview.5`**. Do
+(`Sekiban.Dcb.WasmRuntime`, `…Remote`, `…Wasmtime`) are **`1.0.0-preview.6`**. Do
 not assume the two share a version number.
 
 Rust support now has two lanes. Existing repo-development samples continue to
