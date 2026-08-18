@@ -63,12 +63,12 @@ retained and is the value checked by the release-lane marker.
 ### .NET — NuGet
 
 ```xml
-<PackageReference Include="Sekiban.Dcb.WasmRuntime" Version="1.0.0-preview.5" />
-<PackageReference Include="Sekiban.Dcb.WasmRuntime.Remote" Version="1.0.0-preview.5" />
-<PackageReference Include="Sekiban.Dcb.WasmRuntime.Aspire" Version="1.0.0-preview.5" />
+<PackageReference Include="Sekiban.Dcb.WasmRuntime" Version="1.0.0-preview.6" />
+<PackageReference Include="Sekiban.Dcb.WasmRuntime.Remote" Version="1.0.0-preview.6" />
+<PackageReference Include="Sekiban.Dcb.WasmRuntime.Aspire" Version="1.0.0-preview.6" />
 ```
 
-The current published NuGet package line is `1.0.0-preview.5`. <!-- release-lane: current-package-version -->
+The current published NuGet package line is `1.0.0-preview.6`. <!-- release-lane: current-package-version -->
 The current Sekiban.Dcb baseline is `10.16.0`. <!-- release-lane: current-dcb-version -->
 
 | Package | What it is |
