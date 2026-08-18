@@ -13,7 +13,7 @@ cp docs/public-packages.md "$fixture"
 # compares against the lane's PACKAGE_VERSION independently. Reading the
 # marker value from the document itself is therefore correct here, and it
 # removes the hardcoded current-line copy that rotted on every release.
-package_version="$(grep -oE '\x60[0-9]+\.[0-9]+\.[0-9]+-preview\.[0-9]+\x60\. <!-- release-lane: current-package-version -->' docs/public-packages.md | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+-preview\.[0-9]+')"
+package_version="$(grep -oE '`[0-9]+\.[0-9]+\.[0-9]+-preview\.[0-9]+`\. <!-- release-lane: current-package-version -->' docs/public-packages.md | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+-preview\.[0-9]+')"
 mutated_version="${package_version%.*}.$(( ${package_version##*.} + 1 ))"
 runtime_image_version="${RUNTIME_IMAGE_VERSION:-}"
 if [[ -z "$runtime_image_version" ]]; then
