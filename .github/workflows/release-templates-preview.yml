@@ -27,7 +27,7 @@ on:
       runtime_package_version:
         description: 'Runtime package version asserted by the Templates README'
         required: true
-        default: '1.0.0-preview.5'
+        default: '1.0.0-preview.6'
       dcb_version:
         description: 'Sekiban.Dcb baseline asserted by the Templates README'
         required: true
@@ -46,7 +46,7 @@ permissions:
 env:
   # templates-v* release tag wins; workflow_dispatch input is the fallback.
   RAW_PACKAGE_VERSION: ${{ github.event.release.tag_name || inputs.package_version || '1.0.0-preview.1' }}
-  RUNTIME_PACKAGE_VERSION: ${{ inputs.runtime_package_version || '1.0.0-preview.5' }}
+  RUNTIME_PACKAGE_VERSION: ${{ inputs.runtime_package_version || '1.0.0-preview.6' }}
   SEKIBAN_DCB_VERSION: ${{ inputs.dcb_version || '10.16.0' }}
 
 jobs:
