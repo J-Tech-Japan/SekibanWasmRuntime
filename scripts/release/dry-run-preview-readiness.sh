@@ -4,7 +4,7 @@ set -uo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
 repo_root="$(pwd)"
-package_version="${PACKAGE_VERSION:-${1:-1.0.0-preview.5}}"
+package_version="${PACKAGE_VERSION:-${1:-1.0.0-preview.6}}"
 package_version="${package_version#v}"
 
 if [[ ! "$package_version" =~ ^1\.0\.0-preview\.[0-9A-Za-z.-]+$ ]]; then
