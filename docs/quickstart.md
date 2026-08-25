@@ -18,7 +18,7 @@ The Wasmtime package is included in the preview matrix while native asset
 packaging and host policy are finalized.
 
 The current published package line is `1.0.0-preview.6`. <!-- release-lane: current-package-version -->
-The current Sekiban.Dcb baseline is `10.16.0`. <!-- release-lane: current-dcb-version -->
+The current Sekiban.Dcb baseline is `10.19.0`. <!-- release-lane: current-dcb-version -->
 
 Install with prerelease resolution enabled:
 

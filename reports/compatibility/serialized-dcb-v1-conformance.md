@@ -7,17 +7,17 @@
 - HTTP-only suite: **true** (Python standard library; no local implementation import)
 - Restart lifecycle command executed: **true**
 - Deliberately broken commit tag comparison (HTTP proxy) failed as expected: **true**
-- Target: http://127.0.0.1:57280
+- Target: http://127.0.0.1:65130
 - Suite source: conformance/serialized-dcb-v1/suite.py
 
 ## Scenario markers
 
-    before.log:BEFORE_RESTART=PASS tag=weather:g082-a517acade5c2 head=063922597570096092200125817952
+    before.log:BEFORE_RESTART=PASS tag=weather:g082-8f822ebde665 head=063923233801977885001515325769
     before.log:CONFORMANCE_RESULT=PASS phase=before-restart requests=32
-    after.log:AFTER_RESTART=PASS tag=weather:g082-a517acade5c2 old=063922597570096092200125817952 new=063922597574471579201485603951
+    after.log:AFTER_RESTART=PASS tag=weather:g082-8f822ebde665 old=063923233801977885001515325769 new=063923233807276740601626843551
     after.log:CONFORMANCE_RESULT=PASS phase=after-restart requests=6
-    negative.log:CONFORMANCE_RESULT=FAIL detail=broken-commit-exact-conflict: expected conflict HTTP 400/409, got 200: {'writtenEvents': [{'payload': 'eyJmb3JlY2FzdElkIjoiZzA4Mi1hNTE3YWNhZGU1YzItYnJva2VuLWNvbW1pdCIsImxvY2F0aW9uIjoiVG9reW8iLCJ0ZW1wZXJhdHVyZUMiOjIxLCJzdW1tYXJ5IjoiU1dSLUcwODIiLCJjcmVhdGVkQXQiOiIyMDI2LTA4LTE3VDIxOjA2OjE3LjIwNloifQ==', 'sortableUniqueIdValue': '063922597577217464900082002382', 'id': '01a0118b-ea01-7f72-9ede-b3f36a0fb2f4', 'eventMetadata': {'causationId': '01a0118b-ea01-7f72-9ede-b3f36a0fb2f4', 'correlationId': 'SerializedCommit', 'executedUser': 'SerializedSekibanExecutor'}, 'tags': ['weather:g082-a517acade5c2'], 'eventPayloadName': 'WeatherForecastCreated'}], 'tagWriteResults': [{'tag': 'weather:g082-a517acade5c2', 'version': 1, 'writtenAt': '2026-08-17T21:06:17.2199331+00:00'}], 'duration': '00:00:00.0103440'}
-    negative.log:BROKEN_TAG_NEGATIVE=EXPECTED_FAILURE detail=broken-commit-exact-conflict: expected conflict HTTP 400/409, got 200: {'writtenEvents': [{'payload': 'eyJmb3JlY2FzdElkIjoiZzA4Mi1hNTE3YWNhZGU1YzItYnJva2VuLWNvbW1pdCIsImxvY2F0aW9uIjoiVG9reW8iLCJ0ZW1wZXJhdHVyZUMiOjIxLCJzdW1tYXJ5IjoiU1dSLUcwODIiLCJjcmVhdGVkQXQiOiIyMDI2LTA4LTE3VDIxOjA2OjE3LjIwNloifQ==', 'sortableUniqueIdValue': '063922597577217464900082002382', 'id': '01a0118b-ea01-7f72-9ede-b3f36a0fb2f4', 'eventMetadata': {'causationId': '01a0118b-ea01-7f72-9ede-b3f36a0fb2f4', 'correlationId': 'SerializedCommit', 'executedUser': 'SerializedSekibanExecutor'}, 'tags': ['weather:g082-a517acade5c2'], 'eventPayloadName': 'WeatherForecastCreated'}], 'tagWriteResults': [{'tag': 'weather:g082-a517acade5c2', 'version': 1, 'writtenAt': '2026-08-17T21:06:17.2199331+00:00'}], 'duration': '00:00:00.0103440'}
+    negative.log:CONFORMANCE_RESULT=FAIL detail=broken-commit-exact-conflict: expected conflict HTTP 400/409, got 200: {'writtenEvents': [{'payload': 'eyJmb3JlY2FzdElkIjoiZzA4Mi04ZjgyMmViZGU2NjUtYnJva2VuLWNvbW1pdCIsImxvY2F0aW9uIjoiVG9reW8iLCJ0ZW1wZXJhdHVyZUMiOjIxLCJzdW1tYXJ5IjoiU1dSLUcwODIiLCJjcmVhdGVkQXQiOiIyMDI2LTA4LTI1VDA1OjUwOjEwLjk0OVoifQ==', 'sortableUniqueIdValue': '063923233810963245400019442796', 'id': '01a03778-1213-7f53-80ec-f10d55df3450', 'eventMetadata': {'causationId': '01a03778-1213-7f53-80ec-f10d55df3450', 'correlationId': 'SerializedCommit', 'executedUser': 'SerializedSekibanExecutor'}, 'tags': ['weather:g082-8f822ebde665'], 'eventPayloadName': 'WeatherForecastCreated'}], 'tagWriteResults': [{'tag': 'weather:g082-8f822ebde665', 'version': 1, 'writtenAt': '2026-08-25T05:50:10.9697657+00:00'}], 'duration': '00:00:00.0110939'}
+    negative.log:BROKEN_TAG_NEGATIVE=EXPECTED_FAILURE detail=broken-commit-exact-conflict: expected conflict HTTP 400/409, got 200: {'writtenEvents': [{'payload': 'eyJmb3JlY2FzdElkIjoiZzA4Mi04ZjgyMmViZGU2NjUtYnJva2VuLWNvbW1pdCIsImxvY2F0aW9uIjoiVG9reW8iLCJ0ZW1wZXJhdHVyZUMiOjIxLCJzdW1tYXJ5IjoiU1dSLUcwODIiLCJjcmVhdGVkQXQiOiIyMDI2LTA4LTI1VDA1OjUwOjEwLjk0OVoifQ==', 'sortableUniqueIdValue': '063923233810963245400019442796', 'id': '01a03778-1213-7f53-80ec-f10d55df3450', 'eventMetadata': {'causationId': '01a03778-1213-7f53-80ec-f10d55df3450', 'correlationId': 'SerializedCommit', 'executedUser': 'SerializedSekibanExecutor'}, 'tags': ['weather:g082-8f822ebde665'], 'eventPayloadName': 'WeatherForecastCreated'}], 'tagWriteResults': [{'tag': 'weather:g082-8f822ebde665', 'version': 1, 'writtenAt': '2026-08-25T05:50:10.9697657+00:00'}], 'duration': '00:00:00.0110939'}
 
 ## Findings boundary
 
