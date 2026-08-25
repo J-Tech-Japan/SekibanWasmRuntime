@@ -1,0 +1,41 @@
+{
+  "observedDate": "2026-08-25",
+  "packageProvenance": {
+    "status": "published-artifact-unavailable",
+    "package": "@sekiban/dcb-domain@0.1.0",
+    "registries": {
+      "https://registry.npmjs.org": "E404",
+      "https://npm.pkg.github.com": "E404"
+    },
+    "upstreamPackagePrivate": true,
+    "upstreamHasNpmrc": false,
+    "fallback": "pinned-upstream-source-staging",
+    "sourceCommit": "d9859e71e287c87b872bd9347e117d1b7ee08512"
+  },
+  "componentizeJs": {
+    "jco": "1.16.1",
+    "componentizeJs": "0.19.3",
+    "durationMs": 2263.77,
+    "bundleBytes": 1138527,
+    "componentBytes": 21864350
+  },
+  "preview2ShimJsonArray": {
+    "coldStartMs": 614.1996,
+    "perCallMs": 0.01709,
+    "callCount": 100
+  },
+  "zodStaticScan": {
+    "version": "4.4.3",
+    "runtimeFiles": 210,
+    "newFunctionFiles": 2,
+    "functionConstructorFiles": 6,
+    "functionConstructorOccurrences": 14,
+    "mathRandomFiles": 2,
+    "nodeApiOccurrences": 312,
+    "bundleFunctionConstructorOccurrences": 14,
+    "evalOccurrences": 0,
+    "dynamicImportOccurrences": 0,
+    "topLevelAwaitOccurrences": 0,
+    "dateNowOccurrences": 0
+  }
+}

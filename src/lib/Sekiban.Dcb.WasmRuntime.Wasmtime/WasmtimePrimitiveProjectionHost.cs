@@ -43,6 +43,11 @@ public sealed class WasmtimePrimitiveProjectionHost :
 
     public IPrimitiveProjectionInstance CreateInstance(string projectorName)
     {
+        if (IsComponentModule(projectorName))
+        {
+            return CreateComponentInstance(projectorName);
+        }
+
         if (_options.MaxPooledInstancesPerProjector <= 0)
         {
             return CreateLease(projectorName, releasePermit: null);
@@ -69,6 +74,11 @@ public sealed class WasmtimePrimitiveProjectionHost :
     public async ValueTask<IPrimitiveProjectionInstance> CreateInstanceAsync(
         string projectorName, CancellationToken ct = default)
     {
+        if (IsComponentModule(projectorName))
+        {
+            return CreateComponentInstance(projectorName);
+        }
+
         if (_options.MaxPooledInstancesPerProjector <= 0)
         {
             return CreateLease(projectorName, releasePermit: null);
@@ -91,6 +101,11 @@ public sealed class WasmtimePrimitiveProjectionHost :
     public IPrimitiveProjectionInstance CreateFreshInstance(string projectorName)
     {
         Trace($"host:create_fresh_instance:start projector={projectorName}");
+        if (IsComponentModule(projectorName))
+        {
+            return CreateComponentInstance(projectorName);
+        }
+
         WasmtimePrimitiveProjectionInstance core = CreateCoreInstance(projectorName);
         return new PooledPrimitiveProjectionLease(projectorName, core, ReturnToPool);
     }
@@ -145,6 +160,26 @@ public sealed class WasmtimePrimitiveProjectionHost :
             Trace($"host:create_instance:after_instantiate projector={projectorName}");
             return new WasmtimePrimitiveProjectionInstance(store, instance, projectorName);
         }
+    }
+
+    private bool IsComponentModule(string projectorName)
+    {
+        string? modulePath = _options.ResolveModulePath(projectorName);
+        return !string.IsNullOrWhiteSpace(modulePath) &&
+            WasmBinaryFormatDetector.IsSekibanProjectionComponentFile(modulePath);
+    }
+
+    private IPrimitiveProjectionInstance CreateComponentInstance(string projectorName)
+    {
+        string? modulePath = _options.ResolveModulePath(projectorName);
+        if (string.IsNullOrWhiteSpace(modulePath))
+        {
+            throw new InvalidOperationException(
+                $"No WASM component path configured for projector '{projectorName}'.");
+        }
+
+        Trace($"host:create_component_instance projector={projectorName} path={modulePath}");
+        return new WasmtimeComponentProjectionInstance(modulePath, projectorName);
     }
 
     private SemaphoreSlim GetInstanceLimit(string projectorName) =>

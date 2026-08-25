@@ -9,31 +9,41 @@ internal static class WasmtimePreview2ShimResolver
     private const string ShimLibraryName = "wasmtime_preview2_shim";
 
     private static readonly object Sync = new();
-    private static int _resolverRegistered;
+    private static readonly HashSet<Assembly> RegisteredAssemblies = new();
     private static bool _buildAttempted;
     private static string? _resolvedPath;
 
     public static void EnsureAvailable()
     {
-        EnsureResolverRegistered();
-        _ = ResolveLibraryPath();
+        EnsureAvailableFor(typeof(global::Wasmtime.ComponentCoreExtractor).Assembly);
     }
 
-    private static void EnsureResolverRegistered()
+    public static string? EnsureAvailableFor(Assembly assembly)
     {
-        if (Interlocked.Exchange(ref _resolverRegistered, 1) == 1)
-        {
-            return;
-        }
+        EnsureResolverRegistered(assembly);
+        return ResolveLibraryPath();
+    }
 
-        try
+    private static void EnsureResolverRegistered(Assembly assembly)
+    {
+        lock (Sync)
         {
-            NativeLibrary.SetDllImportResolver(
-                typeof(global::Wasmtime.ComponentCoreExtractor).Assembly,
-                ResolveShimLibrary);
-        }
-        catch (InvalidOperationException)
-        {
+            if (RegisteredAssemblies.Contains(assembly))
+            {
+                return;
+            }
+
+            try
+            {
+                NativeLibrary.SetDllImportResolver(assembly, ResolveShimLibrary);
+            }
+            catch (InvalidOperationException)
+            {
+                // Another consumer may have already installed a resolver for this
+                // assembly. The shim can still be loaded through an explicit path.
+            }
+
+            RegisteredAssemblies.Add(assembly);
         }
     }
 

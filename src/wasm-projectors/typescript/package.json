@@ -1,0 +1,21 @@
+{
+  "name": "sekiban-wasm-projector-ts-component",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "build:component": "node ../../../build/scripts/build-dcb-ts-component.mjs",
+    "verify:component": "node ../../../build/scripts/verify-dcb-ts-component.mjs",
+    "test:component": "npm run build:component && npm run verify:component"
+  },
+  "dependencies": {
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@bytecodealliance/componentize-js": "0.19.3",
+    "@bytecodealliance/jco": "1.16.1",
+    "esbuild": "0.27.2",
+    "typescript": "5.7.3"
+  }
+}
