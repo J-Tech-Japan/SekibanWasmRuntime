@@ -22,7 +22,7 @@ fi
 
 python3 scripts/release/check-consumer-version-accuracy.py \
   --package-version "$package_version" \
-  --dcb-version 10.16.0 \
+  --dcb-version 10.19.0 \
   --runtime-image-version "$runtime_image_version" \
   --document "$fixture" \
   --skip-package-artifact >/dev/null
@@ -42,7 +42,7 @@ PY
 
 if output=$(python3 scripts/release/check-consumer-version-accuracy.py \
   --package-version "$package_version" \
-  --dcb-version 10.16.0 \
+  --dcb-version 10.19.0 \
   --runtime-image-version "$runtime_image_version" \
   --document "$fixture" \
   --skip-package-artifact 2>&1); then

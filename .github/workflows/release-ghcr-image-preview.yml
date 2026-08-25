@@ -184,7 +184,7 @@ jobs:
       - name: Consumer version accuracy (runtime-host release lane)
         env:
           RUNTIME_PACKAGE_VERSION: '1.0.0-preview.6'
-          SEKIBAN_DCB_VERSION: '10.16.0'
+          SEKIBAN_DCB_VERSION: '10.19.0'
           RUNTIME_IMAGE_VERSION: ${{ steps.tags.outputs.version }}
         run: |
           set -euo pipefail
