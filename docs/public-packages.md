@@ -69,7 +69,7 @@ retained and is the value checked by the release-lane marker.
 ```
 
 The current published NuGet package line is `1.0.0-preview.6`. <!-- release-lane: current-package-version -->
-The current Sekiban.Dcb baseline is `10.16.0`. <!-- release-lane: current-dcb-version -->
+The current Sekiban.Dcb baseline is `10.19.0`. <!-- release-lane: current-dcb-version -->
 
 | Package | What it is |
 | --- | --- |
