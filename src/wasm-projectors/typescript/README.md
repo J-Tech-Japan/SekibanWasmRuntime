@@ -26,6 +26,12 @@ dotnet test ../../internalUsages/cs/SekibanWasm.Cs.Tests/SekibanWasm.Cs.Tests.cs
 - records a same-domain JavaScript reference result;
 - runs `jco componentize` to produce `build/module.wasm`.
 
+The upstream boundary checker is deliberately run unmodified. It hard-codes
+`packages/dcb-domain/src` and validates that library source, its negative
+fixtures, and the package manifest; it has no consumer-domain target or mode.
+Because this consumer `src/domain.ts` imports `@sekiban/dcb-domain`, a checker
+`PASS` is not an oracle for the consumer domain file.
+
 `npm run verify:component` validates the component and asserts the exact root
 export set:
 

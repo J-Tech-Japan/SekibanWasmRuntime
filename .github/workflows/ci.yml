@@ -43,6 +43,22 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Add Rust wasm32-wasip1 target
         run: rustup target add wasm32-wasip1
+      - name: Install wasm-tools
+        run: cargo install wasm-tools --locked
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: src/wasm-projectors/typescript/package-lock.json
+
+      - name: Build Wasmtime Preview2 shim
+        working-directory: external/wasmtime-dotnet/native/wasmtime-preview2-shim
+        run: cargo build --release
+      - name: Build TypeScript component projector
+        working-directory: src/wasm-projectors/typescript
+        run: |
+          npm ci
+          npm run test:component
 
       - name: Build C# WASM module
         run: ./build/scripts/build-csharp-wasm.sh

@@ -12,6 +12,14 @@
     "fallback": "pinned-upstream-source-staging",
     "sourceCommit": "d9859e71e287c87b872bd9347e117d1b7ee08512"
   },
+  "upstreamBoundary": {
+    "checker": "scripts/dcb-domain-boundary-check.mjs",
+    "source": "unmodified upstream checker",
+    "target": "packages/dcb-domain/src",
+    "consumerDomainMode": false,
+    "consumerDomainOracle": false,
+    "limitation": "The checker validates the upstream library source, negative fixtures, and package manifest only; it has no consumer-domain target, so PASS is not an oracle for this consumer domain.ts."
+  },
   "componentizeJs": {
     "jco": "1.16.1",
     "componentizeJs": "0.19.3",
