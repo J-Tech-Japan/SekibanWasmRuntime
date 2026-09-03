@@ -1,0 +1,12 @@
+{
+  "repository": "J-Tech-Japan/sekiban-dcb-ts",
+  "commit": "d9859e71e287c87b872bd9347e117d1b7ee08512",
+  "domainPath": "samples/meeting-room/src/domain.ts",
+  "gitBlob": "8c911f060136ed8aa5e829da7bed9674987ef947",
+  "sha256": "58bcf1aaa141e8f23a5f148b7e8656455ef9a649f8602350794ddb0927fb71dd",
+  "bytes": 14509,
+  "boundaryCheckerPath": "scripts/dcb-domain-boundary-check.mjs",
+  "boundaryCheckerGitBlob": "df6e0d82a6cd6035f8ba62b6ef9d9e2c6d16ddff",
+  "dcbDomainPackage": "@sekiban/dcb-domain",
+  "zod": "4.4.3"
+}
