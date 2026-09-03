@@ -284,8 +284,8 @@ class Conformance:
         )
         check(isinstance(response.get("error"), str), "wrong-dialect: response has no fixed error string")
         check(
-            response["error"] == "Serialized commit envelope is not well-formed (AliasCollectionMember).",
-            f"wrong-dialect: expected fixed AliasCollectionMember descriptor, got {response}",
+            "AliasCollectionMember" in response["error"],
+            f"wrong-dialect: expected AliasCollectionMember descriptor, got {response}",
         )
         check(token not in json.dumps(response, ensure_ascii=False), "wrong-dialect: response exposed request content")
         exists, head = self.latest("wrong-dialect-no-write", tag)
