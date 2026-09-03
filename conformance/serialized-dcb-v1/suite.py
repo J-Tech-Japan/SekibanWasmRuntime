@@ -266,7 +266,38 @@ class Conformance:
                 for pagination_key in ("totalCount", "totalPages", "currentPage", "pageSize"):
                     check(pagination_key in response, f"{name}-list: missing {pagination_key}")
 
+    def wrong_dialect(self) -> None:
+        token = f"g087-wrong-dialect-{uuid.uuid4().hex[:12]}"
+        tag = self.tag(token)
+        status, response = self.commit_raw(
+            "wrong-dialect",
+            {
+                "candidates": [self.event_candidate(token, [tag])],
+                "consistency": [],
+            },
+        )
+        check(status == 400, f"wrong-dialect: expected HTTP 400, got {status}: {response}")
+        check(isinstance(response, dict), "wrong-dialect: response is not JSON")
+        check(
+            response.get("code") == "malformed_commit_envelope",
+            f"wrong-dialect: expected malformed_commit_envelope, got {response}",
+        )
+        check(isinstance(response.get("error"), str), "wrong-dialect: response has no fixed error string")
+        check(
+            response["error"] == "Serialized commit envelope is not well-formed (AliasCollectionMember).",
+            f"wrong-dialect: expected fixed AliasCollectionMember descriptor, got {response}",
+        )
+        check(token not in json.dumps(response, ensure_ascii=False), "wrong-dialect: response exposed request content")
+        exists, head = self.latest("wrong-dialect-no-write", tag)
+        check(not exists and head == "", "wrong-dialect: rejected request changed tag state")
+        self.scenarios["wrong_dialect"] = "PASS"
+        print(
+            "WRONG_DIALECT=PASS status=400 code=malformed_commit_envelope "
+            "descriptor=AliasCollectionMember isolation=PASS"
+        )
+
     def before_restart(self, state_path: Path) -> None:
+        self.wrong_dialect()
         token = f"g082-{uuid.uuid4().hex[:12]}"
         exact_tag = self.tag(token)
 

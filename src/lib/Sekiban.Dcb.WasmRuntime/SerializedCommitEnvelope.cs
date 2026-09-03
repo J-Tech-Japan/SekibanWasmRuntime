@@ -34,6 +34,21 @@ public sealed record SerializedCommitEnvelopeBindResult(
 /// </summary>
 public static class SerializedCommitEnvelope
 {
+    // These are deliberately local to this gate. Do not add them to the Sekiban.Dcb error enum or response shape.
+    private enum CollectionShapeError
+    {
+        MissingCollectionMember,
+        InvalidCollectionMember,
+        AliasCollectionMember,
+        AmbiguousCollectionMember
+    }
+
+    private static readonly JsonDocumentOptions RawShapeOptions = new()
+    {
+        CommentHandling = JsonCommentHandling.Disallow,
+        AllowTrailingCommas = false
+    };
+
     /// <summary>Reads the whole request body and binds it. The stream is read to completion before binding.</summary>
     public static async Task<SerializedCommitEnvelopeBindResult> BindAsync(
         Stream utf8JsonStream,
@@ -60,6 +75,11 @@ public static class SerializedCommitEnvelope
 
     private static SerializedCommitEnvelopeBindResult BindLegacy(ReadOnlySpan<byte> utf8Json)
     {
+        if (GetCollectionShapeError(utf8Json) is { } shapeError)
+        {
+            return Malformed(shapeError);
+        }
+
         SerializedCommitRequest? legacy;
         try
         {
@@ -77,6 +97,11 @@ public static class SerializedCommitEnvelope
 
     private static SerializedCommitEnvelopeBindResult BindVersioned(ReadOnlySpan<byte> utf8Json)
     {
+        if (GetCollectionShapeError(utf8Json) is { } shapeError)
+        {
+            return Malformed(shapeError);
+        }
+
         VersionedSerializedCommitRequest? envelope;
         try
         {
@@ -94,7 +119,10 @@ public static class SerializedCommitEnvelope
             : Accepted(envelope);
     }
 
-    /// <summary>Absent arrays coalesce to empty (a valid empty commit), so a missing collection is never a null reference.</summary>
+    /// <summary>
+    ///     Converts the validated envelope to the executor DTO. The null coalescing is defensive only; the raw shape gate
+    ///     rejects absent or null collection members before this method can be reached.
+    /// </summary>
     private static SerializedCommitEnvelopeBindResult Accepted(VersionedSerializedCommitRequest envelope) =>
         new(
             new SerializedCommitRequest(
@@ -102,9 +130,105 @@ public static class SerializedCommitEnvelope
                 envelope.ConsistencyTags ?? []),
             null);
 
-    private static SerializedCommitEnvelopeBindResult Malformed(SerializedCommitShapeError shapeError) => Rejected(
-        "malformed_commit_envelope",
-        $"Serialized commit envelope is not well-formed ({shapeError}).");
+    /// <summary>
+    ///     Validates only the top-level collection-member shape. Property values are inspected for their JSON kind but
+    ///     never bound to runtime DTOs, decoded, or included in an error. Unknown extension members remain tolerated.
+    /// </summary>
+    private static CollectionShapeError? GetCollectionShapeError(ReadOnlySpan<byte> utf8Json)
+    {
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(utf8Json.ToArray(), RawShapeOptions);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return CollectionShapeError.InvalidCollectionMember;
+            }
+
+            var eventCandidatesCount = 0;
+            var consistencyTagsCount = 0;
+            var invalidEventCandidates = false;
+            var invalidConsistencyTags = false;
+            var hasAlias = false;
+            var hasCaseVariant = false;
+
+            foreach (JsonProperty property in document.RootElement.EnumerateObject())
+            {
+                if (property.Name.Equals("eventCandidates", StringComparison.Ordinal))
+                {
+                    eventCandidatesCount++;
+                    if (property.Value.ValueKind != JsonValueKind.Array)
+                    {
+                        invalidEventCandidates = true;
+                    }
+
+                    continue;
+                }
+
+                if (property.Name.Equals("eventCandidates", StringComparison.OrdinalIgnoreCase))
+                {
+                    hasCaseVariant = true;
+                    continue;
+                }
+
+                if (property.Name.Equals("consistencyTags", StringComparison.Ordinal))
+                {
+                    consistencyTagsCount++;
+                    if (property.Value.ValueKind != JsonValueKind.Array)
+                    {
+                        invalidConsistencyTags = true;
+                    }
+
+                    continue;
+                }
+
+                if (property.Name.Equals("consistencyTags", StringComparison.OrdinalIgnoreCase))
+                {
+                    hasCaseVariant = true;
+                    continue;
+                }
+
+                if (property.Name.Equals("candidates", StringComparison.OrdinalIgnoreCase) ||
+                    property.Name.Equals("consistency", StringComparison.OrdinalIgnoreCase))
+                {
+                    hasAlias = true;
+                }
+            }
+
+            if (hasAlias)
+            {
+                return CollectionShapeError.AliasCollectionMember;
+            }
+
+            if (hasCaseVariant || eventCandidatesCount > 1 || consistencyTagsCount > 1)
+            {
+                return CollectionShapeError.AmbiguousCollectionMember;
+            }
+
+            if (invalidEventCandidates || invalidConsistencyTags)
+            {
+                return CollectionShapeError.InvalidCollectionMember;
+            }
+
+            return eventCandidatesCount == 1 && consistencyTagsCount == 1
+                ? null
+                : CollectionShapeError.MissingCollectionMember;
+        }
+        catch (JsonException)
+        {
+            // The version discriminator already rejects malformed JSON; keep this fallback fixed and request-data-free.
+            return CollectionShapeError.InvalidCollectionMember;
+        }
+    }
+
+    private static SerializedCommitEnvelopeBindResult Malformed(CollectionShapeError reason) =>
+        Rejected(
+            "malformed_commit_envelope",
+            $"Serialized commit envelope is not well-formed ({reason}).");
+
+    private static SerializedCommitEnvelopeBindResult Malformed(SerializedCommitShapeError shapeError) =>
+        Rejected(
+            "malformed_commit_envelope",
+            $"Serialized commit envelope is not well-formed ({shapeError}).");
 
     private static SerializedCommitEnvelopeBindResult Rejected(string code, string message) =>
         new(null, new SerializedCommitEnvelopeError(code, message));
