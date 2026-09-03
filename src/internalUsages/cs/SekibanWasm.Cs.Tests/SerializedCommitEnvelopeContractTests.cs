@@ -100,15 +100,173 @@ public class SerializedCommitEnvelopeContractTests
         Assert.Equal("malformed_commit_envelope", result.Error!.Code);
     }
 
-    /// <summary>An absent collection is a valid empty commit, never a null-reference failure.</summary>
     [Fact]
-    public void Bind_AbsentCollections_ShouldCoalesceToEmpty()
+    public void Bind_ExplicitEmptyV1Collections_ShouldRemainValid()
     {
-        SerializedCommitEnvelopeBindResult result = Bind("""{"version":1}""");
+        SerializedCommitEnvelopeBindResult result = Bind("""{"version":1,"eventCandidates":[],"consistencyTags":[]}""");
 
         Assert.Null(result.Error);
         Assert.Empty(result.Request!.EventCandidates);
         Assert.Empty(result.Request.ConsistencyTags);
+    }
+
+    [Fact]
+    public void Bind_ClientDialectAliases_ShouldFailClosedInsteadOfCommittingEmpty()
+    {
+        SerializedCommitEnvelopeBindResult result = Bind(
+            $$"""{"candidates":[{{CandidateA}}],"consistency":[]}""");
+
+        Assert.Null(result.Request);
+        Assert.Equal("malformed_commit_envelope", result.Error!.Code);
+        Assert.Equal(
+            "Serialized commit envelope is not well-formed (AliasCollectionMember).",
+            result.Error.Message);
+        Assert.DoesNotContain("WeatherForecastCreated", result.Error.Message);
+    }
+
+    public static IEnumerable<object[]> RawCollectionShapeRejectionMatrix()
+    {
+        foreach (var (dialect, versionPrefix) in new[]
+        {
+            ("legacy", ""),
+            ("v1", "\"version\":1,")
+        })
+        {
+            yield return new object[]
+            {
+                $"{dialect}-missing-both",
+                "MissingCollectionMember",
+                $"{{{versionPrefix.TrimEnd(',')}}}"
+            };
+            yield return new object[]
+            {
+                $"{dialect}-missing-event-candidates",
+                "MissingCollectionMember",
+                $"{{{versionPrefix}\"consistencyTags\":[]}}"
+            };
+            yield return new object[]
+            {
+                $"{dialect}-missing-consistency-tags",
+                "MissingCollectionMember",
+                $"{{{versionPrefix}\"eventCandidates\":[]}}"
+            };
+            yield return new object[]
+            {
+                $"{dialect}-null-event-candidates",
+                "InvalidCollectionMember",
+                $"{{{versionPrefix}\"eventCandidates\":null,\"consistencyTags\":[]}}"
+            };
+            yield return new object[]
+            {
+                $"{dialect}-null-consistency-tags",
+                "InvalidCollectionMember",
+                $"{{{versionPrefix}\"eventCandidates\":[],\"consistencyTags\":null}}"
+            };
+            yield return new object[]
+            {
+                $"{dialect}-invalid-event-candidates",
+                "InvalidCollectionMember",
+                $"{{{versionPrefix}\"eventCandidates\":{{}},\"consistencyTags\":[]}}"
+            };
+            yield return new object[]
+            {
+                $"{dialect}-invalid-consistency-tags",
+                "InvalidCollectionMember",
+                $"{{{versionPrefix}\"eventCandidates\":[],\"consistencyTags\":\"not-an-array\"}}"
+            };
+            yield return new object[]
+            {
+                $"{dialect}-aliases-only",
+                "AliasCollectionMember",
+                $"{{{versionPrefix}\"candidates\":[],\"consistency\":[]}}"
+            };
+            yield return new object[]
+            {
+                $"{dialect}-mixed-candidates-alias",
+                "AliasCollectionMember",
+                $"{{{versionPrefix}\"eventCandidates\":[],\"consistencyTags\":[],\"candidates\":[]}}"
+            };
+            yield return new object[]
+            {
+                $"{dialect}-mixed-consistency-alias",
+                "AliasCollectionMember",
+                $"{{{versionPrefix}\"eventCandidates\":[],\"consistencyTags\":[],\"consistency\":[]}}"
+            };
+            yield return new object[]
+            {
+                $"{dialect}-duplicate-event-candidates",
+                "AmbiguousCollectionMember",
+                $"{{{versionPrefix}\"eventCandidates\":[],\"eventCandidates\":[],\"consistencyTags\":[]}}"
+            };
+            yield return new object[]
+            {
+                $"{dialect}-duplicate-consistency-tags",
+                "AmbiguousCollectionMember",
+                $"{{{versionPrefix}\"eventCandidates\":[],\"consistencyTags\":[],\"consistencyTags\":[]}}"
+            };
+            yield return new object[]
+            {
+                $"{dialect}-case-variant-event-candidates",
+                "AmbiguousCollectionMember",
+                $"{{{versionPrefix}\"eventCandidates\":[],\"EventCandidates\":[],\"consistencyTags\":[]}}"
+            };
+            yield return new object[]
+            {
+                $"{dialect}-case-variant-consistency-tags",
+                "AmbiguousCollectionMember",
+                $"{{{versionPrefix}\"eventCandidates\":[],\"consistencyTags\":[],\"ConsistencyTags\":[]}}"
+            };
+            yield return new object[]
+            {
+                $"{dialect}-case-variant-alias",
+                "AliasCollectionMember",
+                $"{{{versionPrefix}\"Candidates\":[],\"consistency\":[]}}"
+            };
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(RawCollectionShapeRejectionMatrix))]
+    public void Bind_RawCollectionShapeMatrix_ShouldReject(
+        string _,
+        string expectedDescriptor,
+        string json)
+    {
+        SerializedCommitEnvelopeBindResult result = Bind(json);
+
+        Assert.Null(result.Request);
+        Assert.Equal("malformed_commit_envelope", result.Error!.Code);
+        Assert.Equal(
+            $"Serialized commit envelope is not well-formed ({expectedDescriptor}).",
+            result.Error.Message);
+    }
+
+    [Theory]
+    [InlineData("""{"version":1,"eventCandidates":[],"consistencyTags":[],"x-trace":"ignored"}""")]
+    [InlineData("""{"eventCandidates":[],"consistencyTags":[],"x-trace":"ignored"}""")]
+    public void Bind_CompleteOfficialCollections_ShouldAcceptUnrelatedExtension(string json)
+    {
+        SerializedCommitEnvelopeBindResult result = Bind(json);
+
+        Assert.Null(result.Error);
+        Assert.Empty(result.Request!.EventCandidates);
+        Assert.Empty(result.Request.ConsistencyTags);
+    }
+
+    [Fact]
+    public void Bind_CollectionShapeError_ShouldUseFixedSecretSafeDescriptor()
+    {
+        const string sentinel = "secret-request-sentinel";
+        SerializedCommitEnvelopeBindResult result = Bind(
+            $$"""{"version":1,"eventCandidates":null,"consistencyTags":[],"extension":"{{sentinel}}"}""");
+
+        Assert.Null(result.Request);
+        Assert.Equal("malformed_commit_envelope", result.Error!.Code);
+        Assert.Equal(
+            "Serialized commit envelope is not well-formed (InvalidCollectionMember).",
+            result.Error.Message);
+        Assert.DoesNotContain(sentinel, result.Error.Code);
+        Assert.DoesNotContain(sentinel, result.Error.Message);
     }
 
     /// <summary>

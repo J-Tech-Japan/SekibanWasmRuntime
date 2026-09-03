@@ -24,6 +24,15 @@ where that observation differs from this page or cannot be proved through the
 boundary. A green HTTP run is therefore not a claim that the implementation
 was used to derive the specification.
 
+The 2026-09-03 tightening aligned this downstream boundary with
+[Sekiban#1174](https://github.com/J-Tech-Japan/Sekiban/issues/1174) / SEK-G51.
+Repository and client inventory found no known caller that intentionally emits
+an omitted collection. Sekiban.Dcb 10.20.0's presence gate still permits a
+present `null` collection to reach defensive null-coalescing; this runtime
+deliberately diverges by requiring an actual JSON array and rejecting explicit
+`null`. This is a request-shape tightening only; valid response golden bytes
+and shapes are unchanged.
+
 ## 2. Terms and wire conventions
 
 * A **tag** is a non-empty string identifying one logical stream. The reference
@@ -144,10 +153,16 @@ Request shape:
 }
 ```
 
-`version` MUST be the number `1`. `eventCandidates` and
-`consistencyTags` are arrays; an omitted array is equivalent to an empty array
-for the empty-commit compatibility case. An empty commit has no storage side
-effect and returns empty `writtenEvents` and `tagWriteResults`.
+`version` MUST be the number `1`. `eventCandidates` and `consistencyTags` MUST
+both be present as JSON arrays in every request, versioned or legacy. An empty
+commit is expressed only as explicit empty arrays. A request in which either
+member is absent or `null`, or which uses the public-model names `candidates` /
+`consistency`, is rejected as `malformed_commit_envelope` with no side effect.
+The required member names are case-sensitive and must occur exactly once;
+duplicate or case-variant names, and official/alias mixtures, are ambiguous and
+rejected. Unrelated top-level extension members remain tolerated. An empty
+commit has no storage side effect and returns empty `writtenEvents` and
+`tagWriteResults`.
 
 The server MUST preserve candidate order, payload bytes, event payload name,
 and candidate tag lists. It generates the event ID, SUID, and event metadata;
@@ -265,11 +280,16 @@ as 5.4.
 
 The response body MUST be JSON and MUST contain an `error` string. A stable
 `code` is required for envelope-shape failures and is recommended for all
-other failures. Message text is diagnostic, not a compatibility key.
+other failures. Message text is diagnostic, not a compatibility key. Raw
+collection-shape rejections use fixed, request-safe descriptors —
+`MissingCollectionMember`, `InvalidCollectionMember`, `AliasCollectionMember`,
+or `AmbiguousCollectionMember` — inside the existing
+`malformed_commit_envelope` message; no request content is copied into the
+response.
 
 | Code/class | Meaning | Reference HTTP status |
 | --- | --- | --- |
-| `malformed_commit_envelope` | Invalid JSON/shape, wrong version member, null SUID expectation, or unsupported member type | 400 |
+| `malformed_commit_envelope` | Invalid JSON/shape, missing or `null` required collections, aliases or official/alias mixtures, duplicate or case-variant required members, wrong version member, null SUID expectation, or unsupported member type | 400 |
 | `unsupported_commit_envelope_version` | `version` is an unsupported number | 400 |
 | `consistency_conflict` | Exact/empty expectation did not match the authoritative tag head, or a reservation is active | 400 |
 | `validation_error` | Invalid tag, tag-state ID, query, or candidate relationship | 400 |
