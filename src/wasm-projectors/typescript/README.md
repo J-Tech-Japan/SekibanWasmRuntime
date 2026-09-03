@@ -16,6 +16,16 @@ dotnet test ../../internalUsages/cs/SekibanWasm.Cs.Tests/SekibanWasm.Cs.Tests.cs
   --filter FullyQualifiedName~TypeScriptComponentGuestTests
 ```
 
+Normal CI deliberately excludes `TypeScriptComponentGuestTests`, which carry
+the xUnit trait `[Trait("Category", "PrivateUpstreamComponent")]`, with
+`--filter 'Category!=PrivateUpstreamComponent'`. The component path depends on
+the private upstream checkout and the not-yet-public `@sekiban/dcb-domain`
+package. This is an explicit test selection, not a pass-on-missing-artifact
+fallback: the local commands above remain runnable for authorized developers
+and still fail when the component or Preview2 shim is absent. Once the npm
+package is public and clean CI can restore the pinned toolchain, remove this
+trait/filter and restore the component build steps to normal CI.
+
 `npm run build:component` performs all of the following in scratch space:
 
 - checks the pinned upstream commit, Git blob, byte length, and SHA-256;

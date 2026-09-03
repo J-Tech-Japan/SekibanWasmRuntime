@@ -6,6 +6,7 @@ using Xunit;
 
 namespace SekibanWasm.Cs.Tests;
 
+[Trait("Category", "PrivateUpstreamComponent")]
 public sealed class TypeScriptComponentGuestTests
 {
     [Fact]

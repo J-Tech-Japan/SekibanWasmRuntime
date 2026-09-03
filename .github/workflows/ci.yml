@@ -43,22 +43,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Add Rust wasm32-wasip1 target
         run: rustup target add wasm32-wasip1
-      - name: Install wasm-tools
-        run: cargo install wasm-tools --locked
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: src/wasm-projectors/typescript/package-lock.json
-
-      - name: Build Wasmtime Preview2 shim
-        working-directory: external/wasmtime-dotnet/native/wasmtime-preview2-shim
-        run: cargo build --release
-      - name: Build TypeScript component projector
-        working-directory: src/wasm-projectors/typescript
-        run: |
-          npm ci
-          npm run test:component
 
       - name: Build C# WASM module
         run: ./build/scripts/build-csharp-wasm.sh
@@ -71,10 +55,12 @@ jobs:
       - name: Serialized DCB V1 external black-box conformance
         run: bash scripts/contract/run-serialized-dcb-v1-ci.sh
 
-      - name: Test
+      - name: Test (excluding private-upstream component tests)
         env:
           SEKIBAN_MV_TEST_POSTGRES_CONNECTION_STRING: Host=localhost;Port=5432;Database=sekiban_mv_tests;Username=postgres;Password=postgres;Pooling=false
-        run: dotnet test src/SekibanWasmRuntime.ci.slnx -c Release --no-build
+        # TypeScriptComponentGuestTests remain an explicit manual path until
+        # the upstream npm package is public and available to clean CI.
+        run: dotnet test src/SekibanWasmRuntime.ci.slnx -c Release --no-build --filter 'Category!=PrivateUpstreamComponent'
 
       - name: E2E (Aspire + Playwright, CS)
         env:
