@@ -36,6 +36,24 @@ python3 suite.py \
   --report .artifacts/dcb-v1-before.json
 ~~~
 
+Caller-owned request headers may be repeated. Each argument is split on its
+first `=` only, so additional equals signs remain part of the value:
+
+~~~sh
+python3 suite.py \
+  --base-url http://127.0.0.1:8080 \
+  --fixture fixture.json \
+  --phase before-restart \
+  --state-file .artifacts/dcb-v1-state.json \
+  --header Authorization=Bearer-token \
+  --header X-Request-Signature=part=with=equals
+~~~
+
+Headers are applied in memory at the common HTTP request boundary for every
+phase. Header names and values are never written to reports or state files and
+are not included in routine output or safe errors. Do not treat conformance
+reports as a place to record credentials or other caller-owned metadata.
+
 Restart the target using its own lifecycle tooling, wait for its readiness
 endpoint, and run the after-restart phase:
 

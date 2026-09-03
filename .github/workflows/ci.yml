@@ -52,6 +52,8 @@ jobs:
         run: ./scripts/build-samples-wasm.sh --primary
       - name: Verify serialized DCB V1 suite isolation
         run: bash scripts/contract/check-serialized-dcb-v1-isolation.sh
+      - name: Serialized DCB V1 header option killing test
+        run: python3 scripts/contract/test-serialized-dcb-v1-headers.py
       - name: Serialized DCB V1 external black-box conformance
         run: bash scripts/contract/run-serialized-dcb-v1-ci.sh
 

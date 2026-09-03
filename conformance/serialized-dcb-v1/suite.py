@@ -13,6 +13,7 @@ import binascii
 import datetime as dt
 import json
 import os
+import re
 import sys
 import threading
 import uuid
@@ -25,6 +26,18 @@ from urllib.request import Request, urlopen
 
 class CheckFailure(RuntimeError):
     pass
+
+
+HEADER_NAME_PATTERN = re.compile(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$")
+
+
+def parse_header(value: str) -> tuple[str, str]:
+    name, separator, header_value = value.partition("=")
+    if not separator or HEADER_NAME_PATTERN.fullmatch(name) is None:
+        raise argparse.ArgumentTypeError("header must use NAME=VALUE syntax")
+    if any(ord(character) < 32 or ord(character) == 127 for character in header_value):
+        raise argparse.ArgumentTypeError("header must use NAME=VALUE syntax")
+    return name, header_value
 
 
 def check(condition: bool, message: str) -> None:
@@ -43,17 +56,44 @@ def load_json(path: Path) -> dict[str, Any]:
 
 
 class HttpClient:
-    def __init__(self, base_url: str) -> None:
+    def __init__(self, base_url: str, headers: list[tuple[str, str]] | None = None) -> None:
         self.base_url = base_url.rstrip("/")
+        self.headers = tuple(headers or ())
         self.records: list[dict[str, Any]] = []
         self._lock = threading.Lock()
 
+    def safe_text(self, value: str) -> str:
+        result = value
+        tokens = sorted(
+            {token for header in self.headers for token in header if token},
+            key=len,
+            reverse=True,
+        )
+        for token in tokens:
+            result = re.sub(re.escape(token), "[REDACTED]", result, flags=re.IGNORECASE)
+        return result
+
+    def safe_value(self, value: Any) -> Any:
+        if isinstance(value, str):
+            return self.safe_text(value)
+        if isinstance(value, list):
+            return [self.safe_value(item) for item in value]
+        if isinstance(value, dict):
+            return {
+                self.safe_text(str(key)): self.safe_value(item)
+                for key, item in value.items()
+            }
+        return value
+
     def post(self, name: str, path: str, body: dict[str, Any]) -> tuple[int, Any]:
         raw_request = json.dumps(body, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+        request_headers = {"Accept": "application/json", "Content-Type": "application/json"}
+        for header_name, header_value in self.headers:
+            request_headers[header_name] = header_value
         request = Request(
             f"{self.base_url}{path}",
             data=raw_request,
-            headers={"Accept": "application/json", "Content-Type": "application/json"},
+            headers=request_headers,
             method="POST",
         )
         status = 0
@@ -79,8 +119,8 @@ class HttpClient:
                     "name": name,
                     "path": path,
                     "status": status,
-                    "request": body,
-                    "response": decoded,
+                    "request": self.safe_value(body),
+                    "response": self.safe_value(decoded),
                 }
             )
         return status, decoded
@@ -95,8 +135,13 @@ def render(value: str, token: str, tag: str) -> str:
 
 
 class Conformance:
-    def __init__(self, base_url: str, fixture: dict[str, Any]) -> None:
-        self.client = HttpClient(base_url)
+    def __init__(
+        self,
+        base_url: str,
+        fixture: dict[str, Any],
+        headers: list[tuple[str, str]] | None = None,
+    ) -> None:
+        self.client = HttpClient(base_url, headers)
         self.fixture = fixture
         self.scenarios: dict[str, str] = {}
 
@@ -408,7 +453,8 @@ class Conformance:
         try:
             self.expect_conflict("broken-commit-exact-conflict", body)
         except CheckFailure as error:
-            print(f"BROKEN_TAG_NEGATIVE=EXPECTED_FAILURE detail={error}")
+            safe_error = self.client.safe_text(str(error))
+            print(f"BROKEN_TAG_NEGATIVE=EXPECTED_FAILURE detail={safe_error}")
             self.scenarios["broken_tag_negative"] = "PASS"
             raise
         raise CheckFailure("deliberately broken target still rejected a stale exact-match commit")
@@ -427,7 +473,7 @@ def write_report(path: Path | None, conformance: Conformance, result: str, error
         "requests": conformance.client.records,
     }
     if error:
-        report["error"] = error
+        report["error"] = conformance.client.safe_text(error)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
@@ -439,9 +485,17 @@ def main() -> int:
     parser.add_argument("--phase", choices=("before-restart", "after-restart", "broken-tag"), required=True)
     parser.add_argument("--state-file", required=True, type=Path)
     parser.add_argument("--report", type=Path)
+    parser.add_argument(
+        "--header",
+        action="append",
+        default=[],
+        metavar="NAME=VALUE",
+        type=parse_header,
+        help="add a caller-owned HTTP header; repeatable and split on the first '='",
+    )
     args = parser.parse_args()
 
-    conformance = Conformance(args.base_url, load_json(args.fixture))
+    conformance = Conformance(args.base_url, load_json(args.fixture), args.header)
     try:
         if args.phase == "before-restart":
             conformance.before_restart(args.state_file)
@@ -450,8 +504,9 @@ def main() -> int:
         else:
             conformance.broken_tag_negative(args.state_file)
     except CheckFailure as error:
-        write_report(args.report, conformance, "FAIL", str(error))
-        print(f"CONFORMANCE_RESULT=FAIL detail={error}", file=sys.stderr)
+        safe_error = conformance.client.safe_text(str(error))
+        write_report(args.report, conformance, "FAIL", safe_error)
+        print(f"CONFORMANCE_RESULT=FAIL detail={safe_error}", file=sys.stderr)
         return 1
 
     write_report(args.report, conformance, "PASS")

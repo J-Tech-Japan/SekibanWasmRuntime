@@ -29,7 +29,7 @@ import sys
 
 allowed = {
     "argparse", "base64", "binascii", "concurrent", "datetime", "http", "json", "os", "pathlib",
-    "sys", "threading", "typing", "urllib", "uuid", "__future__",
+    "re", "sys", "threading", "typing", "urllib", "uuid", "__future__",
 }
 path = pathlib.Path(sys.argv[1])
 tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
