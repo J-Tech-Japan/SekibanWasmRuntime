@@ -7,6 +7,7 @@ on:
       # Included so the tag-scoping check below runs when any release-triggered
       # lane's trigger changes, not just this one.
       - '.github/workflows/release-rust-crates.yml'
+      - '.github/workflows/release-rust-cli.yml'
       - '.github/workflows/release-templates-preview.yml'
       - '.github/workflows/release-npm-ts.yml'
       - '.github/release-notes/**'

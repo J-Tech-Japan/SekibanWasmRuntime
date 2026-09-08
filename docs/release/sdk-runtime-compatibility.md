@@ -13,6 +13,7 @@ The registry-verified current runtime-host tag is `1.0.0-preview.3`. <!-- releas
 
 | SDK | Version | Distribution | Runtime image | Status | Evidence |
 | --- | --- | --- | --- | --- | --- |
+| Rust CLI cargo-sekiban | 0.1.0 | crates.io via independent rust-cli-v* validation-only lane | 1.0.0-preview.3 | Prepared/Unpublished | SWR-G091 / #293: deterministic embedded registry/dev templates, external generated-workspace Cargo checks, weather fixture smoke assets, package inventory, and publish dry-run |
 | Rust `sekiban-core` / `sekiban-derive` / `sekiban-wasm` / `sekiban-mv` / `sekiban-executor` | 0.1.0 | crates.io | `1.0.0-preview.3` | Published | crates.io consumer sample + public-container proof (SWR-G054..G056), `rust-crate-preview-readiness.md` |
 | npm `@sekiban/ts` | 0.1.0 | npm via `ts-v*` lane (tag `ts-v0.1.0` + `npm-release` env pending, human-gated) | `1.0.0-preview.3` | Lane ready | Extraction smoke: packed-tarball client commit → tag-state → list-query readback (SWR-G057), `npm-ts-preview-readiness.md`; release lane with credential-free dry-run (SWR-G058), `npm-ts-release-lane.md` |
 | npm `@sekiban/as-wasm` | 0.1.0 | npm via `ts-v*` lane (tag `ts-v0.1.0` + `npm-release` env pending, human-gated) | `1.0.0-preview.3` | Lane ready | Extraction smoke: packed-tarball projector module loaded and exercised in the public container (SWR-G057), `npm-ts-preview-readiness.md`; release lane with credential-free dry-run (SWR-G058), `npm-ts-release-lane.md` |

@@ -1,0 +1,20 @@
+[package]
+name = "sekiban-mv"
+version = "0.1.0"
+description = "Materialized-view WASM boundary contracts for Sekiban Rust modules."
+documentation = "https://docs.rs/sekiban-mv"
+categories = ["wasm", "data-structures"]
+readme = "README.md"
+include = ["Cargo.toml", "README.md", "src/**"]
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
+
+[dependencies]
+sekiban-wasm = { version = "=0.1.0", path = "../sekiban-wasm" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["serde"] }

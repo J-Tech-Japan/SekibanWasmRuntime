@@ -1,0 +1,25 @@
+[package]
+name = "sekiban-derive"
+version = "0.1.0"
+description = "Procedural derive macros for Sekiban Rust domain declarations."
+documentation = "https://docs.rs/sekiban-derive"
+categories = ["development-tools::procedural-macro-helpers", "rust-patterns"]
+readme = "README.md"
+include = ["Cargo.toml", "README.md", "src/**"]
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "2", features = ["full", "parsing", "extra-traits"] }
+
+[dev-dependencies]
+sekiban-core = { version = "=0.1.0", path = "../sekiban-core" }

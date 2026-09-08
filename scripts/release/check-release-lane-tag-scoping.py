@@ -26,6 +26,7 @@ import yaml
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 RUST_LANE = ".github/workflows/release-rust-crates.yml"
+RUST_CLI_LANE = ".github/workflows/release-rust-cli.yml"
 NUGET_LANE = ".github/workflows/release-nuget-preview.yml"
 TEMPLATES_LANE = ".github/workflows/release-templates-preview.yml"
 TS_LANE = ".github/workflows/release-npm-ts.yml"
@@ -47,6 +48,7 @@ REPO = "J-Tech-Japan/SekibanWasmRuntime"
 # the readiness job's PR path filter.
 OTHER_LANE_TAGS = [
     "rust-v0.1.1",
+    "rust-cli-v0.1.0",
     "ts-v0.1.0",
     "templates-v1.0.0-preview.1",
     "runtime-host-v1.0.0-preview.3",
@@ -97,6 +99,11 @@ def resolve_crate_version(raw: str) -> str:
     return raw.removeprefix("rust-").removeprefix("v")
 
 
+def resolve_cli_version(raw: str) -> str:
+    """Mirror of the cargo-sekiban lane's tag version resolution."""
+    return raw.removeprefix("rust-cli-").removeprefix("v")
+
+
 def main() -> int:
     failures: list[str] = []
     checks = 0
@@ -125,6 +132,24 @@ def main() -> int:
     expect("nuget readiness on rust-v0.1.1", job_runs(NUGET_LANE, "readiness", rust), False)
     expect("nuget publish on rust-v0.1.1", job_runs(NUGET_LANE, "publish", rust), False)
 
+    print("\nThe cargo-sekiban validation lane is independent from the SDK lane")
+    rust_cli = release("rust-cli-v0.1.0")
+    expect(
+        "cargo-sekiban validate on rust-cli-v0.1.0",
+        job_runs(RUST_CLI_LANE, "validate", rust_cli),
+        True,
+    )
+    expect(
+        "cargo-sekiban validate on rust-v0.1.1",
+        job_runs(RUST_CLI_LANE, "validate", rust),
+        False,
+    )
+    expect(
+        "cargo-sekiban validate on v1.0.0-preview.2",
+        job_runs(RUST_CLI_LANE, "validate", incident),
+        False,
+    )
+
     print("\nThe other release-triggered lanes must stay mutually exclusive too")
     templates = release("templates-v1.0.0-preview.1")
     expect("templates validate on templates-v1.0.0-preview.1", job_runs(TEMPLATES_LANE, "validate", templates), True)
@@ -141,7 +166,7 @@ def main() -> int:
 
     print("\nEvery other lane's prefix starts neither lane")
     for tag in OTHER_LANE_TAGS:
-        if tag.startswith("rust-v"):
+        if tag.startswith("rust-v") or tag.startswith("rust-cli-v"):
             continue
         ctx = release(tag)
         expect(f"rust check on {tag}", job_runs(RUST_LANE, "check", ctx), False)
@@ -162,6 +187,7 @@ def main() -> int:
     expect("rust check on dispatch", job_runs(RUST_LANE, "check", dispatch_check), True)
     expect("rust publish on dispatch publish=false", job_runs(RUST_LANE, "publish", dispatch_check), False)
     expect("rust publish on dispatch publish=true", job_runs(RUST_LANE, "publish", dispatch_publish), True)
+    expect("cargo-sekiban validate on dispatch", job_runs(RUST_CLI_LANE, "validate", dispatch_check), True)
     expect("nuget readiness on dispatch", job_runs(NUGET_LANE, "readiness", dispatch_check), True)
     expect("nuget publish on dispatch", job_runs(NUGET_LANE, "publish", dispatch_check), False)
     pull_request = {"event_name": "pull_request"}
@@ -172,6 +198,7 @@ def main() -> int:
     expect("resolve rust-v0.1.1", resolve_crate_version("rust-v0.1.1"), "0.1.1")
     expect("resolve rust-v1.0.0-preview.2", resolve_crate_version("rust-v1.0.0-preview.2"), "1.0.0-preview.2")
     expect("resolve dispatch input 0.1.0", resolve_crate_version("0.1.0"), "0.1.0")
+    expect("resolve rust-cli-v0.1.0", resolve_cli_version("rust-cli-v0.1.0"), "0.1.0")
 
     print()
     if failures:

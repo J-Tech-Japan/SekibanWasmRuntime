@@ -1,0 +1,84 @@
+name: release-rust-cli
+
+# Validation-only release lane for the cargo-sekiban subcommand. It is
+# intentionally independent from the SDK's rust-v* lane and never publishes
+# to crates.io, creates a tag/release, or reads publication credentials.
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_version:
+        description: 'cargo-sekiban version to validate'
+        required: true
+        default: '0.1.0'
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RAW_CARGO_SEKIBAN_VERSION: ${{ github.event.release.tag_name || inputs.expected_version || '0.1.0' }}
+
+jobs:
+  validate:
+    name: cargo-sekiban validation and publish dry-run
+    runs-on: ubuntu-latest
+    # This job owns only rust-cli-v* releases. A different published release
+    # fans out to this workflow but skips cleanly instead of validating an
+    # unrelated artifact version.
+    if: >-
+      github.event_name != 'release' ||
+      startsWith(github.event.release.tag_name, 'rust-cli-v')
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Resolve cargo-sekiban version
+        run: |
+          set -euo pipefail
+          version="${RAW_CARGO_SEKIBAN_VERSION#rust-cli-}"
+          version="${version#v}"
+          echo "CARGO_SEKIBAN_VERSION=${version}" >> "$GITHUB_ENV"
+          echo "Using CARGO_SEKIBAN_VERSION=${version}"
+
+      - name: Validate package version
+        run: |
+          set -euo pipefail
+          actual="$(cargo metadata --no-deps --format-version 1 \
+            --manifest-path src/tools/cargo-sekiban/Cargo.toml \
+            | jq -r '.packages[] | select(.name == "cargo-sekiban") | .version')"
+          if [[ "$actual" != "$CARGO_SEKIBAN_VERSION" ]]; then
+            echo "cargo-sekiban version $actual does not match $CARGO_SEKIBAN_VERSION" >&2
+            exit 1
+          fi
+          echo "cargo-sekiban $actual"
+
+      - name: Check deterministic template sync
+        run: python3 scripts/cargo-sekiban/sync-templates.py --check
+
+      - name: Cargo fmt
+        run: cargo fmt --manifest-path src/tools/cargo-sekiban/Cargo.toml --all -- --check
+
+      - name: Cargo clippy
+        run: cargo clippy --manifest-path src/tools/cargo-sekiban/Cargo.toml --all-targets -- -D warnings
+
+      - name: Cargo tests
+        run: cargo test --manifest-path src/tools/cargo-sekiban/Cargo.toml
+
+      - name: Standalone generated-workspace proof
+        run: bash scripts/cargo-sekiban/test-generated-workspaces.sh
+
+      - name: Package file inventory
+        run: cargo package --list --manifest-path src/tools/cargo-sekiban/Cargo.toml
+
+      - name: crates.io publish dry-run only
+        run: cargo publish --dry-run --manifest-path src/tools/cargo-sekiban/Cargo.toml
+
+      - name: Whitespace check
+        run: git diff --check

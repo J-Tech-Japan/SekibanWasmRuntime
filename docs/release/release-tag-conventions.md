@@ -8,6 +8,7 @@ prefix — not the workflow — is what decides which lane actually runs.
 
 | Lane | Tag | Workflow | Trigger | Version derived by |
 | --- | --- | --- | --- | --- |
+| Rust CLI validation | `rust-cli-v<version>` (e.g. `rust-cli-v0.1.0`) | `release-rust-cli.yml` | release | strip `rust-cli-v` |
 | NuGet packages | `v<version>` (e.g. `v1.0.0-preview.2`) | `release-nuget-preview.yml` | release | strip `v` |
 | Rust crates (crates.io) | `rust-v<version>` (e.g. `rust-v0.1.1`) | `release-rust-crates.yml` | release | strip `rust-v` |
 | npm `@sekiban/*` | `ts-v<version>` | `release-npm-ts.yml` | release | strip `ts-v` |
@@ -25,7 +26,7 @@ The `tag push` lanes filter on `push: tags:` in the workflow's `on:` block, so
 GitHub only starts them for their own tag pattern and there is nothing to fan
 out. The `release` lanes all listen on `release: [published]`, which GitHub
 delivers to every one of them regardless of tag — so each must decide for itself
-whether the tag is its own. Those are the four lanes carrying a job-level `if`.
+whether the tag is its own. Those are the five lanes carrying a job-level `if`.
 
 ## Why Lanes Are Scoped
 
@@ -76,12 +77,12 @@ out of the committed workflow YAML, evaluates them against synthetic release
 payloads, and asserts which jobs run. It does not re-implement the guards, so
 drift between a workflow and this document fails the check.
 
-It asserts that the NuGet, Rust, npm, and Templates lanes stay mutually
+It asserts that the NuGet, Rust, Rust CLI, npm, and Templates lanes stay mutually
 exclusive, that every other lane prefix starts none of them, that fork releases
 never publish, and that `workflow_dispatch` and `pull_request` behavior is
 unchanged.
 
-**What it does not do:** the check only reads the four release-triggered
+**What it does not do:** the check only reads the five release-triggered
 workflow files it names. The `tag push` lanes appear solely as negative tag
 vectors against the Rust and NuGet guards — their workflows are never parsed. If
 one of them is converted to a `release: [published]` trigger, this check will
@@ -91,7 +92,7 @@ and adding its path to the readiness job's PR path filter. Step 4 of
 [Adding a Lane](#adding-a-lane) covers the same requirement.
 
 It runs in the `release readiness` job of `release-nuget-preview.yml`, which is
-triggered by pull requests touching any of the four release-triggered workflow
+triggered by pull requests touching any of the five release-triggered workflow
 files.
 
 ```
