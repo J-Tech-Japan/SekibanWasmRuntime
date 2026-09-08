@@ -2,7 +2,7 @@
 #
 # Public-container sample smoke: starts the Aspire AppHost (Postgres + the PUBLIC
 # runtime container with the sample's WASM module + manifest mounted), then proves
-# commit + tag-state read + list-query through the running container.
+# commit + tag-state read + query/list-query through the running container.
 #
 # Writes reports/smoke/SekibanDcbDecider-smoke.md (PASS / FAIL / SKIP).
 # Exit 0 on PASS or SKIP (prereq missing), 1 on FAIL.
@@ -43,7 +43,7 @@ write_report() {
   local result="$1" detail="$2"
   mkdir -p "$REPORT_DIR"
   {
-    printf '# Public Container CS Decider Smoke (SWR-G036)\n\n'
+    printf '# Public Container CS Decider Smoke (SWR-G090)\n\n'
     printf '%s\n' "- Result: **$result**"
     printf '%s\n' "- Detail: $detail"
     printf '%s\n' "- Runtime image: \`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:${SAMPLE_RUNTIME_IMAGE_TAG:-1.0.0-preview.3}\`"
@@ -166,6 +166,29 @@ printf '%s' "$resp" | python3 -c 'import json,sys; d=json.load(sys.stdin); sys.e
   || fail "tag-state read did not reflect the committed event: $resp"
 log "tag-state read OK"
 
+# Query the same forecast through the non-list endpoint. Filter by the generated
+# id so the assertion remains deterministic even when a caller intentionally
+# points the smoke at a database containing other weather events.
+log "query (GetWeatherForecastCountQuery)"
+query_found=0
+query_body=$(printf '{"queryType":"GetWeatherForecastCountQuery","queryParamsJson":"{\\"forecastId\\":\\"%s\\"}"}' "$forecast_id")
+for i in $(seq 1 20); do
+  out=$(http_post "/api/sekiban/serialized/query" "$query_body")
+  resp=$(printf '%s' "$out" | sed '$d')
+  if printf '%s' "$resp" | python3 -c '
+import json
+import sys
+
+envelope = json.load(sys.stdin)
+result_json = envelope.get("resultJson", envelope.get("ResultJson"))
+result = json.loads(result_json) if isinstance(result_json, str) else result_json
+sys.exit(0 if isinstance(result, dict) and result.get("count", result.get("Count")) == 1 else 1)
+'; then query_found=1; break; fi
+  sleep 2
+done
+[[ "$query_found" == "1" ]] || fail "query did not return count=1 for the committed forecast within timeout: ${resp:0:200}"
+log "query OK"
+
 log "list-query (GetWeatherForecastListQuery)"
 query_found=0
 for i in $(seq 1 20); do
@@ -230,6 +253,6 @@ done
 log "materialized-view read OK ($mv_detail)"
 
 IMAGE_TAG_USED="${SAMPLE_RUNTIME_IMAGE_TAG:-1.0.0-preview.3}"
-log "PASS: commit + tag-state read + list-query + materialized-view read all succeeded through the public runtime container"
-write_report "PASS" "Committed WeatherForecastCreated (tag=$tag); read it back via tag-latest-sortable; saw it in GetWeatherForecastListQuery; and confirmed the WeatherForecast materialized view caught it up in DcbMaterializedViewPostgres ($mv_detail) — all through ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:${IMAGE_TAG_USED}."
+log "PASS: commit + tag-state read + query/list-query + materialized-view read all succeeded through the public runtime container"
+write_report "PASS" "Committed WeatherForecastCreated (tag=$tag); read it back via tag-latest-sortable; counted it with GetWeatherForecastCountQuery; saw it in GetWeatherForecastListQuery; and confirmed the WeatherForecast materialized view caught it up in DcbMaterializedViewPostgres ($mv_detail) — all through ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:${IMAGE_TAG_USED}."
 exit 0

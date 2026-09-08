@@ -20,8 +20,12 @@ The registry-verified current runtime-host tag is `1.0.0-preview.3`. <!-- releas
 | Go `github.com/J-Tech-Japan/SekibanWasmRuntime/src/lib/sekiban-go` | 0.1.0 | Go subdirectory module (tag `src/lib/sekiban-go/v0.1.0` pending) | `1.0.0-preview.3` | Lane ready | Release-gate workflow (build/vet/test) + in-repo `go-wasm`/`go-clientapi` samples (SWR-G060), `go-sdk-release-lane.md`; public-container consumer proof follows in SWR-G061 |
 | Swift `sekiban-swift` (products `SekibanWasm`, `SekibanMv`) | 0.1.0 (published, superseded) and 0.1.1 (published, clean) | Mirror repo `github.com/J-Tech-Japan/sekiban-swift`; both tags are immutable and consumers should select `v0.1.1` | `1.0.0-preview.3` | Published | SWR-G076 redirects SwiftPM scratch output outside the staged tree and asserts the exact published contents; the `v0.1.1` mirror tree contains exactly `LICENSE`, `Package.swift`, `README.md`, `Sources`, and `Tests`, while `v0.1.0` remains documented so publication history is not erased |
 | MoonBit `sekiban/sekiban-wasm-runtime` + `sekiban/sekiban-client` | 0.1.0 | mooncakes.io (account/`sekiban` scope + tag `moonbit-v0.1.0` pending, human-gated) | `1.0.0-preview.3` | Lane prepared | Metadata gate + moon check/test + `moon package` dry-run producing the publish zips (SWR-G064), `moonbit-package-release-lane.md`; in-repo MoonBit sample pairs both packages; public-container consumer proof follows in SWR-G065 |
+| C# scaffolding `Sekiban.Dcb.WasmRuntime.Templates` (`sekiban-wasm-decider`) | 1.0.0-preview.1 (unpublished) | NuGet via `templates-v*` lane (Trusted Publishing pending) | `1.0.0-preview.3` | Prepared/Unpublished | SWR-G090 / #291: locally packed nupkg, isolated-hive generation with `IncludeTests` true/false, generated Domain/AppHost restore/build/test, and Docker-conditional weather smoke; validation never publishes |
 
-Framework baseline: all rows above sit on Sekiban.Dcb `10.16.0` and speak the V1
+Framework baseline: the published/SDK lane evidence rows above were recorded on
+Sekiban.Dcb `10.16.0`; the C# scaffolding row is intentionally a separate
+prepared/unpublished consumer path whose generated Domain pin is `10.19.0`. All
+rows speak the V1
 serialized commit envelope. The package-ground-truth finding and mixed-version
 behavior are documented in
 [`nuget-preview-readiness.md`](nuget-preview-readiness.md). The original

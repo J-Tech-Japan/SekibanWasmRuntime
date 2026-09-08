@@ -18,6 +18,7 @@ on:
       - 'scripts/release/**'
       - 'docs/nuget/templates-package-readme.md'
       - 'docs/templates/**'
+      - 'docs/release/**'
   workflow_dispatch:
     inputs:
       package_version:
@@ -81,6 +82,9 @@ jobs:
           dotnet pack templates/Sekiban.Dcb.WasmRuntime.Templates/Sekiban.Dcb.WasmRuntime.Templates.csproj \
             -c Release -o artifacts/packages "-p:Version=${TEMPLATE_PACKAGE_VERSION}"
 
+      - name: Template dependency/version drift
+        run: bash scripts/templates/test-template-version-drift.sh
+
       - name: Resolve runtime-host image version from registry
         id: runtime-image
         env:
@@ -102,6 +106,9 @@ jobs:
         env:
           TEMPLATE_TEST_PACKAGE_VERSION: ${{ env.TEMPLATE_PACKAGE_VERSION }}
         run: bash scripts/templates/test-sekiban-wasm-decider.sh
+
+      - name: Generated weather runtime smoke
+        run: bash artifacts/template-test/work/AcmeWeather-tests-true/AcmeWeather/scripts/smoke.sh
 
       - name: Consumer version assertion regression
         env:
