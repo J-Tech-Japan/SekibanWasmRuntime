@@ -83,15 +83,25 @@ if bad:
 PY
 }
 
+contains_pattern_in_files() {
+  local pattern="$1"
+  shift
+  if command -v rg >/dev/null 2>&1; then
+    rg -q "$pattern" "$@"
+  else
+    grep -Eq "$pattern" "$@"
+  fi
+}
+
 assert_fixture_shape() {
   local output="$1"
-  rg -q 'WeatherForecastCreated|WeatherForecastLocationUpdated|WeatherForecastProjector|weather_forecast' \
+  contains_pattern_in_files 'WeatherForecastCreated|WeatherForecastLocationUpdated|WeatherForecastProjector|weather_forecast' \
     "$output/scripts/build-wasm.sh" \
     || fail "$output is missing the serialized weather fixture manifest shape"
-  rg -q 'RemoteSekibanExecutor|execute_command|get_state|execute_list_query|execute_query' \
+  contains_pattern_in_files 'RemoteSekibanExecutor|execute_command|get_state|execute_list_query|execute_query' \
     "$output/Client/src/main.rs" \
     || fail "$output is missing the typed command/tag/query proof"
-  rg -q '/health|/ready|cargo run' "$output/scripts/smoke.sh" \
+  contains_pattern_in_files '/health|/ready|cargo run' "$output/scripts/smoke.sh" \
     || fail "$output is missing the channel-owned health/client smoke"
 }
 
