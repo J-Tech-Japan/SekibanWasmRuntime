@@ -170,11 +170,21 @@ def copy_tree(source_root: Path, destination_root: Path, mode: str, sample_name:
                 for part in relative.parts
             )
         )
-        destination = destination_root / destination_relative
+        destination = destination_root / storage_relative(destination_relative)
         if source.is_dir():
             destination.mkdir(parents=True, exist_ok=True)
         elif source.is_file():
             copy_file(source, destination, mode, sample_name, source_root)
+
+
+def storage_relative(relative: Path) -> Path:
+    """Keep nested Cargo assets publishable without changing generated output."""
+    parts = list(relative.parts)
+    if parts[-1] == "Cargo.toml":
+        parts[-1] = "Cargo.toml.template"
+    elif parts[-1] == ".gitignore":
+        parts[-1] = "gitignore.template"
+    return Path(*parts)
 
 
 def rewrite_registry_guard(destination_root: Path) -> None:
@@ -188,7 +198,7 @@ def rewrite_registry_guard(destination_root: Path) -> None:
 
 
 def rewrite_dev_workspace(destination_root: Path) -> None:
-    root_manifest = destination_root / "Cargo.toml"
+    root_manifest = destination_root / "Cargo.toml.template"
     text = root_manifest.read_text(encoding="utf-8")
     match = re.search(r"members\s*=\s*\[\n(?P<members>.*?)\n\]", text, flags=re.DOTALL)
     if match is None:
@@ -205,7 +215,7 @@ def rewrite_dev_workspace(destination_root: Path) -> None:
     write_text(root_manifest, text)
 
     for project in ("Wasm", "Client"):
-        manifest = destination_root / project / "Cargo.toml"
+        manifest = destination_root / project / "Cargo.toml.template"
         text = manifest.read_text(encoding="utf-8")
         text = re.sub(
             r'path\s*=\s*"\.\./\.\./\.\./wasm-projectors/rust/([A-Za-z0-9_-]+)"',

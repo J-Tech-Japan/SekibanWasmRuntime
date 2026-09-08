@@ -16,7 +16,6 @@ include = [
     "README.md",
     "build.rs",
     "src/**",
-    "src/templates/**/*",
 ]
 
 [[bin]]

@@ -258,7 +258,7 @@ fn generate_project(options: &NewOptions) -> Result<(), String> {
             .strip_prefix(prefix)
             .expect("asset has selected mode prefix");
         ensure_safe_relative_path(template_relative)?;
-        let relative = render_text(template_relative, &names);
+        let relative = render_output_path(template_relative, &names);
         ensure_safe_relative_path(&relative)?;
         let destination = output.join(&relative);
         if let Some(parent) = destination.parent() {
@@ -330,6 +330,22 @@ fn render_asset(bytes: &[u8], names: &ProjectNames) -> Vec<u8> {
         return bytes.to_vec();
     };
     render_text(text, names).into_bytes()
+}
+
+fn render_output_path(path: &str, names: &ProjectNames) -> String {
+    let rendered = render_text(path, names);
+    let Some((parent, filename)) = rendered.rsplit_once('/') else {
+        return restore_packaging_filename(&rendered).to_string();
+    };
+    format!("{parent}/{}", restore_packaging_filename(filename))
+}
+
+fn restore_packaging_filename(filename: &str) -> &str {
+    match filename {
+        "Cargo.toml.template" => "Cargo.toml",
+        "gitignore.template" => ".gitignore",
+        other => other,
+    }
 }
 
 fn render_text(text: &str, names: &ProjectNames) -> String {
@@ -441,6 +457,26 @@ mod tests {
         .expect("rendered text is utf8");
         assert_eq!(rendered, "Weather-App weather-app weather_app WeatherApp");
         assert!(!rendered.contains("__SEKIBAN_"));
+    }
+
+    #[test]
+    fn restores_packaging_safe_template_filenames() {
+        let names = project_names("weather-app");
+        assert_eq!(
+            render_output_path("registry/Cargo.toml.template", &names),
+            "registry/Cargo.toml"
+        );
+        assert_eq!(
+            render_output_path("registry/gitignore.template", &names),
+            "registry/.gitignore"
+        );
+        assert_eq!(
+            render_output_path(
+                "registry/AppHost/__SEKIBAN_PROJECT_PASCAL__.AppHost.csproj",
+                &names
+            ),
+            "registry/AppHost/WeatherApp.AppHost.csproj"
+        );
     }
 
     #[test]
