@@ -9,16 +9,21 @@ and their rust-v* lane.
 ## Tag and trigger
 
 The lane owns rust-cli-v<version> (for example, rust-cli-v0.1.0) through
-.github/workflows/release-rust-cli.yml. A published GitHub Release with
-another prefix skips the job. Workflow dispatch accepts a bare expected
-version for local/operator validation.
+.github/workflows/release-rust-cli.yml. Pull requests touching the CLI,
+its proof scripts, or this workflow run the same path-scoped validation. A
+published GitHub Release with another prefix skips the job. Workflow dispatch
+accepts a bare expected version for local/operator validation.
 
 The workflow performs:
 
 - exact package-version validation;
 - deterministic template synchronization;
 - Cargo fmt, clippy, and tests;
+- the stable toolchain's `wasm32-wasip1` target installation and real module
+  builds;
 - external-directory registry/dev generation and workspace checks;
+- channel-owned runtime smoke with uploaded generated reports; only the exact
+  `Docker is not available.` reason is permitted as a pull-request smoke skip;
 - cargo package --list; and
 - cargo publish --dry-run.
 

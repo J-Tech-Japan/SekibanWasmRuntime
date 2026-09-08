@@ -5,6 +5,11 @@ name: release-rust-cli
 # to crates.io, creates a tag/release, or reads publication credentials.
 
 on:
+  pull_request:
+    paths:
+      - 'src/tools/cargo-sekiban/**'
+      - 'scripts/cargo-sekiban/**'
+      - '.github/workflows/release-rust-cli.yml'
   workflow_dispatch:
     inputs:
       expected_version:
@@ -37,7 +42,15 @@ jobs:
         with:
           submodules: recursive
 
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          dotnet-quality: preview
+
       - uses: dtolnay/rust-toolchain@stable
+
+      - name: Add Rust wasm32-wasip1 target
+        run: rustup target add wasm32-wasip1
 
       - name: Resolve cargo-sekiban version
         run: |
@@ -72,7 +85,19 @@ jobs:
         run: cargo test --manifest-path src/tools/cargo-sekiban/Cargo.toml
 
       - name: Standalone generated-workspace proof
+        env:
+          CARGO_SEKIBAN_REPORT_DIR: ${{ github.workspace }}/artifacts/cargo-sekiban-smoke
+          CARGO_SEKIBAN_REQUIRE_RUNTIME: '1'
+          CARGO_SEKIBAN_REQUIRE_WASM: '1'
         run: bash scripts/cargo-sekiban/test-generated-workspaces.sh
+
+      - name: Upload cargo-sekiban smoke reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-sekiban-smoke-reports
+          path: artifacts/cargo-sekiban-smoke
+          if-no-files-found: warn
 
       - name: Package file inventory
         run: cargo package --list --manifest-path src/tools/cargo-sekiban/Cargo.toml

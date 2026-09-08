@@ -5,15 +5,41 @@
 # dependency boundary, Cargo workspace, WASM fixture shape, and the generated
 # channel-owned smoke. Runtime execution may be SKIP only for an unavailable
 # Docker/.NET/WASM toolchain; a live smoke failure is a real failure.
-set -uo pipefail
+set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CLI_MANIFEST="$ROOT/src/tools/cargo-sekiban/Cargo.toml"
-WORK_DIR="$(mktemp -d /private/tmp/cargo-sekiban-generated.XXXXXX)"
+TMP_ROOT="${TMPDIR:-/tmp}"
+WORK_DIR=""
+if ! WORK_DIR="$(mktemp -d "${TMP_ROOT%/}/cargo-sekiban-generated.XXXXXX")"; then
+  printf '[cargo-sekiban-generation] FAIL: mktemp could not create the standalone proof directory under %s\n' "$TMP_ROOT" >&2
+  exit 1
+fi
+if [[ -z "$WORK_DIR" || ! -d "$WORK_DIR" ]]; then
+  printf '[cargo-sekiban-generation] FAIL: mktemp returned an unusable standalone proof directory: %s\n' "$WORK_DIR" >&2
+  exit 1
+fi
 TASK_CARGO_HOME="$WORK_DIR/cargo-home"
 export CARGO_HOME="$TASK_CARGO_HOME"
+TASK_DOTNET_HOME="$WORK_DIR/dotnet-home"
+export DOTNET_CLI_HOME="$TASK_DOTNET_HOME"
+TASK_NUGET_PACKAGES="$WORK_DIR/nuget-packages"
+export NUGET_PACKAGES="$TASK_NUGET_PACKAGES"
+TASK_NUGET_HTTP_CACHE="$WORK_DIR/nuget-http-cache"
+export NUGET_HTTP_CACHE_PATH="$TASK_NUGET_HTTP_CACHE"
+REPORT_OUTPUT_DIR="${CARGO_SEKIBAN_REPORT_DIR:-}"
 
 cleanup() {
+  if [[ -n "$REPORT_OUTPUT_DIR" && -d "$WORK_DIR" ]]; then
+    mkdir -p "$REPORT_OUTPUT_DIR"
+    for mode in registry dev; do
+      if [[ -d "$WORK_DIR/$mode/reports" ]]; then
+        mkdir -p "$REPORT_OUTPUT_DIR/$mode"
+        cp -R "$WORK_DIR/$mode/reports/." "$REPORT_OUTPUT_DIR/$mode/" \
+          || log "WARN: could not retain $mode smoke reports in $REPORT_OUTPUT_DIR"
+      fi
+    done
+  fi
   rm -rf "$WORK_DIR"
 }
 trap cleanup EXIT
@@ -106,6 +132,8 @@ build_wasm_if_available() {
     log "building generated WASM module in $output"
     (cd "$output" && bash scripts/build-wasm.sh) \
       || fail "generated WASM build failed for $output"
+  elif [[ "${CARGO_SEKIBAN_REQUIRE_WASM:-0}" == "1" ]]; then
+    fail "wasm32-wasip1 target is required for generated WASM validation"
   else
     log "SKIP generated WASM build for $output: active rustc cannot use wasm32-wasip1"
   fi
@@ -118,13 +146,38 @@ run_smoke() {
   (cd "$output" && bash scripts/smoke.sh) \
     || fail "generated runtime smoke failed for $output"
   [[ -s "$report" ]] || fail "generated smoke did not write $report"
-  rg -q '^- Result: \*\*(PASS|SKIP)\*\*$' "$report" \
-    || fail "generated smoke report has no PASS/SKIP result: $report"
-  if rg -q '^- Result: \*\*SKIP\*\*$' "$report"; then
-    log "runtime smoke recorded SKIP: $report"
-  else
-    log "runtime smoke recorded PASS: $report"
-  fi
+  local result detail
+  result="$(sed -nE 's/^- Result: \*\*(PASS|SKIP|FAIL)\*\*$/\1/p' "$report")"
+  detail="$(sed -nE 's/^- Detail: (.*)$/\1/p' "$report")"
+  case "$result" in
+    PASS)
+      log "runtime smoke recorded PASS: $report"
+      ;;
+    SKIP)
+      case "$detail" in
+        "Docker is not available."|"dotnet SDK not found."|"cargo not found."|"active rustc cannot use the wasm32-wasip1 target."|"could not build the Rust WASM module; install the wasm32-wasip1 target and re-run.")
+          if [[ "${CARGO_SEKIBAN_REQUIRE_RUNTIME:-0}" == "1" && "$detail" != "Docker is not available." ]]; then
+            fail "generated smoke recorded a non-Docker SKIP in strict runtime mode: $detail"
+          fi
+          if [[ "${CARGO_SEKIBAN_REQUIRE_WASM:-0}" == "1" && "$detail" == *wasm32-wasip1* ]]; then
+            fail "generated smoke recorded a WASI-target SKIP in strict WASM mode: $detail"
+          fi
+          log "runtime smoke recorded sanctioned SKIP ($detail): $report"
+          ;;
+        *)
+          fail "generated smoke recorded an unsanctioned SKIP reason: $detail"
+          ;;
+      esac
+      ;;
+    FAIL)
+      fail "generated smoke report recorded FAIL: $detail"
+      ;;
+    *)
+      fail "generated smoke report has no single PASS/SKIP/FAIL result: $report"
+      ;;
+  esac
+  log "generated smoke report:"
+  sed -n '1,240p' "$report"
 }
 
 REGISTRY="$WORK_DIR/registry"

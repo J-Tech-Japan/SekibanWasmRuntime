@@ -190,11 +190,70 @@ def storage_relative(relative: Path) -> Path:
 def rewrite_registry_guard(destination_root: Path) -> None:
     path = destination_root / "scripts/verify-no-local-sekiban-paths.sh"
     text = path.read_text(encoding="utf-8")
-    old = "rg -n 'path\\s*=.*wasm-projectors/rust|sekiban-wasm-domain' \"$SAMPLE_DIR\" -g Cargo.toml"
-    new = "rg -n 'path\\s*=' \"$SAMPLE_DIR\" -g Cargo.toml | rg -i 'wasm-projectors|sekiban-(core|derive|mv|wasm|executor|domain)'"
-    if old not in text:
+    old = re.compile(
+        r'SAMPLE_DIR="\."\n\nif rg .*?\nfi\n\n(?=# The end-to-end smoke)',
+        flags=re.DOTALL,
+    )
+    new = r'''SAMPLE_DIR="."
+
+scan_manifests() {
+  local pattern="$1"
+  if command -v rg >/dev/null 2>&1; then
+    rg -ni --glob 'Cargo.toml' "$pattern" "$SAMPLE_DIR"
+  else
+    find "$SAMPLE_DIR" -type f -name Cargo.toml -exec grep -Eni "$pattern" {} +
+  fi
+}
+
+fail_on_manifest_match() {
+  local pattern="$1" message="$2" matches="" status=0
+  matches="$(scan_manifests "$pattern")" || status=$?
+  if [[ "$status" -gt 1 ]]; then
+    echo "could not scan Cargo manifests" >&2
+    exit 1
+  fi
+  if [[ "$status" -eq 0 && -n "$matches" ]]; then
+    echo "$message" >&2
+    printf '%s\n' "$matches" >&2
+    exit 1
+  fi
+}
+
+fail_on_manifest_match \
+  'sekiban-wasm-domain' \
+  'forbidden sekiban-wasm-domain dependency found'
+
+path_matches=""
+path_status=0
+path_matches="$(scan_manifests 'path[[:space:]]*=')" || path_status=$?
+if [[ "$path_status" -gt 1 ]]; then
+  echo "could not scan Cargo manifests for path dependencies" >&2
+  exit 1
+fi
+if [[ "$path_status" -eq 0 ]] && printf '%s\n' "$path_matches" | grep -Eiq 'wasm-projectors|sekiban-(core|derive|mv|wasm|executor|domain)'; then
+  echo "forbidden local Sekiban path dependency found" >&2
+  printf '%s\n' "$path_matches" >&2
+  exit 1
+fi
+
+contains_pattern() {
+  local pattern="$1" file="$2"
+  if command -v rg >/dev/null 2>&1; then
+    rg -q "$pattern" "$file"
+  else
+    grep -Eq "$pattern" "$file"
+  fi
+}
+
+'''
+    if not old.search(text):
         raise SyncError(f"registry guard shape changed; cannot rewrite {path}")
-    write_text(path, text.replace(old, new))
+    rewritten = old.sub(lambda _match: new, text, count=1)
+    old_image_check = "if ! rg -q 'ghcr\\.io/j-tech-japan/sekiban-wasm-runtime-host' \"$APPHOST_PROGRAM\"; then"
+    new_image_check = "if ! contains_pattern 'ghcr\\.io/j-tech-japan/sekiban-wasm-runtime-host' \"$APPHOST_PROGRAM\"; then"
+    if old_image_check not in rewritten:
+        raise SyncError(f"registry AppHost image check shape changed; cannot rewrite {path}")
+    write_text(path, rewritten.replace(old_image_check, new_image_check, 1))
 
 
 def rewrite_dev_workspace(destination_root: Path) -> None:
@@ -241,8 +300,25 @@ done
 
 manifests=(Cargo.toml Client/Cargo.toml Wasm/Cargo.toml)
 for crate in "${required[@]}"; do manifests+=("vendor/$crate/Cargo.toml"); done
-if rg -n 'wasm-projectors/rust|path\s*=\s*"/(Users|home|private)/' "${manifests[@]}"; then
+manifest_matches() {
+  local pattern="$1"
+  if command -v rg >/dev/null 2>&1; then
+    rg -n "$pattern" "${manifests[@]}"
+  else
+    grep -En "$pattern" "${manifests[@]}"
+  fi
+}
+
+matches=""
+status=0
+matches="$(manifest_matches 'wasm-projectors/rust|path[[:space:]]*=[[:space:]]*"/(Users|home|private)/')" || status=$?
+if [[ "$status" -gt 1 ]]; then
+  echo "could not scan generated dev manifests" >&2
+  exit 1
+fi
+if [[ "$status" -eq 0 && -n "$matches" ]]; then
   echo "generated dev workspace still contains an original-checkout or absolute path" >&2
+  printf '%s\n' "$matches" >&2
   exit 1
 fi
 

@@ -58,9 +58,12 @@ That check runs the deterministic sync check, generates both modes under a
 temporary external directory, runs the registry no-local-path guard and dev
 vendor guard, and performs cargo metadata plus cargo check --workspace. When
 the active compiler can use wasm32-wasip1, it also builds each module. Each
-generated smoke writes a report and must state PASS or SKIP. A live
-Docker/.NET/runtime failure is not converted into a skip; unavailable
-Docker/.NET/WASI prerequisites are recorded as the permitted live-smoke skip.
+generated smoke writes a report and must state PASS or SKIP with one of the
+fixed toolchain-unavailable reasons. A live Docker/.NET/runtime failure is not
+converted into a skip. The pull-request release lane installs the
+wasm32-wasip1 target and treats a missing target or non-Docker smoke skip as a
+failure; when Docker itself is unavailable, that exact sanctioned reason is
+retained in the uploaded smoke report.
 
 The portable conformance/serialized-dcb-v1 suite is not part of this tool and
 is not modified by this lane.

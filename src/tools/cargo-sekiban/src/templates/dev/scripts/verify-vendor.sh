@@ -14,8 +14,25 @@ done
 
 manifests=(Cargo.toml Client/Cargo.toml Wasm/Cargo.toml)
 for crate in "${required[@]}"; do manifests+=("vendor/$crate/Cargo.toml"); done
-if rg -n 'wasm-projectors/rust|path\s*=\s*"/(Users|home|private)/' "${manifests[@]}"; then
+manifest_matches() {
+  local pattern="$1"
+  if command -v rg >/dev/null 2>&1; then
+    rg -n "$pattern" "${manifests[@]}"
+  else
+    grep -En "$pattern" "${manifests[@]}"
+  fi
+}
+
+matches=""
+status=0
+matches="$(manifest_matches 'wasm-projectors/rust|path[[:space:]]*=[[:space:]]*"/(Users|home|private)/')" || status=$?
+if [[ "$status" -gt 1 ]]; then
+  echo "could not scan generated dev manifests" >&2
+  exit 1
+fi
+if [[ "$status" -eq 0 && -n "$matches" ]]; then
   echo "generated dev workspace still contains an original-checkout or absolute path" >&2
+  printf '%s\n' "$matches" >&2
   exit 1
 fi
 
