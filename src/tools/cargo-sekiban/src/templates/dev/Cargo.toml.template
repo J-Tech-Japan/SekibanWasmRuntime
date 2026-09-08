@@ -1,0 +1,20 @@
+[workspace]
+members = [
+    "Client",
+    "Wasm",
+    "vendor/sekiban-core",
+    "vendor/sekiban-derive",
+    "vendor/sekiban-wasm",
+    "vendor/sekiban-mv",
+    "vendor/sekiban-executor",
+    "vendor/domain",
+]
+resolver = "2"
+
+[workspace.package]
+authors = ["J-Tech Japan, Inc."]
+edition = "2021"
+license = "Elastic-2.0"
+homepage = "https://github.com/J-Tech-Japan/SekibanWasmRuntime"
+repository = "https://github.com/J-Tech-Japan/SekibanWasmRuntime"
+keywords = ["sekiban", "dcb", "event-sourcing", "wasm", "wasi"]
