@@ -21,7 +21,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 PACKAGE_ROOT = ROOT / "src/tools/cargo-sekiban"
-TEMPLATES_ROOT = PACKAGE_ROOT / "templates"
+TEMPLATES_ROOT = PACKAGE_ROOT / "src" / "templates"
 REGISTRY_SAMPLE = ROOT / "src/samples/Sekiban.Dcb.WasmRuntime.CratesIo.RsDecider"
 DEV_SAMPLE = ROOT / "src/samples/Sekiban.Dcb.WasmRuntime.PublicContainer.RsDecider"
 RUST_SOURCE_ROOT = ROOT / "src/wasm-projectors/rust"

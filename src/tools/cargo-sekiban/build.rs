@@ -11,7 +11,7 @@ fn main() {
 
 fn generate_asset_module() -> io::Result<()> {
     let manifest_dir = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").expect("manifest dir"));
-    let templates_dir = manifest_dir.join("templates");
+    let templates_dir = manifest_dir.join("src").join("templates");
     println!("cargo:rerun-if-changed={}", templates_dir.display());
 
     let mut assets = Vec::new();
