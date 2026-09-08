@@ -175,6 +175,7 @@ query_body=$(printf '{"queryType":"GetWeatherForecastCountQuery","queryParamsJso
 for i in $(seq 1 20); do
   out=$(http_post "/api/sekiban/serialized/query" "$query_body")
   resp=$(printf '%s' "$out" | sed '$d')
+  LAST_HTTP_BODY="$resp"
   if printf '%s' "$resp" | python3 -c '
 import json
 import sys
