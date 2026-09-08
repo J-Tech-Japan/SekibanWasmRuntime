@@ -28,7 +28,8 @@ The registry-verified runtime-host tag is `1.0.0-preview.3`. <!-- release-lane: 
   and Postgres references through `Sekiban.Dcb.WasmRuntime.Aspire`'s single
   `AddSekibanWasmRuntime` call;
 - an end-to-end smoke script (health/ready, command commit, tag-state
-  readback, list-query) and an optional xUnit test project.
+  readback, count query, list-query, and materialized-view catch-up) and an
+  optional xUnit test project.
 
 ```bash
 dotnet new sekiban-wasm-decider -n MyWeather

@@ -21,7 +21,8 @@ SekibanDcbDecider.Domain.Tests/  xUnit tests for the domain (generated when
                                  IncludeTests=true, the default).
 scripts/build-wasm.sh            Builds modules/SekibanDcbDecider.wasm + config/sekiban-manifest.json.
 scripts/smoke.sh                 End-to-end smoke: health/ready, commit, tag-state
-                                 readback, list-query against the running container.
+                                 readback, count/list-query, and materialized-view
+                                 catch-up against the running container.
 ```
 
 ## Run
@@ -40,6 +41,9 @@ bash scripts/smoke.sh
 
 The runtime image tag defaults to `1.0.0-preview.3`; override with
 `SAMPLE_RUNTIME_IMAGE_TAG`.
+
+The smoke script exercises health/readiness, commit, tag-latest-sortable,
+count/list-query, and materialized-view catch-up through the running container.
 
 ## Build and test
 

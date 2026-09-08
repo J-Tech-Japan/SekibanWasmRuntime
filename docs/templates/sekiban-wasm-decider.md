@@ -10,6 +10,11 @@ the **public Sekiban WASM runtime container**
 - Source name (replaced by `-n`): `SekibanDcbDecider`
 - Package source tree: `templates/Sekiban.Dcb.WasmRuntime.Templates/`
 
+The generated Domain pins `Sekiban.Dcb.WithoutResult` `10.19.0`, while the
+generated AppHost pins `Sekiban.Dcb.WasmRuntime.Aspire` `1.0.0-preview.6`.
+These are package dependencies; the independently released runtime container
+default remains the registry-verified `1.0.0-preview.3` image.
+
 ## Install
 
 ```bash
@@ -90,8 +95,13 @@ dotnet pack src/lib/Sekiban.Dcb.WasmRuntime.Aspire/Sekiban.Dcb.WasmRuntime.Aspir
 - Generation test: `bash scripts/templates/test-sekiban-wasm-decider.sh` —
   packs the template (and the Aspire dependency), installs it from the local
   nupkg, generates with `IncludeTests` on and off under a custom `-n` name,
-  builds Domain + AppHost, runs the generated tests, and verifies that no
-  `SekibanDcbDecider` residue survives sourceName substitution.
+  restores/builds Domain + AppHost, runs the generated tests (including the
+  intentional no-tests shape), and verifies that no `SekibanDcbDecider` residue
+  survives sourceName substitution.
+- Runtime smoke: the generated `scripts/smoke.sh` records a Docker-only skip when
+  Docker is unavailable; otherwise it proves health/readiness, commit,
+  `tag-latest-sortable`, count `query`, `list-query`, and materialized-view
+  catch-up through the public runtime container.
 - Release lane: `.github/workflows/release-templates-preview.yml` — a
   published GitHub Release tagged `templates-v<version>` validates and (behind
   the protected `templates-release` environment) publishes the package.

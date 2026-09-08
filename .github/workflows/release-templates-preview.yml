@@ -18,6 +18,7 @@ on:
       - 'scripts/release/**'
       - 'docs/nuget/templates-package-readme.md'
       - 'docs/templates/**'
+      - 'docs/release/**'
   workflow_dispatch:
     inputs:
       package_version:
@@ -81,6 +82,9 @@ jobs:
           dotnet pack templates/Sekiban.Dcb.WasmRuntime.Templates/Sekiban.Dcb.WasmRuntime.Templates.csproj \
             -c Release -o artifacts/packages "-p:Version=${TEMPLATE_PACKAGE_VERSION}"
 
+      - name: Template dependency/version drift
+        run: bash scripts/templates/test-template-version-drift.sh
+
       - name: Resolve runtime-host image version from registry
         id: runtime-image
         env:
@@ -102,6 +106,68 @@ jobs:
         env:
           TEMPLATE_TEST_PACKAGE_VERSION: ${{ env.TEMPLATE_PACKAGE_VERSION }}
         run: bash scripts/templates/test-sekiban-wasm-decider.sh
+
+      - name: Generated weather runtime smoke
+        id: generated-weather-smoke
+        shell: bash
+        run: |
+          set -uo pipefail
+          smoke_script=artifacts/template-test/work/AcmeWeather-tests-true/AcmeWeather/scripts/smoke.sh
+          smoke_report=artifacts/template-test/work/AcmeWeather-tests-true/AcmeWeather/reports/smoke/AcmeWeather-smoke.md
+          smoke_exit=0
+          bash "$smoke_script" || smoke_exit=$?
+
+          if [[ ! -s "$smoke_report" ]]; then
+            echo "Generated weather runtime smoke did not produce its report: $smoke_report"
+            exit 1
+          fi
+
+          echo '--- generated weather runtime smoke report ---'
+          cat "$smoke_report"
+          echo '--- end generated weather runtime smoke report ---'
+
+          result="$(sed -n 's/^- Result: \*\*\([^*]*\)\*\*$/\1/p' "$smoke_report" | head -n 1)"
+          detail="$(sed -n 's/^- Detail: //p' "$smoke_report" | head -n 1)"
+          case "$result" in
+            PASS)
+              if [[ "$smoke_exit" -ne 0 ]]; then
+                echo "Smoke report says PASS but smoke exited with $smoke_exit"
+                exit 1
+              fi
+              ;;
+            SKIP)
+              if [[ "$smoke_exit" -ne 0 ]]; then
+                echo "Smoke report says SKIP but smoke exited with $smoke_exit"
+                exit 1
+              fi
+              docker_unavailable=false
+              if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
+                docker_unavailable=true
+              fi
+              if [[ "$detail" == "Docker is not available (the runtime container needs it)." && "$docker_unavailable" == true ]]; then
+                echo 'Accepted smoke SKIP: Docker is unavailable on this runner.'
+              else
+                echo "Generated weather runtime smoke SKIP is not permitted: $detail"
+                exit 1
+              fi
+              ;;
+            FAIL)
+              echo "Generated weather runtime smoke failed: $detail"
+              exit 1
+              ;;
+            *)
+              echo "Generated weather runtime smoke report has an unknown result: $result"
+              exit 1
+              ;;
+          esac
+
+      - name: Upload generated weather runtime smoke report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: templates-preview-${{ env.TEMPLATE_PACKAGE_VERSION }}-smoke
+          path: artifacts/template-test/work/AcmeWeather-tests-true/AcmeWeather/reports/smoke/AcmeWeather-smoke.md
+          if-no-files-found: error
 
       - name: Consumer version assertion regression
         env:

@@ -1,18 +1,20 @@
 #!/usr/bin/env bash
-# SWR-G068 template generation test.
+# SWR-G090 template generation test.
 #
 # Repeatable pack/install/generate/build validation for the
 # sekiban-wasm-decider template:
-#   1. dotnet pack Sekiban.Dcb.WasmRuntime.Templates (and the
+#   1. Check the explicit template dependency pins against the current release
+#      lane and consumer-document defaults.
+#   2. dotnet pack Sekiban.Dcb.WasmRuntime.Templates (and the
 #      Sekiban.Dcb.WasmRuntime.Aspire dependency, so generated AppHosts can
 #      restore it from a local source until the first NuGet publish).
-#   2. dotnet new install from the local nupkg.
-#   3. Generate with IncludeTests=true and IncludeTests=false under a temp dir
+#   3. dotnet new install from the local nupkg in an isolated CLI home.
+#   4. Generate with IncludeTests=true and IncludeTests=false under a temp dir
 #      using a custom -n name.
-#   4. Restore/build the generated Domain, AppHost, and (when present) Tests
+#   5. Restore/build the generated Domain, AppHost, and (when present) Tests
 #      projects; run the generated tests.
-#   5. Verify sourceName substitution left no SekibanDcbDecider residue.
-#   6. Uninstall the template package.
+#   6. Verify sourceName substitution left no SekibanDcbDecider residue.
+#   7. Uninstall the template package.
 #
 # The generated Wasm project compiles via the generated scripts/build-wasm.sh
 # (NativeAOT-LLVM + WASI SDK) and the live-container smoke needs Docker; both
@@ -24,6 +26,7 @@ ROOT="$(pwd)"
 
 PKG_DIR="${TEMPLATE_TEST_PKG_DIR:-$ROOT/artifacts/template-test/packages}"
 WORK_DIR="${TEMPLATE_TEST_WORK_DIR:-$ROOT/artifacts/template-test/work}"
+CLI_HOME="${TEMPLATE_TEST_CLI_HOME:-$WORK_DIR/dotnet-cli-home}"
 TEMPLATE_PROJ="templates/Sekiban.Dcb.WasmRuntime.Templates/Sekiban.Dcb.WasmRuntime.Templates.csproj"
 ASPIRE_PROJ="src/lib/Sekiban.Dcb.WasmRuntime.Aspire/Sekiban.Dcb.WasmRuntime.Aspire.csproj"
 PACKAGE_ID="Sekiban.Dcb.WasmRuntime.Templates"
@@ -39,6 +42,11 @@ trap cleanup EXIT
 
 rm -rf "$PKG_DIR" "$WORK_DIR"
 mkdir -p "$PKG_DIR" "$WORK_DIR"
+export DOTNET_CLI_HOME="$CLI_HOME"
+
+log "checking template dependency/version drift"
+python3 scripts/templates/check-template-version-drift.py \
+  || fail "template dependency/version drift check failed"
 
 # The work dir lives under the repo, so stop the repo's Directory.Build.props /
 # Directory.Packages.props (central package management) from flowing into the
@@ -96,18 +104,42 @@ generate_and_build() {
 
   cp "$WORK_DIR/NuGet.config" "$sol/NuGet.config"
 
+  log "restoring $name.Domain"
+  (cd "$sol" && dotnet restore "$name.Domain/$name.Domain.csproj" --configfile "$sol/NuGet.config" --nologo) \
+    || fail "generated Domain restore failed ($name, IncludeTests=$include_tests)"
+
+  log "restoring $name.AppHost (Aspire package from the local source)"
+  (cd "$sol" && dotnet restore "$name.AppHost/$name.AppHost.csproj" --configfile "$sol/NuGet.config" --nologo) \
+    || fail "generated AppHost restore failed ($name, IncludeTests=$include_tests)"
+
+  if [[ "$include_tests" == "true" ]]; then
+    log "restoring $name.Domain.Tests"
+    (cd "$sol" && dotnet restore "$name.Domain.Tests/$name.Domain.Tests.csproj" --configfile "$sol/NuGet.config" --nologo) \
+      || fail "generated tests restore failed ($name)"
+  fi
+
   log "building $name.Domain"
-  dotnet build "$sol/$name.Domain/$name.Domain.csproj" -c Release --nologo -v quiet \
+  (cd "$sol" && dotnet build "$name.Domain/$name.Domain.csproj" -c Release --nologo -v quiet --no-restore) \
     || fail "generated Domain build failed ($name, IncludeTests=$include_tests)"
 
   log "building $name.AppHost (Aspire package from the local source)"
-  dotnet build "$sol/$name.AppHost/$name.AppHost.csproj" -c Release --nologo -v quiet \
+  (cd "$sol" && dotnet build "$name.AppHost/$name.AppHost.csproj" -c Release --nologo -v quiet --no-restore) \
     || fail "generated AppHost build failed ($name, IncludeTests=$include_tests)"
 
   if [[ "$include_tests" == "true" ]]; then
+    log "building $name.Domain.Tests"
+    (cd "$sol" && dotnet build "$name.Domain.Tests/$name.Domain.Tests.csproj" -c Release --nologo -v quiet --no-restore) \
+      || fail "generated tests build failed ($name)"
     log "running $name.Domain.Tests"
-    dotnet test "$sol/$name.Domain.Tests/$name.Domain.Tests.csproj" -c Release --nologo -v quiet \
+    (cd "$sol" && dotnet test "$name.Domain.Tests/$name.Domain.Tests.csproj" -c Release --nologo -v quiet --no-build --no-restore) \
       || fail "generated tests failed ($name)"
+  else
+    # The false shape intentionally has no test project. `dotnet test` on the
+    # generated Domain still validates that the test target is a clean no-op
+    # after its restore/build, rather than silently skipping the shape.
+    log "checking $name.Domain test target (IncludeTests=false has no test project)"
+    (cd "$sol" && dotnet test "$name.Domain/$name.Domain.csproj" -c Release --nologo -v quiet --no-build --no-restore) \
+      || fail "generated no-tests shape test target failed ($name)"
   fi
 
   # sourceName substitution must leave no residue anywhere in the output.
