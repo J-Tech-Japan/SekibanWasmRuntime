@@ -81,6 +81,11 @@ export function fixedNowIso(now: string | number | bigint): string {
   return new Date(Number(now)).toISOString();
 }
 
+/** Normalize optional caller IDs once before retryable executor.execute. */
+export function normalizeOptionalId(value: string | null | undefined): string {
+  return value && value !== "" ? value : crypto.randomUUID();
+}
+
 function isEmptyState(state: Record<string, unknown>, idField: string): boolean {
   const id = state[idField];
   return typeof id !== "string" || id.length === 0;
@@ -166,7 +171,7 @@ const roomUpdated = event("RoomUpdated", z.object({
   equipment: z.array(z.string()), requiresApproval: z.boolean(),
 }), { tags: (p) => [roomTag(p.roomId)] });
 
-const reservationDraftCreated = event("ReservationDraftCreated", z.object({
+export const reservationDraftCreated = event("ReservationDraftCreated", z.object({
   reservationId: z.string(), roomId: z.string(), organizerId: z.string(), organizerName: z.string(),
   startTime: z.string(), endTime: z.string(), purpose: z.string(), selectedEquipment: z.array(z.string()),
 }), { tags: (p) => [reservationTag(p.reservationId), roomTag(p.roomId)] });
@@ -174,17 +179,28 @@ const reservationDraftCreatedQuick = event("ReservationDraftCreated", z.object({
   reservationId: z.string(), roomId: z.string(), organizerId: z.string(), organizerName: z.string(),
   startTime: z.string(), endTime: z.string(), purpose: z.string(), selectedEquipment: z.array(z.string()),
 }), { tags: (p) => [reservationTag(p.reservationId), roomReservationTag(p.roomId)] });
+const reservationHoldCommittedQuick = event("ReservationHoldCommitted", z.object({
+  reservationId: z.string(), roomId: z.string(), organizerId: z.string(), organizerName: z.string(),
+  startTime: z.string(), endTime: z.string(), purpose: z.string(), selectedEquipment: z.array(z.string()),
+  requiresApproval: z.boolean(), approvalRequestId: z.string().nullable(), approvalRequestComment: z.string().nullable(),
+}), { tags: (p) => [reservationTag(p.reservationId), roomReservationTag(p.roomId)] });
 const reservationHoldCommitted = event("ReservationHoldCommitted", z.object({
   reservationId: z.string(), roomId: z.string(), organizerId: z.string(), organizerName: z.string(),
   startTime: z.string(), endTime: z.string(), purpose: z.string(), selectedEquipment: z.array(z.string()),
   requiresApproval: z.boolean(), approvalRequestId: z.string().nullable(), approvalRequestComment: z.string().nullable(),
+}), { tags: (p) => [reservationTag(p.reservationId), roomTag(p.roomId)] });
+const reservationConfirmedQuick = event("ReservationConfirmed", z.object({
+  reservationId: z.string(), roomId: z.string(), organizerId: z.string(), organizerName: z.string(),
+  startTime: z.string(), endTime: z.string(), purpose: z.string(), selectedEquipment: z.array(z.string()),
+  confirmedAt: z.string(), approvalRequestId: z.string().nullable(), approvalRequestComment: z.string().nullable(),
+  approvalDecisionComment: z.string().nullable(),
 }), { tags: (p) => [reservationTag(p.reservationId), roomReservationTag(p.roomId)] });
 const reservationConfirmed = event("ReservationConfirmed", z.object({
   reservationId: z.string(), roomId: z.string(), organizerId: z.string(), organizerName: z.string(),
   startTime: z.string(), endTime: z.string(), purpose: z.string(), selectedEquipment: z.array(z.string()),
   confirmedAt: z.string(), approvalRequestId: z.string().nullable(), approvalRequestComment: z.string().nullable(),
   approvalDecisionComment: z.string().nullable(),
-}), { tags: (p) => [reservationTag(p.reservationId), roomReservationTag(p.roomId)] });
+}), { tags: (p) => [reservationTag(p.reservationId), roomTag(p.roomId)] });
 const reservationCancelled = event("ReservationCancelled", z.object({
   reservationId: z.string(), roomId: z.string(), organizerId: z.string(), organizerName: z.string(),
   startTime: z.string(), endTime: z.string(), purpose: z.string(), selectedEquipment: z.array(z.string()),
@@ -213,9 +229,9 @@ const deleteWeatherInput = z.object({ forecastId: z.string() });
 export const createWeatherForecastCommand = command({
   id: "CreateWeatherForecast",
   input: idInput,
-  reads: (input) => readExists(weatherTag(input.forecastId ?? "")),
+  reads: (input) => readExists(weatherTag(input.forecastId!)),
   handle: async (input, ctx) => {
-    const id = input.forecastId && input.forecastId !== "" ? input.forecastId : crypto.randomUUID();
+    const id = input.forecastId!;
     if (await ctx.exists(weatherTag(id))) return reject("conflict", `weather forecast ${id}`);
     ctx.append(weatherForecastCreated, weatherForecastCreated.make({
       forecastId: id, location: input.location, date: input.date, temperatureC: input.temperatureC,
@@ -254,10 +270,10 @@ export const deleteWeatherForecastCommand = command({
 const studentInput = z.object({ studentId: optionalString, name: z.string(), maxClassCount: z.number() });
 export const createStudentCommand = command({
   id: "CreateStudent", input: studentInput,
-  reads: (input) => readExists(studentTag(input.studentId ?? "")),
+  reads: (input) => readExists(studentTag(input.studentId!)),
   handle: async (input, ctx) => {
     if (input.maxClassCount < 1) return reject("validation", "maxClassCount must be at least 1");
-    const id = input.studentId && input.studentId !== "" ? input.studentId : crypto.randomUUID();
+    const id = input.studentId!;
     if (await ctx.exists(studentTag(id))) return reject("conflict", `student ${id}`);
     ctx.append(studentCreated, studentCreated.make({ studentId: id, name: input.name, maxClassCount: input.maxClassCount }));
     return done({ studentId: id });
@@ -267,10 +283,10 @@ export const createStudentCommand = command({
 const classRoomInput = z.object({ classRoomId: optionalString, name: z.string(), maxStudents: z.number() });
 export const createClassRoomCommand = command({
   id: "CreateClassRoom", input: classRoomInput,
-  reads: (input) => readExists(classRoomTag(input.classRoomId ?? "")),
+  reads: (input) => readExists(classRoomTag(input.classRoomId!)),
   handle: async (input, ctx) => {
     if (input.maxStudents < 1) return reject("validation", "maxStudents must be at least 1");
-    const id = input.classRoomId && input.classRoomId !== "" ? input.classRoomId : crypto.randomUUID();
+    const id = input.classRoomId!;
     if (await ctx.exists(classRoomTag(id))) return reject("conflict", `classroom ${id}`);
     ctx.append(classRoomCreated, classRoomCreated.make({ classRoomId: id, name: input.name, maxStudents: input.maxStudents }));
     return done({ classRoomId: id });
@@ -318,9 +334,9 @@ const userInput = z.object({
 });
 export const registerUserCommand = command({
   id: "RegisterUser", input: userInput,
-  reads: (input) => readExists(userTag(input.userId ?? "")),
+  reads: (input) => readExists(userTag(input.userId!)),
   handle: async (input, ctx) => {
-    const id = input.userId && input.userId !== "" ? input.userId : crypto.randomUUID();
+    const id = input.userId!;
     if (await ctx.exists(userTag(id))) return reject("conflict", `user ${id}`);
     ctx.append(userRegistered, userRegistered.make({
       userId: id, displayName: input.displayName, email: input.email, department: input.department ?? null,
@@ -352,6 +368,7 @@ export const grantUserAccessCommand = command({
   handle: async (input, ctx) => {
     const user = await ctx.state(userDirectoryProjector, userTag(input.userId)) as Record<string, unknown>;
     if (isEmptyState(user, "userId")) return reject("not-found", `user ${input.userId}`);
+    if (await ctx.exists(userAccessTag(input.userId))) return reject("conflict", `user access for ${input.userId} already exists`);
     ctx.append(userAccessGranted, userAccessGranted.make({ userId: input.userId, initialRole: input.initialRole, grantedAt: fixedNowIso(ctx.now()) }));
     return done();
   },
@@ -375,9 +392,9 @@ const roomInput = z.object({
 });
 export const createRoomCommand = command({
   id: "CreateRoom", input: roomInput,
-  reads: (input) => readExists(roomTag(input.roomId ?? "")),
+  reads: (input) => readExists(roomTag(input.roomId!)),
   handle: async (input, ctx) => {
-    const id = input.roomId && input.roomId !== "" ? input.roomId : crypto.randomUUID();
+    const id = input.roomId!;
     if (await ctx.exists(roomTag(id))) return reject("conflict", `room ${id}`);
     ctx.append(roomCreated, roomCreated.make({
       roomId: id, name: input.name, capacity: input.capacity, location: input.location,
@@ -407,9 +424,9 @@ const draftInput = z.object({
 });
 export const createReservationDraftCommand = command({
   id: "CreateReservationDraft", input: draftInput,
-  reads: (input) => readExists(reservationTag(input.reservationId ?? "")),
+  reads: (input) => readExists(reservationTag(input.reservationId!)),
   handle: async (input, ctx) => {
-    const id = input.reservationId && input.reservationId !== "" ? input.reservationId : crypto.randomUUID();
+    const id = input.reservationId!;
     if (await ctx.exists(reservationTag(id))) return reject("conflict", `reservation ${id}`);
     ctx.append(reservationDraftCreated, reservationDraftCreated.make({
       reservationId: id, roomId: input.roomId, organizerId: input.organizerId, organizerName: input.organizerName,
@@ -424,7 +441,7 @@ export async function executeCreateReservationDraft(
   input: z.infer<typeof draftInput>,
 ) {
   await readStateOrThrow(executor, roomProjector, roomTag(input.roomId));
-  const reservationId = input.reservationId && input.reservationId !== "" ? input.reservationId : crypto.randomUUID();
+  const reservationId = normalizeOptionalId(input.reservationId);
   const { executeOrThrow } = await import("./executorAdapter.js");
   return executeOrThrow(executor, createReservationDraftCommand, { ...input, reservationId });
 }
@@ -437,12 +454,12 @@ const quickInput = z.object({
 export const createQuickReservationCommand = command({
   id: "CreateQuickReservation", input: quickInput,
   reads: (input) => readSet(
-    readExists(reservationTag(input.reservationId ?? "")),
+    readExists(reservationTag(input.reservationId!)),
     read(roomProjector, roomTag(input.roomId)),
     read(roomReservationsProjector, roomReservationTag(input.roomId)),
   ),
   handle: async (input, ctx) => {
-    const reservationId = input.reservationId && input.reservationId !== "" ? input.reservationId : crypto.randomUUID();
+    const reservationId = input.reservationId!;
     if (await ctx.exists(reservationTag(reservationId))) return reject("conflict", `reservation ${reservationId}`);
     const room = await ctx.state(roomProjector, roomTag(input.roomId)) as Record<string, unknown>;
     if (isEmptyState(room, "roomId")) return reject("not-found", `room ${input.roomId}`);
@@ -459,14 +476,14 @@ export const createQuickReservationCommand = command({
       startTime: input.startTime, endTime: input.endTime, purpose: input.purpose, selectedEquipment: input.selectedEquipment,
     };
     ctx.append(reservationDraftCreatedQuick, reservationDraftCreatedQuick.make(base));
-    ctx.append(reservationHoldCommitted, reservationHoldCommitted.make({
+    ctx.append(reservationHoldCommittedQuick, reservationHoldCommittedQuick.make({
       ...base,
       requiresApproval: Boolean(room.requiresApproval),
       approvalRequestId: null,
       approvalRequestComment: input.approvalRequestComment ?? null,
     }));
     if (!Boolean(room.requiresApproval)) {
-      ctx.append(reservationConfirmed, reservationConfirmed.make({
+      ctx.append(reservationConfirmedQuick, reservationConfirmedQuick.make({
         ...base,
         confirmedAt: fixedNowIso(ctx.now()),
         approvalRequestId: null,
@@ -573,11 +590,12 @@ const approvalStartInput = z.object({
 });
 export const startApprovalFlowCommand = command({
   id: "StartApprovalFlow", input: approvalStartInput,
-  reads: (input) => readSet(read(reservationProjector, reservationTag(input.reservationId)), readExists(approvalRequestTag(input.approvalRequestId ?? ""))),
+  reads: (input) => readSet(read(reservationProjector, reservationTag(input.reservationId)), readExists(approvalRequestTag(input.approvalRequestId!))),
   handle: async (input, ctx) => {
     const reservation = await ctx.state(reservationProjector, reservationTag(input.reservationId)) as Record<string, unknown>;
     if (isEmptyState(reservation, "reservationId")) return reject("not-found", `reservation ${input.reservationId}`);
-    const id = input.approvalRequestId && input.approvalRequestId !== "" ? input.approvalRequestId : crypto.randomUUID();
+    const id = input.approvalRequestId!;
+    if (await ctx.exists(approvalRequestTag(id))) return reject("conflict", `approval request ${id} already exists`);
     ctx.append(approvalFlowStarted, approvalFlowStarted.make({
       approvalRequestId: id, reservationId: input.reservationId, roomId: String(reservation.roomId),
       requesterId: String(reservation.organizerId), approverIds: input.approverIds ?? [],
@@ -586,6 +604,15 @@ export const startApprovalFlowCommand = command({
     return done({ approvalRequestId: id });
   },
 });
+
+export async function executeStartApprovalFlow(
+  executor: SekibanExecutor,
+  input: z.infer<typeof approvalStartInput>,
+) {
+  const approvalRequestId = normalizeOptionalId(input.approvalRequestId);
+  const { executeOrThrow } = await import("./executorAdapter.js");
+  return executeOrThrow(executor, startApprovalFlowCommand, { ...input, approvalRequestId });
+}
 
 const decisionInput = z.object({
   approvalRequestId: z.string(), approverId: z.string(), decision: z.string(), comment: optionalString,
@@ -613,4 +640,3 @@ export const allCommands = [
   commitReservationHoldCommand, confirmReservationCommand, cancelReservationCommand, rejectReservationCommand,
   startApprovalFlowCommand, recordApprovalDecisionCommand,
 ] as const satisfies readonly CommandDefinition[];
-

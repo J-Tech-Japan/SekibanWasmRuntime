@@ -18,6 +18,7 @@ import {
   executeCreateReservationDraft,
   grantUserAccessCommand,
   grantUserRoleCommand,
+  normalizeOptionalId,
   recordApprovalDecisionCommand,
   registerUserCommand,
   rejectReservationCommand,
@@ -187,6 +188,7 @@ app.get("/api/weatherforecast/count", async (c) => {
 app.post("/api/weatherforecast", async (c) => {
   try {
     const body = await c.req.json();
+    body.forecastId = normalizeOptionalId(body.forecastId);
     const resp = await finalizeCommand(createWeatherForecastCommand, body);
     return c.json(resp);
   } catch (err) {
@@ -239,6 +241,7 @@ app.get("/api/students", async (c) => {
 app.post("/api/students", async (c) => {
   try {
     const body = await c.req.json();
+    body.studentId = normalizeOptionalId(body.studentId);
     const resp = await finalizeCommand(createStudentCommand, body);
     return c.json(resp);
   } catch (err) {
@@ -269,6 +272,7 @@ app.get("/api/classrooms", async (c) => {
 app.post("/api/classrooms", async (c) => {
   try {
     const body = await c.req.json();
+    body.classRoomId = normalizeOptionalId(body.classRoomId);
     const resp = await finalizeCommand(createClassRoomCommand, body);
     return c.json(resp);
   } catch (err) {
@@ -404,6 +408,7 @@ app.get("/api/users", async (c) => {
 app.post("/api/users", async (c) => {
   try {
     const body = await c.req.json();
+    body.userId = normalizeOptionalId(body.userId);
     const resp = await finalizeCommand(registerUserCommand, body);
     return c.json(resp);
   } catch (err) {
@@ -443,6 +448,7 @@ app.get("/api/rooms", async (c) => {
 app.post("/api/rooms", async (c) => {
   try {
     const body = await c.req.json();
+    body.roomId = normalizeOptionalId(body.roomId);
     const resp = await finalizeCommand(createRoomCommand, body);
     return c.json(resp);
   } catch (err) {
@@ -505,11 +511,8 @@ app.post("/api/reservations/draft", async (c) => {
 app.post("/api/reservations/quick", async (c) => {
   try {
     const body = await c.req.json();
-    let resId = body.reservationId;
-    if (!resId || resId === "") {
-      resId = uuidv4();
-      body.reservationId = resId;
-    }
+    const resId = normalizeOptionalId(body.reservationId);
+    body.reservationId = resId;
     const confirmResp = await finalizeCommand(createQuickReservationCommand, body);
 
     return c.json({

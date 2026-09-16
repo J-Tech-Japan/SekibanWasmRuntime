@@ -1,20 +1,19 @@
 # npm TypeScript SDK Preview Readiness (SWR-G057)
 
 This document records the package boundaries, metadata decisions, and
-compatibility statement for the first publishable versions of the TypeScript
-SDK surface: `@sekiban/dcb-client` 0.2.0 (published) and `@sekiban/as-wasm` 0.1.0. It is the
-TypeScript counterpart of `rust-crate-preview-readiness.md`.
-
-No npm publish happened in this slice. Publishing is a separate, human-gated
-batch (the `ts-v*` release lane is SWR-G058); both package names were verified
-unclaimed under the active, owned `@sekiban` scope on 2026-07-02.
+compatibility statement for the TypeScript SDK surface. `@sekiban/dcb-core`,
+`@sekiban/dcb-domain`, and `@sekiban/dcb-client` **0.2.0** are published public
+npm packages (upstream `sekiban-dcb-ts`; not built or released from this
+repository). `@sekiban/as-wasm` **0.1.0** remains a repository-owned,
+lane-ready/unpublished package released through the `ts-v*` lane (SWR-G058).
+This document is the TypeScript counterpart of `rust-crate-preview-readiness.md`.
 
 ## Package Boundaries
 
-| Package | Path | Contents |
+| Package | Ownership | Contents |
 | --- | --- | --- |
-| `@sekiban/dcb-client` | `published @sekiban/dcb-core/domain/client` | Thin Node.js host SDK: `createSekibanExecutor` (tag-state, serialized query/list-query, command commit), the typed `Command`/`CommandContext`/`CommandOutput` contract, and command helpers/errors. Compiled with `tsc` to `dist/`. |
-| `@sekiban/as-wasm` | `src/lib/sekiban-as-wasm` | AssemblyScript projector SDK, shipped as `assembly/` sources (the consumer's `asc` build compiles them together with the projector's own code): pinned-buffer memory management (`alloc`/`dealloc`), string marshalling (`readStr`/`writeStr`, `(ptr << 32 | byteLength)` convention), the `WasmMv*` materialized-view SQL statement protocol DTOs and helpers, and `applyPaging`. |
+| `@sekiban/dcb-core`, `@sekiban/dcb-domain`, `@sekiban/dcb-client` | **Published public npm** (`0.2.0`) | Matched DCB TypeScript SDK: `createSekibanExecutor`, domain command/event helpers, and the typed executor contract. Consumed from the registry by samples and CI in this repo. |
+| `@sekiban/as-wasm` | **Repository-owned** (`src/lib/sekiban-as-wasm`) | AssemblyScript projector SDK, shipped as `assembly/` sources (the consumer's `asc` build compiles them together with the projector's own code): pinned-buffer memory management (`alloc`/`dealloc`), string marshalling (`readStr`/`writeStr`, `(ptr << 32 | byteLength)` convention), the `WasmMv*` materialized-view SQL statement protocol DTOs and helpers, and `applyPaging`. |
 
 Boundary rule applied during the extraction: **only domain-agnostic runtime
 plumbing moved to `@sekiban/as-wasm`**. Everything that mentions a concrete
@@ -76,33 +75,31 @@ Package-specific decisions:
 
 ## Sample Rewiring
 
-`ts-wasm` now consumes `@sekiban/as-wasm` through a repo-internal
-`file:../../../lib/sekiban-as-wasm` reference (acceptable inside the repo per
-the issue contract) and `npm run build` still emits
-`src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Ts/modules/ts-weather.wasm` with
-an unchanged export surface. `ts-clientapi` keeps its existing
-`file:../../../lib/dcb-client` reference. The extraction smoke never uses these
-`file:` references — it proves both packages from packed tarballs.
+`ts-wasm` may consume `@sekiban/as-wasm` through a repo-internal
+`file:../../../lib/sekiban-as-wasm` reference inside the monorepo.
+`ts-clientapi` and the npm decider sample Client consume the published
+`@sekiban/dcb-core/domain/client@0.2.0` matched set from the public npm
+registry. The extraction smoke packs only `@sekiban/as-wasm` from this repo;
+the DCB client proof uses registry installs.
 
 ## Extraction Smoke
 
 `scripts/release/npm-extraction-smoke.sh` (credential-free, publishes nothing):
 
-1. `npm pack` both packages and validate tarball contents (`@sekiban/dcb-client`:
-   `dist/` + README + LICENSE + package.json only; `@sekiban/as-wasm`:
-   `assembly/` + README + LICENSE + package.json only).
+1. `npm pack` `@sekiban/as-wasm` and validate tarball contents (`assembly/` +
+   README + LICENSE + package.json only).
 2. Compile the `ts-wasm` projector sources against the packed
    `@sekiban/as-wasm` tarball in an isolated consumer directory, with a
    no-local-path guard asserting the lockfile resolved `@sekiban/as-wasm` to
    the tarball (never `src/lib`), and verify the module's required exports.
-3. Compile the `ts-clientapi` sources against the packed `@sekiban/dcb-client`
-   tarball, with the same lockfile guard.
+3. Clean-install and test the migrated small npm Client against registry
+   `@sekiban/dcb-core/domain/client@0.2.0`.
 4. Load the produced `.wasm` in the public runtime container
    (`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host`, default tag
    `1.0.0-preview.3`, overridable via `SAMPLE_RUNTIME_IMAGE_TAG`) with a
    disposable Postgres sidecar, wait for the strict `/ready` check, then use
-   the packed `@sekiban/dcb-client` client to commit a `WeatherForecastCreated` event
-   and read it back through tag-state and `GetWeatherForecastListQuery`.
+   the registry-installed DCB client to commit a `WeatherForecastCreated`
+   event and read it back through tag-state and list/count queries.
 
 If Docker is unavailable, step 4 is reported as an explicit `SKIPPED`
 container step in the report (`artifacts/release/npm-extraction-smoke.md`);

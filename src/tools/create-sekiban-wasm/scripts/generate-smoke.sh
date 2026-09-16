@@ -161,8 +161,18 @@ for language in $ALL_LANGUAGES; do
   fi
 
   if (cd "$target_dir" && bash scripts/verify-no-local-sekiban-paths.sh >/tmp/csw-smoke-guard.log 2>&1); then
-    record_result "$language" "GUARD-PASS" "bundled guard passed standalone"
-    log "$language: GUARD-PASS"
+    if [[ "$language" == "ts" ]]; then
+      if (cd "$target_dir/Client" && npm install --no-audit --no-fund >/tmp/csw-smoke-ts-client-ci.log 2>&1 \
+        && npm run build >/tmp/csw-smoke-ts-client-build.log 2>&1); then
+        record_result "$language" "GUARD-PASS" "bundled guard passed; Client registry install + build succeeded outside checkout"
+        log "$language: GUARD-PASS (Client registry install + build OK)"
+      else
+        fail_hard "$language: Client npm ci/build must succeed outside checkout: $(tail -c 400 /tmp/csw-smoke-ts-client-build.log 2>/dev/null || tail -c 400 /tmp/csw-smoke-ts-client-ci.log)"
+      fi
+    else
+      record_result "$language" "GUARD-PASS" "bundled guard passed standalone"
+      log "$language: GUARD-PASS"
+    fi
   else
     guard_tail="$(tail -c 300 /tmp/csw-smoke-guard.log | tr '\n' ' ')"
     if is_required_language "$language"; then

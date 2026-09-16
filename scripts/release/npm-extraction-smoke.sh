@@ -10,10 +10,11 @@ REPORT_DIR="${RELEASE_REPORT_DIR:-$ROOT/artifacts/release}"
 REPORT="$REPORT_DIR/npm-extraction-smoke.md"
 RUNTIME_IMAGE="ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:${SAMPLE_RUNTIME_IMAGE_TAG:-1.0.0-preview.3}"
 READY_TIMEOUT="${NPM_EXTRACTION_SMOKE_TIMEOUT:-180}"
+SAMPLE_ROOT="$ROOT/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Ts"
 
 AS_PKG_DIR="$ROOT/src/lib/sekiban-as-wasm"
 SMALL_CLIENT="$ROOT/src/samples/Sekiban.Dcb.WasmRuntime.Npm.TsDecider/Client"
-TS_WASM_DIR="$ROOT/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Ts/ts-wasm"
+TS_WASM_DIR="$SAMPLE_ROOT/ts-wasm"
 
 CONTAINER_ID=""
 PG_CONTAINER_ID=""
@@ -68,11 +69,19 @@ node -e "
   const fs = require('fs');
   fs.writeFileSync('$PROJ_DIR/package.json', JSON.stringify({
     name: 'projector-consumer-smoke', private: true, type: 'module',
-    dependencies: { '@sekiban/as-wasm': 'file:$AS_TGZ' },
-    devDependencies: { typescript: '^5.7.3', '@types/node': '^22.10.5', 'assemblyscript': '^0.27.0' }
+    dependencies: { '@sekiban/as-wasm': 'file:$AS_TGZ', 'visitor-as': '^0.11.4' },
+    devDependencies: { typescript: '^5.7.3', '@types/node': '^22.10.5', assemblyscript: '^0.27.32', 'json-as': '^0.9.28' },
+    overrides: { 'visitor-as': { assemblyscript: '\$assemblyscript' } }
   }, null, 2));
 "
 (cd "$PROJ_DIR" && npm install --no-audit --no-fund >/dev/null 2>&1) || fail "projector consumer npm install failed"
+(cd "$PROJ_DIR" && npx asc assembly/index.ts \
+  --outFile modules/ts-weather.wasm \
+  --optimize --exportStart _initialize --runtime incremental \
+  --exportRuntime --use abort= --transform json-as/transform) \
+  || fail "asc compile against packed @sekiban/as-wasm tarball failed"
+SMOKE_WASM="$PROJ_DIR/modules/ts-weather.wasm"
+[[ -s "$SMOKE_WASM" ]] || fail "projector compile produced no wasm module"
 
 log "registry install + build of migrated small TypeScript client"
 CLIENT_SMOKE_DIR="$SMOKE_ROOT/registry-client"
@@ -88,13 +97,97 @@ for pkg in @sekiban/dcb-core @sekiban/dcb-domain @sekiban/dcb-client; do
 done
 (cd "$CLIENT_SMOKE_DIR" && npm run build && npm test) || fail "registry-backed client build/test failed"
 
-if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-  CONTAINER_RESULT="skipped-runtime"
-  CONTAINER_DETAIL="registry client build/test passed; full container runtime smoke runs in sample scripts/smoke.sh"
-else
-  CONTAINER_RESULT="SKIPPED"
-  CONTAINER_DETAIL="Docker unavailable"
-fi
+run_container_check() {
+  if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
+    CONTAINER_RESULT="SKIPPED"
+    CONTAINER_DETAIL="Docker is not available in this environment"
+    log "SKIPPED container load: $CONTAINER_DETAIL"
+    return 0
+  fi
 
-write_report "PASS" "Packed @sekiban/as-wasm projector consumer and registry @sekiban/dcb-* 0.2.0 client build/test succeeded."
+  local config_dir="$SMOKE_ROOT/runtime-config"
+  mkdir -p "$config_dir"
+  sed 's#\./ts-weather\.wasm#/app/modules/ts-weather.wasm#g' \
+    "$SAMPLE_ROOT/modules/sekiban-runtime-manifest.json" > "$config_dir/sekiban-manifest.json"
+
+  local port
+  port="$(node -e 'const s=require("net").createServer();s.listen(0,()=>{console.log(s.address().port);s.close();})')"
+
+  DOCKER_NETWORK="swr-npm-smoke-$$"
+  docker network create "$DOCKER_NETWORK" >/dev/null 2>&1 || true
+  log "starting disposable Postgres sidecar"
+  PG_CONTAINER_ID="$(docker run -d --rm \
+    --network "$DOCKER_NETWORK" --network-alias smoke-postgres \
+    -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=sekiban \
+    postgres:16-alpine 2>/dev/null)"
+  if [[ -z "$PG_CONTAINER_ID" ]]; then
+    CONTAINER_RESULT="FAIL"
+    CONTAINER_DETAIL="could not start the Postgres sidecar"
+    return 1
+  fi
+
+  local pg_deadline=$(( $(date +%s) + 60 ))
+  local pg_ready=0
+  while [[ $(date +%s) -lt $pg_deadline ]]; do
+    if docker exec "$PG_CONTAINER_ID" pg_isready -U postgres >/dev/null 2>&1; then pg_ready=1; break; fi
+    sleep 2
+  done
+  if [[ "$pg_ready" != "1" ]]; then
+    CONTAINER_RESULT="FAIL"
+    CONTAINER_DETAIL="Postgres sidecar did not become ready within 60s"
+    return 1
+  fi
+
+  log "starting $RUNTIME_IMAGE on port $port"
+  CONTAINER_ID="$(docker run -d --rm \
+    --network "$DOCKER_NETWORK" \
+    -p "$port:8080" \
+    -v "$PROJ_DIR/modules:/app/modules:ro" \
+    -v "$config_dir:/app/config:ro" \
+    -e SEKIBAN_MANIFEST_PATH=/app/config/sekiban-manifest.json \
+    -e WASM_MODULE_PATH=/app/modules/ts-weather.wasm \
+    -e "ConnectionStrings__SekibanDcb=Host=smoke-postgres;Port=5432;Database=sekiban;Username=postgres;Password=postgres" \
+    "$RUNTIME_IMAGE" 2>/dev/null)"
+  if [[ -z "$CONTAINER_ID" ]]; then
+    CONTAINER_RESULT="FAIL"
+    CONTAINER_DETAIL="docker run failed (image pull or start error)"
+    return 1
+  fi
+
+  local deadline=$(( $(date +%s) + READY_TIMEOUT ))
+  local ready=0 code
+  while [[ $(date +%s) -lt $deadline ]]; do
+    if ! docker ps -q --no-trunc | grep -q "$CONTAINER_ID"; then
+      CONTAINER_RESULT="FAIL"
+      CONTAINER_DETAIL="container exited before /ready"
+      return 1
+    fi
+    code="$(curl -q -s -o /dev/null --max-time 5 -w '%{http_code}' "http://localhost:$port/ready" || true)"
+    if [[ "$code" == "200" ]]; then ready=1; break; fi
+    sleep 3
+  done
+  if [[ "$ready" != "1" ]]; then
+    CONTAINER_RESULT="FAIL"
+    CONTAINER_DETAIL="/ready did not return 200 within ${READY_TIMEOUT}s"
+    return 1
+  fi
+  log "/ready OK — wasm loaded by the public runtime container"
+
+  local evidence
+  evidence="$(cd "$CLIENT_SMOKE_DIR" && RUNTIME_URL="http://localhost:$port" node dist/main.js 2>&1)"
+  if [[ $? -ne 0 ]]; then
+    CONTAINER_RESULT="FAIL"
+    CONTAINER_DETAIL="registry DCB client failed against the container: ${evidence:0:400}"
+    return 1
+  fi
+  CONTAINER_RESULT="PASS"
+  CONTAINER_DETAIL="registry @sekiban/dcb-* client committed/read/queried through the container: ${evidence:0:400}"
+  log "registry client runtime evidence: $evidence"
+  return 0
+}
+
+run_container_check || fail "container load check failed: $CONTAINER_DETAIL"
+
+write_report "PASS" "Packed @sekiban/as-wasm, compiled projector wasm, registry @sekiban/dcb-* 0.2.0 client build/test succeeded, and container runtime check ${CONTAINER_RESULT}."
+log "PASS (container load: $CONTAINER_RESULT)"
 exit 0
