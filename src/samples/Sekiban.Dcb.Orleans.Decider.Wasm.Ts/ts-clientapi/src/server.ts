@@ -27,7 +27,7 @@ import {
   updateUserMonthlyReservationLimitCommand,
   updateWeatherForecastLocationCommand,
 } from "./domain.js";
-import { executeOrThrow, writeErrorFromCommand } from "./executorAdapter.js";
+import { executeOrThrow, responseFromExecuteSuccess, writeErrorFromCommand } from "./executorAdapter.js";
 import {
   createMaterializedViewState,
   getStatus as getMaterializedViewStatus,
@@ -71,7 +71,7 @@ console.log(`Starting TS ClientAPI on port ${port}`);
 const executor = createSekibanExecutor(createHttpTransport({ baseUrl: wasmServerURL }));
 
 async function finalizeCommand(cmd: Parameters<typeof executeOrThrow>[1], body: unknown) {
-  return (await executeOrThrow(executor, cmd, body as never)).response;
+  return responseFromExecuteSuccess(await executeOrThrow(executor, cmd, body as never));
 }
 
 let materializedView: MaterializedViewState;
@@ -500,7 +500,7 @@ app.get("/api/reservations/by-room/:roomId", async (c) => {
 app.post("/api/reservations/draft", async (c) => {
   try {
     const body = await c.req.json();
-    const resp = (await executeCreateReservationDraft(executor, body)).response;
+    const resp = responseFromExecuteSuccess(await executeCreateReservationDraft(executor, body));
     return c.json(resp);
   } catch (err) {
     const { status, body } = writeErrorFromCommand(err);

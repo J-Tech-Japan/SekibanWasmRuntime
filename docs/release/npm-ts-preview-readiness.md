@@ -42,8 +42,13 @@ reference implementation of that shape.
 
 ## Metadata Decisions
 
-Both packages carry the same metadata bar, aligned with the Rust crate
-metadata policy (`rust-crate-metadata-policy.md`):
+The published DCB packages (`@sekiban/dcb-core`, `@sekiban/dcb-domain`,
+`@sekiban/dcb-client` **0.2.0**) carry upstream metadata from
+`sekiban-dcb-ts` and are not built or released from this repository. This
+section records metadata for the repository-owned lane-ready package only.
+
+`@sekiban/as-wasm` carries the same metadata bar as other SDK languages,
+aligned with the Rust crate metadata policy (`rust-crate-metadata-policy.md`):
 
 | Field | Value |
 | --- | --- |
@@ -52,15 +57,11 @@ metadata policy (`rust-crate-metadata-policy.md`):
 | `author` | `J-Tech Japan, Inc.` |
 | `homepage` | `https://github.com/J-Tech-Japan/SekibanWasmRuntime` |
 | `repository` | git URL plus `directory` pointing at the package path |
-| `keywords` | `sekiban`, `dcb`, `event-sourcing`, `wasm`, plus `cqrs` (`@sekiban/dcb-client`) / `assemblyscript` (`@sekiban/as-wasm`) |
-| `files` | Whitelist: `dist` for `@sekiban/dcb-client`, `assembly` for `@sekiban/as-wasm` (README/LICENSE/package.json are always included by npm) |
+| `keywords` | `sekiban`, `dcb`, `event-sourcing`, `wasm`, `assemblyscript` |
+| `files` | Whitelist: `assembly` for `@sekiban/as-wasm` (README/LICENSE/package.json are always included by npm) |
 
 Package-specific decisions:
 
-- `@sekiban/dcb-client` targets Node.js 20+ (`engines`), is ESM-only (`type: module`)
-  with `exports`/`types` mappings, and has zero runtime dependencies (it uses
-  the built-in `fetch`). A `prepack` hook rebuilds `dist/` so the tarball can
-  never ship stale output.
 - `@sekiban/as-wasm` ships TypeScript(-dialect) sources under `assembly/` and
   declares `assemblyscript` (^0.27) and `json-as` (^0.9) as peer dependencies;
   its `ascMain`/`main` point at `assembly/index.ts` so
@@ -138,30 +139,32 @@ versions only (`Wasm/package.json`, `Client/package.json`; no `file:`/
 `scripts/verify-no-local-sekiban-paths.sh`), with a sample-owned Aspire
 AppHost provisioning Postgres and the public GHCR runtime container.
 
-Because neither package is published yet, the guard is static (no live
-`npm install` against the registry, unlike the Rust guard's `cargo check`
-against already-published crates.io crates). Both `scripts/build-wasm.sh` and
-`scripts/smoke.sh` accept `SEKIBAN_NPM_MODE=tarball|registry`:
+The guard is static (grep-based manifest/lockfile checks, no live package
+resolution). `@sekiban/dcb-core/domain/client@0.2.0` are published on the
+public npm registry and resolve in registry mode. `@sekiban/as-wasm@0.1.0`
+remains lane-ready/unpublished in this repository until the `ts-v*` batch
+(SWR-G058). Both `scripts/build-wasm.sh` and `scripts/smoke.sh` accept
+`SEKIBAN_NPM_MODE=tarball|registry`:
 
-- `tarball` packs `@sekiban/as-wasm`/`@sekiban/dcb-client` from `src/lib` with
-  `npm pack` and installs each from its packed tarball in a scratch build
-  directory (never rewriting the committed `package.json`), with a guard
-  asserting the installed package resolved from the `.tgz`. This mode passes
-  today.
-- `registry` (the default, and the mode that becomes real after publish)
-  runs a plain `npm install`; today this 404s, and both scripts report
-  `SKIP` rather than `FAIL`.
+- `tarball` (monorepo-only pre-publish dry-run) packs `@sekiban/as-wasm` from
+  `src/lib/sekiban-as-wasm` with `npm pack` and installs it from the packed
+  tarball in a scratch build directory while the Client still resolves the
+  published DCB packages from npm. This mode is for local pre-publish checks
+  only.
+- `registry` (the default) runs a plain `npm install` for all dependencies.
+  DCB packages resolve from npm today; `@sekiban/as-wasm` reports `SKIP`
+  until the npm publish batch completes.
 
 ```bash
 bash src/samples/Sekiban.Dcb.WasmRuntime.Npm.TsDecider/scripts/verify-no-local-sekiban-paths.sh
-env SEKIBAN_NPM_MODE=tarball bash src/samples/Sekiban.Dcb.WasmRuntime.Npm.TsDecider/scripts/build-wasm.sh
-env -u SAMPLE_RUNTIME_IMAGE_TAG SEKIBAN_NPM_MODE=tarball bash src/samples/Sekiban.Dcb.WasmRuntime.Npm.TsDecider/scripts/smoke.sh
+npm --prefix src/samples/Sekiban.Dcb.WasmRuntime.Npm.TsDecider/Client ci && npm run build && npm test
+env -u SAMPLE_RUNTIME_IMAGE_TAG bash src/samples/Sekiban.Dcb.WasmRuntime.Npm.TsDecider/scripts/smoke.sh
 ```
 
-Verified locally on 2026-07-03 in tarball mode: full PASS against
-`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3` --
-`CreateWeatherForecast` + `UpdateWeatherForecastLocation` committed through
-`createSekibanExecutor`, tag-state read back (version 2, location `Osaka`),
+Verified locally against `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3`
+with registry-backed DCB client installs: `CreateWeatherForecast` +
+`UpdateWeatherForecastLocation` committed through `createSekibanExecutor`,
+tag-state read back (version 2, location `Osaka`),
 `GetWeatherForecastListQuery`/`GetWeatherForecastCountQuery` both returned the
 forecast, and the `WeatherForecast` materialized view caught up in
 `DcbMaterializedViewPostgres` (`sekiban_mv_weatherforecast_v1_weather_forecast`).
@@ -177,13 +180,11 @@ the Rust smoke client's own retry loop) rather than relying on a blocking
 host wait. This is a candidate follow-up for a future `@sekiban/dcb-client` release,
 not addressed in this slice (kept out of scope per the SWR-G059 packet).
 
-**Pending evidence**: the registry-mode run
-(`SEKIBAN_NPM_MODE=registry`, `dotnet`/`npm install` without a tarball
-override) is still outstanding and tracked here until the `ts-v*` publish
-batch (SWR-G058) completes; re-run the same three commands with
-`SEKIBAN_NPM_MODE=registry` (or omit it, since that is the default) once
-`@sekiban/dcb-client` 0.2.0 and `@sekiban/as-wasm` 0.1.0 are live on npm, and update this
-section with the result.
+**Pending evidence**: the registry-mode end-to-end smoke for `@sekiban/as-wasm`
+(`SEKIBAN_NPM_MODE=registry`, or omit it since that is the default) remains
+outstanding until the `ts-v*` publish batch (SWR-G058) lands
+`@sekiban/as-wasm` 0.1.0 on npm. Registry-backed DCB client proof is already
+live via the published `@sekiban/dcb-*@0.2.0` packages and normal CI.
 
 ## Out of Scope (deferred)
 

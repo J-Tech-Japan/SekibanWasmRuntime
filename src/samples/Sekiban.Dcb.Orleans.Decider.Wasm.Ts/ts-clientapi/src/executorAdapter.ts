@@ -1,4 +1,4 @@
-import type { ExecuteResult, SekibanExecutor } from "@sekiban/dcb-client";
+import type { ExecuteCommitted, ExecuteNoop, ExecuteResult, SekibanExecutor } from "@sekiban/dcb-client";
 import type { CommandDefinition, CommandInput } from "@sekiban/dcb-domain";
 
 export class HttpCommandError extends Error {
@@ -43,13 +43,22 @@ export function writeErrorFromCommand(err: unknown): { status: number; body: { e
   return { status: 500, body: { error: "InternalError", message } };
 }
 
+export type ExecuteSuccess = ExecuteCommitted | ExecuteNoop;
+
+export function responseFromExecuteSuccess(result: ExecuteSuccess): unknown {
+  if (result.kind === "committed") {
+    return result.response;
+  }
+  return { noop: true, reason: result.reason ?? null };
+}
+
 export async function executeOrThrow<C extends CommandDefinition>(
   executor: SekibanExecutor,
   command: C,
   input: CommandInput<C>,
-) {
+): Promise<ExecuteSuccess> {
   const result = await executor.execute(command, input);
-  if (result.kind === "committed") {
+  if (result.kind === "committed" || result.kind === "noop") {
     return result;
   }
   const mapped = writeErrorFromResult(result);

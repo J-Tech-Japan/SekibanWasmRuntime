@@ -9,20 +9,38 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 cd "$ROOT"
 
+search() {
+  local pattern="$1" file="$2"
+  if command -v rg >/dev/null 2>&1; then
+    rg -n "$pattern" "$file"
+  else
+    grep -En "$pattern" "$file"
+  fi
+}
+
+search_quiet() {
+  local pattern="$1" file="$2"
+  if command -v rg >/dev/null 2>&1; then
+    rg -q "$pattern" "$file"
+  else
+    grep -Eq "$pattern" "$file"
+  fi
+}
+
 SAMPLE_DIR="src/samples/Sekiban.Dcb.WasmRuntime.GoModule.GoDecider"
 GO_MOD="$SAMPLE_DIR/go.mod"
 
-if rg -n '^replace' "$GO_MOD"; then
+if search '^replace' "$GO_MOD"; then
   echo "forbidden replace directive found in committed go.mod" >&2
   exit 1
 fi
 
-if rg -n '\.\./|\./src/lib' "$GO_MOD"; then
+if search '\.\./|\./src/lib' "$GO_MOD"; then
   echo "forbidden local Sekiban path found in committed go.mod" >&2
   exit 1
 fi
 
-if ! rg -q 'github\.com/J-Tech-Japan/SekibanWasmRuntime/src/lib/sekiban-go v' "$GO_MOD"; then
+if ! search_quiet 'github\.com/J-Tech-Japan/SekibanWasmRuntime/src/lib/sekiban-go v' "$GO_MOD"; then
   echo "go.mod must require the published module github.com/J-Tech-Japan/SekibanWasmRuntime/src/lib/sekiban-go" >&2
   exit 1
 fi
@@ -34,7 +52,7 @@ if [[ ! -f "$APPHOST_PROGRAM" ]]; then
   echo "missing AppHost Program.cs for the public GHCR runtime orchestration" >&2
   exit 1
 fi
-if ! rg -q 'ghcr\.io/j-tech-japan/sekiban-wasm-runtime-host' "$APPHOST_PROGRAM"; then
+if ! search_quiet 'ghcr\.io/j-tech-japan/sekiban-wasm-runtime-host' "$APPHOST_PROGRAM"; then
   echo "AppHost must target the public GHCR runtime image ghcr.io/j-tech-japan/sekiban-wasm-runtime-host" >&2
   exit 1
 fi

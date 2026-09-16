@@ -10,10 +10,28 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 cd "$ROOT"
 
+search() {
+  local pattern="$1" file="$2"
+  if command -v rg >/dev/null 2>&1; then
+    rg -n "$pattern" "$file"
+  else
+    grep -En "$pattern" "$file"
+  fi
+}
+
+search_quiet() {
+  local pattern="$1" file="$2"
+  if command -v rg >/dev/null 2>&1; then
+    rg -q "$pattern" "$file"
+  else
+    grep -Eq "$pattern" "$file"
+  fi
+}
+
 SAMPLE_DIR="src/samples/Sekiban.Dcb.WasmRuntime.PublicSpm.SwiftDecider"
 MANIFEST="$SAMPLE_DIR/Package.swift"
 
-if rg -n '\.package\(\s*(name:[^,]+,\s*)?path:' "$MANIFEST"; then
+if search '\.package\(\s*(name:[^,]+,\s*)?path:' "$MANIFEST"; then
   echo "forbidden .package(path:) dependency found in committed Package.swift" >&2
   exit 1
 fi
@@ -21,16 +39,16 @@ fi
 # Local URL schemes are the same boundary violation as path dependencies: a
 # `.package(url: "file:///…")` (or a bare absolute/relative filesystem URL)
 # would consume a local checkout while still looking like a URL dependency.
-if rg -n 'file://' "$MANIFEST"; then
+if search 'file://' "$MANIFEST"; then
   echo "forbidden local file:// dependency URL found in committed Package.swift" >&2
   exit 1
 fi
-if rg -n '\.package\(\s*url:\s*"(/|\.)' "$MANIFEST"; then
+if search '\.package\(\s*url:\s*"(/|\.)' "$MANIFEST"; then
   echo "forbidden filesystem dependency URL found in committed Package.swift" >&2
   exit 1
 fi
 
-if rg -n 'wasm-projectors/swift|\.\./' "$MANIFEST"; then
+if search 'wasm-projectors/swift|\.\./' "$MANIFEST"; then
   echo "forbidden local Sekiban path reference found in committed Package.swift" >&2
   exit 1
 fi
@@ -38,7 +56,7 @@ fi
 # The exact-version pin must sit on the sekiban-swift dependency declaration
 # itself (a `from:`/`branch:` drift there must fail even if some other
 # dependency happens to use `exact:`).
-if ! rg -Uq '\.package\(\s*url:\s*"https://github\.com/J-Tech-Japan/sekiban-swift"\s*,\s*exact:\s*"[0-9]+\.[0-9]+\.[0-9]+[0-9A-Za-z.+-]*"\s*\)' "$MANIFEST"; then
+if ! search_quiet '\.package\(url: "https://github\.com/J-Tech-Japan/sekiban-swift", exact: "[0-9]+\.[0-9]+\.[0-9]+' "$MANIFEST"; then
   echo "Package.swift must depend on https://github.com/J-Tech-Japan/sekiban-swift pinned with exact: \"X.Y.Z\" on that dependency declaration" >&2
   exit 1
 fi
@@ -50,7 +68,7 @@ if [[ ! -f "$APPHOST_PROGRAM" ]]; then
   echo "missing AppHost Program.cs for the public GHCR runtime orchestration" >&2
   exit 1
 fi
-if ! rg -q 'ghcr\.io/j-tech-japan/sekiban-wasm-runtime-host' "$APPHOST_PROGRAM"; then
+if ! search_quiet 'ghcr\.io/j-tech-japan/sekiban-wasm-runtime-host' "$APPHOST_PROGRAM"; then
   echo "AppHost must target the public GHCR runtime image ghcr.io/j-tech-japan/sekiban-wasm-runtime-host" >&2
   exit 1
 fi

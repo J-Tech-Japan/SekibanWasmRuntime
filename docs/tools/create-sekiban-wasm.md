@@ -121,8 +121,9 @@ project's own root `Cargo.toml` too, or `cargo` fails with
 ### Standalone-mode guard for monorepo-only pre-publish flags
 
 Several source samples have an *opt-in* monorepo-only pre-publish dry-run
-mode: TypeScript's `SEKIBAN_NPM_MODE=tarball` (packs `@sekiban/dcb-client`/
-`@sekiban/as-wasm` from `src/lib`), Go's `smoke.sh --local-module` (uses the
+mode: TypeScript's `SEKIBAN_NPM_MODE=tarball` (packs `@sekiban/as-wasm` from
+`src/lib` while the Client resolves published `@sekiban/dcb-*@0.2.0` from
+npm), Go's `smoke.sh --local-module` (uses the
 excluded `go.work` overlay), Swift's `smoke.sh --local-package` (SwiftPM
 dependency mirroring against a staged monorepo tree), and MoonBit's
 `build-wasm.sh`/`smoke.sh --local-packages` (a staged copy with path deps on

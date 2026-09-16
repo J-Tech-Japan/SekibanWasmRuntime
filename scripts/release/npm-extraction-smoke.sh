@@ -188,6 +188,11 @@ run_container_check() {
 
 run_container_check || fail "container load check failed: $CONTAINER_DETAIL"
 
+if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+  [[ "$CONTAINER_RESULT" == "PASS" ]] \
+    || fail "Docker is available but container runtime proof did not pass ($CONTAINER_RESULT${CONTAINER_DETAIL:+ — $CONTAINER_DETAIL})"
+fi
+
 write_report "PASS" "Packed @sekiban/as-wasm, compiled projector wasm, registry @sekiban/dcb-* 0.2.0 client build/test succeeded, and container runtime check ${CONTAINER_RESULT}."
 log "PASS (container load: $CONTAINER_RESULT)"
 exit 0

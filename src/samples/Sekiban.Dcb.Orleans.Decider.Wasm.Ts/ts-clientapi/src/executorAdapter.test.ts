@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { ExecuteResult } from "@sekiban/dcb-client";
-import { writeErrorFromResult } from "./executorAdapter.js";
+import type { ExecuteResult, SekibanExecutor } from "@sekiban/dcb-client";
+import type { CommandDefinition } from "@sekiban/dcb-domain";
+import { executeOrThrow, writeErrorFromResult } from "./executorAdapter.js";
 
 function result(partial: Record<string, unknown>): ExecuteResult {
   return { attempts: 1, ...partial } as ExecuteResult;
@@ -20,6 +21,7 @@ describe("writeErrorFromResult kind/code mapping", () => {
     { label: "timeout", input: result({ kind: "timeout", code: "timeout", error: "slow" }), status: 500, error: "InternalError" },
     { label: "unavailable", input: result({ kind: "unavailable", code: "unavailable", error: "down" }), status: 500, error: "InternalError" },
     { label: "partial", input: result({ kind: "partial", code: "partial", error: "incomplete" }), status: 500, error: "InternalError" },
+    { label: "noop", input: result({ kind: "noop", code: "noop", error: "already applied" }), status: 500, error: "InternalError" },
   ];
 
   for (const { label, input, status, error } of cases) {
@@ -29,4 +31,22 @@ describe("writeErrorFromResult kind/code mapping", () => {
       assert.equal(mapped.body.error, error);
     });
   }
+});
+
+describe("executeOrThrow success kinds", () => {
+  it("returns committed results without throwing", async () => {
+    const executor = {
+      execute: async () => result({ kind: "committed", events: [] }),
+    } as unknown as SekibanExecutor;
+    const out = await executeOrThrow(executor, {} as CommandDefinition, {} as never);
+    assert.equal(out.kind, "committed");
+  });
+
+  it("returns noop results without throwing", async () => {
+    const executor = {
+      execute: async () => result({ kind: "noop" }),
+    } as unknown as SekibanExecutor;
+    const out = await executeOrThrow(executor, {} as CommandDefinition, {} as never);
+    assert.equal(out.kind, "noop");
+  });
 });
