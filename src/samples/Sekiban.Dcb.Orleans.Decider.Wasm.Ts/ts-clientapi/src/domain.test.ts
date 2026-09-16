@@ -149,13 +149,31 @@ function normalizeReads(values: ReadRecord[]): ReadRecord[] {
   return [...values].sort((a, b) => `${a.kind}:${a.tag}`.localeCompare(`${b.kind}:${b.tag}`));
 }
 
-function assertReads(actual: ReadRecord[], expected: ReadRecord[]) {
-  for (const exp of expected) {
-    assert.ok(
-      actual.some((read) => read.kind === exp.kind && read.tag === exp.tag),
-      `missing declared read ${exp.kind}:${exp.tag}; observed ${JSON.stringify(normalizeReads(actual))}`,
-    );
+function declaredReadsFromCommand(command: CommandDefinition, input: Record<string, unknown>): ReadRecord[] {
+  const parsed = command.parseInput(input);
+  return command.reads(parsed).claims.map((claim) => ({ kind: claim.kind, tag: claim.tag.id }));
+}
+
+function normalizeTransportReads(values: ReadRecord[]): ReadRecord[] {
+  const stateTags = new Set(values.filter((read) => read.kind === "state").map((read) => read.tag));
+  const filtered = values.filter((read) => !(read.kind === "exists" && stateTags.has(read.tag)));
+  const seen = new Set<string>();
+  const deduped: ReadRecord[] = [];
+  for (const read of filtered) {
+    const key = `${read.kind}:${read.tag}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(read);
   }
+  return deduped;
+}
+
+function assertExactDeclaredReads(actual: ReadRecord[], expected: ReadRecord[], label: string) {
+  assert.deepEqual(
+    normalizeReads(normalizeTransportReads(actual)),
+    normalizeReads(expected),
+    `${label} declared reads (actual vs expected)`,
+  );
 }
 
 describe("all 21 commands read/event-tag/consistency matrix", () => {
@@ -164,7 +182,6 @@ describe("all 21 commands read/event-tag/consistency matrix", () => {
     command: CommandDefinition;
     input: Record<string, unknown>;
     tags: Record<string, TagHead>;
-    expectedReads: ReadRecord[];
     expectedEventTags: string[];
     expectedConsistency: Array<{ tag: string; head: string }>;
   }> = [
@@ -173,7 +190,6 @@ describe("all 21 commands read/event-tag/consistency matrix", () => {
       command: createWeatherForecastCommand,
       input: { forecastId: "wf-1", location: "Kyoto", date: "2026-09-16", temperatureC: 20, summary: "sunny" },
       tags: {},
-      expectedReads: [{ kind: "exists", tag: "weather:wf-1" }],
       expectedEventTags: ["weather:wf-1"],
       expectedConsistency: [{ tag: "weather:wf-1", head: "" }],
     },
@@ -182,7 +198,6 @@ describe("all 21 commands read/event-tag/consistency matrix", () => {
       command: updateWeatherForecastLocationCommand,
       input: { forecastId: "wf-1", newLocation: "Osaka" },
       tags: { "weather:wf-1": { exists: true, head: "suid-wf" } },
-      expectedReads: [{ kind: "state", tag: "weather:wf-1" }],
       expectedEventTags: ["weather:wf-1"],
       expectedConsistency: [{ tag: "weather:wf-1", head: "suid-wf" }],
     },
@@ -191,7 +206,6 @@ describe("all 21 commands read/event-tag/consistency matrix", () => {
       command: deleteWeatherForecastCommand,
       input: { forecastId: "wf-1" },
       tags: { "weather:wf-1": { exists: true, head: "suid-wf" } },
-      expectedReads: [{ kind: "state", tag: "weather:wf-1" }],
       expectedEventTags: ["weather:wf-1"],
       expectedConsistency: [{ tag: "weather:wf-1", head: "suid-wf" }],
     },
@@ -200,7 +214,6 @@ describe("all 21 commands read/event-tag/consistency matrix", () => {
       command: createStudentCommand,
       input: { studentId: "stu-1", name: "Alice", maxClassCount: 2 },
       tags: {},
-      expectedReads: [{ kind: "exists", tag: "Student:stu-1" }],
       expectedEventTags: ["Student:stu-1"],
       expectedConsistency: [{ tag: "Student:stu-1", head: "" }],
     },
@@ -209,7 +222,6 @@ describe("all 21 commands read/event-tag/consistency matrix", () => {
       command: createClassRoomCommand,
       input: { classRoomId: "cls-1", name: "Math", maxStudents: 20 },
       tags: {},
-      expectedReads: [{ kind: "exists", tag: "ClassRoom:cls-1" }],
       expectedEventTags: ["ClassRoom:cls-1"],
       expectedConsistency: [{ tag: "ClassRoom:cls-1", head: "" }],
     },
@@ -221,7 +233,6 @@ describe("all 21 commands read/event-tag/consistency matrix", () => {
         "Student:stu-1": { exists: true, head: "suid-stu" },
         "ClassRoom:cls-1": { exists: true, head: "suid-cls" },
       },
-      expectedReads: [{ kind: "state", tag: "Student:stu-1" }, { kind: "state", tag: "ClassRoom:cls-1" }],
       expectedEventTags: ["Student:stu-1", "ClassRoom:cls-1"],
       expectedConsistency: [{ tag: "Student:stu-1", head: "suid-stu" }, { tag: "ClassRoom:cls-1", head: "suid-cls" }],
     },
@@ -233,7 +244,6 @@ describe("all 21 commands read/event-tag/consistency matrix", () => {
         "Student:stu-1": { exists: true, head: "suid-stu", state: { studentId: "stu-1", enrolledClassRoomIds: ["cls-1"] } },
         "ClassRoom:cls-1": { exists: true, head: "suid-cls" },
       },
-      expectedReads: [{ kind: "state", tag: "Student:stu-1" }, { kind: "state", tag: "ClassRoom:cls-1" }],
       expectedEventTags: ["Student:stu-1", "ClassRoom:cls-1"],
       expectedConsistency: [{ tag: "Student:stu-1", head: "suid-stu" }, { tag: "ClassRoom:cls-1", head: "suid-cls" }],
     },
@@ -242,7 +252,6 @@ describe("all 21 commands read/event-tag/consistency matrix", () => {
       command: registerUserCommand,
       input: { userId: "usr-1", displayName: "Bob", email: "b@example.com", monthlyReservationLimit: 5 },
       tags: {},
-      expectedReads: [{ kind: "exists", tag: "User:usr-1" }],
       expectedEventTags: ["User:usr-1"],
       expectedConsistency: [{ tag: "User:usr-1", head: "" }],
     },
@@ -251,7 +260,6 @@ describe("all 21 commands read/event-tag/consistency matrix", () => {
       command: updateUserMonthlyReservationLimitCommand,
       input: { userId: "usr-1", monthlyReservationLimit: 10 },
       tags: { "User:usr-1": { exists: true, head: "suid-usr" } },
-      expectedReads: [{ kind: "state", tag: "User:usr-1" }],
       expectedEventTags: ["User:usr-1"],
       expectedConsistency: [{ tag: "User:usr-1", head: "suid-usr" }],
     },
@@ -260,7 +268,6 @@ describe("all 21 commands read/event-tag/consistency matrix", () => {
       command: grantUserAccessCommand,
       input: { userId: "usr-1", initialRole: "member" },
       tags: { "User:usr-1": { exists: true, head: "suid-usr" }, "UserAccess:usr-1": { exists: false, head: "" } },
-      expectedReads: [{ kind: "exists", tag: "UserAccess:usr-1" }, { kind: "state", tag: "User:usr-1" }],
       expectedEventTags: ["UserAccess:usr-1"],
       expectedConsistency: [{ tag: "UserAccess:usr-1", head: "" }],
     },
@@ -269,7 +276,6 @@ describe("all 21 commands read/event-tag/consistency matrix", () => {
       command: grantUserRoleCommand,
       input: { userId: "usr-1", role: "admin" },
       tags: { "UserAccess:usr-1": { exists: true, head: "suid-ua" } },
-      expectedReads: [{ kind: "state", tag: "UserAccess:usr-1" }],
       expectedEventTags: ["UserAccess:usr-1"],
       expectedConsistency: [{ tag: "UserAccess:usr-1", head: "suid-ua" }],
     },
@@ -278,7 +284,6 @@ describe("all 21 commands read/event-tag/consistency matrix", () => {
       command: createRoomCommand,
       input: { roomId: "room-1", name: "A", capacity: 10, location: "F1", equipment: [], requiresApproval: false },
       tags: {},
-      expectedReads: [{ kind: "exists", tag: "Room:room-1" }],
       expectedEventTags: ["Room:room-1"],
       expectedConsistency: [{ tag: "Room:room-1", head: "" }],
     },
@@ -287,7 +292,6 @@ describe("all 21 commands read/event-tag/consistency matrix", () => {
       command: updateRoomCommand,
       input: { roomId: "room-1", name: "A2", capacity: 12, location: "F2", equipment: [], requiresApproval: false },
       tags: { "Room:room-1": { exists: true, head: "suid-room" } },
-      expectedReads: [{ kind: "state", tag: "Room:room-1" }],
       expectedEventTags: ["Room:room-1"],
       expectedConsistency: [{ tag: "Room:room-1", head: "suid-room" }],
     },
@@ -299,7 +303,6 @@ describe("all 21 commands read/event-tag/consistency matrix", () => {
         startTime: "2026-09-16T10:00:00.000Z", endTime: "2026-09-16T11:00:00.000Z", purpose: "test", selectedEquipment: [],
       },
       tags: {},
-      expectedReads: [{ kind: "exists", tag: "Reservation:res-2" }],
       expectedEventTags: ["Reservation:res-2", "Room:room-1"],
       expectedConsistency: [{ tag: "Reservation:res-2", head: "" }],
     },
@@ -314,11 +317,6 @@ describe("all 21 commands read/event-tag/consistency matrix", () => {
         "Room:room-1": { exists: true, head: "" },
         "RoomReservation:room-1": { exists: true, head: "suid-rr" },
       },
-      expectedReads: [
-        { kind: "exists", tag: "Reservation:res-1" },
-        { kind: "state", tag: "Room:room-1" },
-        { kind: "state", tag: "RoomReservation:room-1" },
-      ],
       expectedEventTags: ["Reservation:res-1", "RoomReservation:room-1"], // unique tags across multi-event quick path
       expectedConsistency: [{ tag: "Reservation:res-1", head: "" }, { tag: "RoomReservation:room-1", head: "suid-rr" }],
     },
@@ -327,7 +325,6 @@ describe("all 21 commands read/event-tag/consistency matrix", () => {
       command: commitReservationHoldCommand,
       input: { reservationId: "res-1", roomId: "room-1", requiresApproval: false },
       tags: { "Reservation:res-1": { exists: true, head: "suid-res" } },
-      expectedReads: [{ kind: "state", tag: "Reservation:res-1" }],
       expectedEventTags: ["Reservation:res-1", "Room:room-1"],
       expectedConsistency: [{ tag: "Reservation:res-1", head: "suid-res" }],
     },
@@ -336,7 +333,6 @@ describe("all 21 commands read/event-tag/consistency matrix", () => {
       command: confirmReservationCommand,
       input: { reservationId: "res-1", roomId: "room-1" },
       tags: { "Reservation:res-1": { exists: true, head: "suid-res" } },
-      expectedReads: [{ kind: "state", tag: "Reservation:res-1" }],
       expectedEventTags: ["Reservation:res-1", "Room:room-1"],
       expectedConsistency: [{ tag: "Reservation:res-1", head: "suid-res" }],
     },
@@ -345,7 +341,6 @@ describe("all 21 commands read/event-tag/consistency matrix", () => {
       command: cancelReservationCommand,
       input: { reservationId: "res-1", roomId: "room-1", reason: "changed plans" },
       tags: { "Reservation:res-1": { exists: true, head: "suid-res" } },
-      expectedReads: [{ kind: "state", tag: "Reservation:res-1" }],
       expectedEventTags: ["Reservation:res-1", "Room:room-1"],
       expectedConsistency: [{ tag: "Reservation:res-1", head: "suid-res" }],
     },
@@ -354,7 +349,6 @@ describe("all 21 commands read/event-tag/consistency matrix", () => {
       command: rejectReservationCommand,
       input: { reservationId: "res-1", roomId: "room-1", approvalRequestId: "apr-1", reason: "denied" },
       tags: { "Reservation:res-1": { exists: true, head: "suid-res" } },
-      expectedReads: [{ kind: "state", tag: "Reservation:res-1" }],
       expectedEventTags: ["Reservation:res-1", "Room:room-1"],
       expectedConsistency: [{ tag: "Reservation:res-1", head: "suid-res" }],
     },
@@ -363,7 +357,6 @@ describe("all 21 commands read/event-tag/consistency matrix", () => {
       command: startApprovalFlowCommand,
       input: { approvalRequestId: "apr-1", reservationId: "res-1" },
       tags: { "Reservation:res-1": { exists: true, head: "suid-res" }, "ApprovalRequest:apr-1": { exists: false, head: "" } },
-      expectedReads: [{ kind: "exists", tag: "ApprovalRequest:apr-1" }, { kind: "state", tag: "Reservation:res-1" }],
       expectedEventTags: ["ApprovalRequest:apr-1"],
       expectedConsistency: [{ tag: "ApprovalRequest:apr-1", head: "" }],
     },
@@ -372,7 +365,6 @@ describe("all 21 commands read/event-tag/consistency matrix", () => {
       command: recordApprovalDecisionCommand,
       input: { approvalRequestId: "apr-1", approverId: "mgr-1", decision: "approved" },
       tags: { "ApprovalRequest:apr-1": { exists: true, head: "suid-apr" } },
-      expectedReads: [{ kind: "state", tag: "ApprovalRequest:apr-1" }],
       expectedEventTags: ["ApprovalRequest:apr-1"],
       expectedConsistency: [{ tag: "ApprovalRequest:apr-1", head: "suid-apr" }],
     },
@@ -388,7 +380,11 @@ describe("all 21 commands read/event-tag/consistency matrix", () => {
       assert.equal(result.kind, "committed", `${row.name} should commit`);
       assert.equal(commits.length, 1);
       const commit = commits[0];
-      assertReads(reads, row.expectedReads);
+      assertExactDeclaredReads(
+        reads,
+        declaredReadsFromCommand(row.command, row.input),
+        row.name,
+      );
       const tags = uniqueSorted(eventTags(commit));
       assert.deepEqual(tags, uniqueSorted(row.expectedEventTags), `${row.name} event tags`);
       assertConsistency(commit, row.expectedConsistency);
