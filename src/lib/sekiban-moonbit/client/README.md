@@ -41,7 +41,7 @@ docker run -p 8080:8080 \
 ```
 
 It speaks the same serialized HTTP contract as the Rust `sekiban-executor`
-0.1.0 crate and the npm `@sekiban/ts` package, so clients built with any of
+0.1.0 crate and the npm `@sekiban/dcb-client` package, so clients built with any of
 these SDKs interoperate with the same runtime image and modules.
 
 A complete client built on this package lives in the monorepo:

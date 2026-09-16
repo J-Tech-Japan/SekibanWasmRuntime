@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # End-to-end smoke for the npm TypeScript external-consumer sample against the
 # public GHCR runtime container. SEKIBAN_NPM_MODE (registry|tarball) selects
-# how @sekiban/as-wasm and @sekiban/ts are resolved; see build-wasm.sh and
+# how @sekiban/as-wasm is resolved for Wasm; Client uses published @sekiban/dcb-*.
+# See build-wasm.sh and
 # the README for details. Skips gracefully (exit 0, "Result: SKIP") when
 # Docker, the .NET SDK, npm, or node are unavailable, or when registry mode
 # cannot resolve the not-yet-published packages.
@@ -40,7 +41,7 @@ write_report() {
     printf '%s\n' "- Result: **$result**"
     printf '%s\n' "- Detail: $detail"
     printf '%s\n' "- Runtime image: \`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:${SAMPLE_RUNTIME_IMAGE_TAG:-1.0.0-preview.3}\`"
-    printf '%s\n' "- Sekiban packages: npm \`@sekiban/ts@0.1.0\`, \`@sekiban/as-wasm@0.1.0\` (SEKIBAN_NPM_MODE=$NPM_MODE, no local Sekiban path dependencies)"
+    printf '%s\n' "- Sekiban packages: npm \`@sekiban/dcb-core/domain/client@0.1.0\`, \`@sekiban/as-wasm@0.1.0\` (SEKIBAN_NPM_MODE=$NPM_MODE)"
     printf '%s\n' "- Runtime URL: \`${RUNTIME_URL:-unresolved}\`"
     printf '%s\n' "- Commit: \`$(git rev-parse HEAD 2>/dev/null || echo unknown)\`"
     [[ -n "${CLIENT_EVIDENCE:-}" ]] && printf '\n## TypeScript client evidence\n\n```json\n%s\n```\n' "$CLIENT_EVIDENCE"
@@ -87,48 +88,11 @@ if [[ ! -s "$MODULE" || ! -s "$CONFIG" ]]; then
   fi
 fi
 
-log "preparing TypeScript client (SEKIBAN_NPM_MODE=$NPM_MODE)"
+log "preparing TypeScript client (registry @sekiban/dcb-* 0.1.0)"
 CLIENT_DIR="$ROOT/$SAMPLE_DIR/Client"
 CLIENT_BUILD_DIR="$CLIENT_DIR"
-case "$NPM_MODE" in
-  registry)
-    if ! (cd "$CLIENT_DIR" && npm install --no-audit --no-fund >/dev/null 2>&1); then
-      skip "npm registry install failed for the TypeScript client -- @sekiban/ts is not published yet; re-run with SEKIBAN_NPM_MODE=tarball."
-    fi
-    ;;
-  tarball)
-    TARBALL_DIR="$ARTIFACT_DIR/tarballs"
-    mkdir -p "$TARBALL_DIR"
-    TS_PKG_DIR="$ROOT/src/lib/sekiban-ts"
-    npm --prefix "$TS_PKG_DIR" install --no-audit --no-fund >/dev/null 2>&1 || fail "npm install failed for @sekiban/ts"
-    TS_TGZ_NAME="$(cd "$TS_PKG_DIR" && npm pack --pack-destination "$TARBALL_DIR" --silent 2>/dev/null | tail -n1)"
-    TS_TGZ="$TARBALL_DIR/$TS_TGZ_NAME"
-    [[ -s "$TS_TGZ" ]] || fail "npm pack produced no tarball for @sekiban/ts"
-
-    CLIENT_BUILD_DIR="$ARTIFACT_DIR/client-build"
-    rm -rf "$CLIENT_BUILD_DIR"
-    mkdir -p "$CLIENT_BUILD_DIR"
-    cp -R "$CLIENT_DIR/src" "$CLIENT_BUILD_DIR/src"
-    cp "$CLIENT_DIR/tsconfig.json" "$CLIENT_BUILD_DIR/tsconfig.json"
-    node -e "
-      const fs = require('fs');
-      const pkg = JSON.parse(fs.readFileSync('$CLIENT_DIR/package.json', 'utf8'));
-      pkg.dependencies['@sekiban/ts'] = 'file:$TS_TGZ';
-      fs.writeFileSync('$CLIENT_BUILD_DIR/package.json', JSON.stringify(pkg, null, 2));
-    "
-    (cd "$CLIENT_BUILD_DIR" && npm install --no-audit --no-fund >/dev/null 2>&1) \
-      || fail "npm install failed for the packed @sekiban/ts tarball"
-
-    resolved="$(node -p "require('$CLIENT_BUILD_DIR/package-lock.json').packages['node_modules/@sekiban/ts'].resolved || ''")"
-    case "$resolved" in
-      *sekiban-ts-*.tgz) ;;
-      *) fail "no-local-path guard: @sekiban/ts resolved to '$resolved' instead of the packed tarball" ;;
-    esac
-    ;;
-  *)
-    fail "unknown SEKIBAN_NPM_MODE=$NPM_MODE (expected 'registry' or 'tarball')"
-    ;;
-esac
+(cd "$CLIENT_DIR" && npm install --no-audit --no-fund >/dev/null 2>&1) \
+  || fail "npm registry install failed for the migrated DCB TypeScript client"
 
 log "compiling TypeScript client"
 (cd "$CLIENT_BUILD_DIR" && npx tsc) || fail "tsc compile failed"
@@ -181,7 +145,7 @@ export RUNTIME_URL
 export SAMPLE_FORECAST_ID="$forecast_id"
 export SAMPLE_FORECAST_LOCATION="Kyoto"
 
-log "running typed TypeScript client smoke (SekibanRuntimeClient + Command + tag-state + in-memory ListQuery/CountQuery)"
+log "running typed TypeScript client smoke (createSekibanExecutor + tag-state + list/count queries)"
 CLIENT_EVIDENCE="$(cd "$CLIENT_BUILD_DIR" && node dist/main.js 2>>"$APPHOST_LOG")"
 client_status=$?
 [[ "$client_status" == "0" ]] || fail "typed TypeScript client smoke failed: ${CLIENT_EVIDENCE:0:500}"
@@ -225,6 +189,6 @@ done
 [[ "$mv_found" == "1" ]] || fail "materialized view did not catch up forecast $forecast_id in $MV_DB"
 log "materialized-view OK ($mv_detail)"
 
-write_report "PASS" "Typed TypeScript client (@sekiban/ts + @sekiban/as-wasm 0.1.0, SEKIBAN_NPM_MODE=$NPM_MODE) committed forecast $forecast_id through SekibanRuntimeClient against the public GHCR runtime, read tag-state and in-memory GetWeatherForecastListQuery/GetWeatherForecastCountQuery, and confirmed WeatherForecast MV catch-up in DcbMaterializedViewPostgres ($mv_detail)."
+write_report "PASS" "Typed TypeScript client (@sekiban/dcb-* 0.1.0 + @sekiban/as-wasm 0.1.0, SEKIBAN_NPM_MODE=$NPM_MODE) committed forecast $forecast_id through createSekibanExecutor against the public GHCR runtime, read tag-state and in-memory GetWeatherForecastListQuery/GetWeatherForecastCountQuery, and confirmed WeatherForecast MV catch-up in DcbMaterializedViewPostgres ($mv_detail)."
 log "PASS"
 exit 0

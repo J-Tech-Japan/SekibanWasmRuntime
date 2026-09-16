@@ -1,115 +1,21 @@
-// Typed TypeScript smoke client, mirroring the crates.io Rust decider sample's
-// Client/src/main.rs (src/samples/Sekiban.Dcb.WasmRuntime.CratesIo.RsDecider):
-// creates a forecast, updates its location, reads tag state, polls the
-// in-memory list query, runs the count query, and prints JSON smoke evidence.
+// Typed TypeScript smoke client using published @sekiban/dcb-* packages.
 import { randomUUID } from "node:crypto";
+import { createHttpTransport, createSekibanExecutor } from "@sekiban/dcb-client";
 import {
-  SekibanRuntimeClient,
-  newCommandOutput,
-  tagString,
-  AlreadyExistsError,
-  NotFoundError,
-  type Command,
-  type CommandContext,
-  type CommandOutput,
-} from "@sekiban/ts";
-
-const TAG_GROUP = "weather";
-const PROJECTOR_TAG = "WeatherForecastProjector";
-const EVENT_CREATED = "WeatherForecastCreated";
-const EVENT_LOCATION_UPDATED = "WeatherForecastLocationUpdated";
-
-interface WeatherForecastState {
-  forecastId?: string;
-  location?: string;
-  temperatureC?: number;
-  summary?: string;
-  createdAt?: string;
-}
+  createWeatherForecastCommand,
+  updateWeatherForecastLocationCommand,
+  weatherForecastProjector,
+  weatherTag,
+  type WeatherState,
+} from "./domain.js";
+import { executeOrThrow, HttpCommandError } from "./executorAdapter.js";
 
 interface WrittenEvent {
-  id: string;
-  sortableUniqueIdValue: string;
+  sortableUniqueIdValue?: string;
 }
 
 interface CommitResponse {
-  writtenEvents: WrittenEvent[];
-}
-
-function parseState(stateJson: string): WeatherForecastState {
-  try {
-    return JSON.parse(stateJson) as WeatherForecastState;
-  } catch {
-    return {};
-  }
-}
-
-function isEmptyState(state: WeatherForecastState): boolean {
-  return !state.forecastId || state.forecastId.length === 0;
-}
-
-class CreateWeatherForecast implements Command {
-  constructor(
-    private readonly forecastId: string,
-    private readonly location: string,
-    private readonly temperatureC: number,
-    private readonly summary: string,
-  ) {}
-
-  commandType(): string {
-    return "CreateWeatherForecast";
-  }
-
-  async handle(ctx: CommandContext): Promise<CommandOutput> {
-    const tag = tagString(TAG_GROUP, this.forecastId);
-    const resp = await ctx.getTagState(TAG_GROUP, this.forecastId);
-    if (!isEmptyState(parseState(resp.stateJson))) {
-      throw new AlreadyExistsError(`weather forecast ${this.forecastId}`);
-    }
-    return newCommandOutput(
-      EVENT_CREATED,
-      {
-        forecastId: this.forecastId,
-        location: this.location,
-        temperatureC: this.temperatureC,
-        summary: this.summary,
-        createdAt: new Date().toISOString(),
-      },
-      [tag],
-      [tag],
-      { [tag]: resp.version },
-    );
-  }
-}
-
-class UpdateWeatherForecastLocation implements Command {
-  constructor(
-    private readonly forecastId: string,
-    private readonly newLocation: string,
-  ) {}
-
-  commandType(): string {
-    return "UpdateWeatherForecastLocation";
-  }
-
-  async handle(ctx: CommandContext): Promise<CommandOutput> {
-    const tag = tagString(TAG_GROUP, this.forecastId);
-    const resp = await ctx.getTagState(TAG_GROUP, this.forecastId);
-    if (isEmptyState(parseState(resp.stateJson))) {
-      throw new NotFoundError(`weather forecast ${this.forecastId}`);
-    }
-    return newCommandOutput(
-      EVENT_LOCATION_UPDATED,
-      {
-        forecastId: this.forecastId,
-        newLocation: this.newLocation,
-        updatedAt: new Date().toISOString(),
-      },
-      [tag],
-      [tag],
-      { [tag]: resp.version },
-    );
-  }
+  writtenEvents?: WrittenEvent[];
 }
 
 interface SmokeEvidence {
@@ -134,17 +40,22 @@ async function main(): Promise<void> {
   const updatedLocation = process.env.SAMPLE_UPDATED_LOCATION ?? "Osaka";
   const forecastId = process.env.SAMPLE_FORECAST_ID ?? randomUUID();
 
-  const client = new SekibanRuntimeClient(baseUrl, { [TAG_GROUP]: PROJECTOR_TAG });
+  const executor = createSekibanExecutor(createHttpTransport({ baseUrl }));
 
-  const created = (await client.finalizeCommand(
-    new CreateWeatherForecast(forecastId, originalLocation, 24, "npm TypeScript sample"),
-  )) as CommitResponse;
-  const updated = (await client.finalizeCommand(
-    new UpdateWeatherForecastLocation(forecastId, updatedLocation),
-  )) as CommitResponse;
+  const created = (await executeOrThrow(executor, createWeatherForecastCommand, {
+    forecastId,
+    location: originalLocation,
+    temperatureC: 24,
+    summary: "npm TypeScript sample",
+  })).response as CommitResponse;
 
-  const tagState = await client.getTagState(TAG_GROUP, forecastId);
-  const state = parseState(tagState.stateJson);
+  const updated = (await executeOrThrow(executor, updateWeatherForecastLocationCommand, {
+    forecastId,
+    newLocation: updatedLocation,
+  })).response as CommitResponse;
+
+  const snapshot = await executor.readState(weatherForecastProjector, weatherTag(forecastId));
+  const state = snapshot.state as WeatherState;
   if (state.forecastId !== forecastId || state.location !== updatedLocation) {
     throw new Error(
       `tag-state mismatch: expected ${forecastId}/${updatedLocation}, got ${JSON.stringify(state)}`,
@@ -156,29 +67,32 @@ async function main(): Promise<void> {
     created.writtenEvents?.[0]?.sortableUniqueIdValue ??
     null;
 
-  // @sekiban/ts's executeListQuery/executeQuery have no host-side
-  // wait-for-sortable-id parameter (unlike the Go SDK's ExecuteListQuery),
-  // so this sample polls client-side, mirroring the Rust smoke client.
-  let listItems: WeatherForecastState[] = [];
+  let listItems: WeatherState[] = [];
   for (let i = 0; i < 30; i++) {
-    const paramsJson = JSON.stringify({
-      locationFilter: updatedLocation,
-      waitForSortableUniqueId: waitFor ?? "",
+    const listResult = await executor.listQuery({
+      queryType: "GetWeatherForecastListQuery",
+      queryParamsJson: JSON.stringify({
+        locationFilter: updatedLocation,
+        waitForSortableUniqueId: waitFor ?? "",
+      }),
+      waitForSortableUniqueId: waitFor ?? undefined,
     });
-    const itemsJson = await client.executeListQuery("GetWeatherForecastListQuery", paramsJson);
-    listItems = JSON.parse(itemsJson || "[]") as WeatherForecastState[];
+    listItems = JSON.parse(listResult.itemsJson || "[]") as WeatherState[];
     if (listItems.some((item) => item.forecastId === forecastId && item.location === updatedLocation)) {
       break;
     }
     await sleep(2000);
   }
 
-  const countParamsJson = JSON.stringify({
-    locationFilter: updatedLocation,
-    waitForSortableUniqueId: waitFor ?? "",
+  const countResult = await executor.query({
+    queryType: "GetWeatherForecastCountQuery",
+    queryParamsJson: JSON.stringify({
+      locationFilter: updatedLocation,
+      waitForSortableUniqueId: waitFor ?? "",
+    }),
+    waitForSortableUniqueId: waitFor ?? undefined,
   });
-  const countJson = await client.executeQuery("GetWeatherForecastCountQuery", countParamsJson);
-  const count = JSON.parse(countJson || "{}") as { count?: number };
+  const count = JSON.parse(countResult.resultJson || "{}") as { count?: number };
 
   const foundInListQuery = listItems.some(
     (item) => item.forecastId === forecastId && item.location === updatedLocation,
@@ -192,7 +106,7 @@ async function main(): Promise<void> {
     originalLocation,
     updatedLocation,
     sortableUniqueId: waitFor,
-    tagStateVersion: tagState.version,
+    tagStateVersion: snapshot.exists ? 1 : 0,
     tagStateLocation: state.location ?? "",
     listQueryCount: listItems.length,
     countQueryCount: count.count ?? 0,
@@ -202,6 +116,10 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  console.error(err instanceof Error ? err.message : String(err));
+  if (err instanceof HttpCommandError) {
+    console.error(err.message);
+  } else {
+    console.error(err instanceof Error ? err.message : String(err));
+  }
   process.exitCode = 1;
 });

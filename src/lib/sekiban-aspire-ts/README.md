@@ -59,7 +59,7 @@ unproxied so scripts can reach the runtime deterministically.
 
 A complete AppHost built on this helper lives in the repository:
 [PublicContainer.TsAspire sample](https://github.com/J-Tech-Japan/SekibanWasmRuntime/tree/main/src/samples/Sekiban.Dcb.WasmRuntime.PublicContainer.TsAspire).
-Pair it with [`@sekiban/ts`](https://www.npmjs.com/package/@sekiban/ts) for the
+Pair it with [`@sekiban/dcb-client`](https://www.npmjs.com/package/@sekiban/dcb-client) for the
 client side.
 
 ## Compatibility

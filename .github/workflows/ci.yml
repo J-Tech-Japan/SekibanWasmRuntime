@@ -71,3 +71,32 @@ jobs:
 
       - name: Pack
         run: dotnet pack src/SekibanWasmRuntime.ci.slnx -c Release -o artifacts/nuget --no-build --no-restore
+
+  typescript-dcb-consumers:
+    name: TypeScript DCB consumers (registry-backed)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Retired TypeScript host SDK guard
+        run: bash scripts/guard/no-retired-sekiban-ts.sh
+      - name: Small npm TypeScript consumer
+        run: |
+          npm --prefix src/samples/Sekiban.Dcb.WasmRuntime.Npm.TsDecider/Client ci
+          npm --prefix src/samples/Sekiban.Dcb.WasmRuntime.Npm.TsDecider/Client run build
+          npm --prefix src/samples/Sekiban.Dcb.WasmRuntime.Npm.TsDecider/Client test
+      - name: Large ts-clientapi consumer
+        run: |
+          npm --prefix src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Ts/ts-clientapi ci
+          npm --prefix src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Ts/ts-clientapi run build
+          npm --prefix src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Ts/ts-clientapi test
+      - name: create-sekiban-wasm generator
+        run: |
+          npm --prefix src/tools/create-sekiban-wasm ci
+          npm --prefix src/tools/create-sekiban-wasm test
+          bash src/tools/create-sekiban-wasm/scripts/generate-smoke.sh
+      - name: Registry-backed extraction/runtime smoke
+        run: bash scripts/release/npm-extraction-smoke.sh

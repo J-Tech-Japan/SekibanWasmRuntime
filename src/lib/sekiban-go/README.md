@@ -16,7 +16,7 @@ to the repository tag `src/lib/sekiban-go/v0.1.0` through proxy.golang.org.
 
 ## Packages
 
-- `client` — `SekibanRuntimeClient`: typed command commit, tag-state reads,
+- `client` — `createSekibanExecutor`: typed command commit, tag-state reads,
   and serialized query/list-query calls against a running Sekiban WASM
   Runtime host over its HTTP contract.
 - `domain` — the typed `Command`/`CommandContext`/`CommandOutput` contract,
@@ -49,7 +49,7 @@ docker run -p 8080:8080 \
 
 It speaks the same serialized HTTP contract and guest ABI as the Rust 0.1.0
 crates (`sekiban-executor`, `sekiban-wasm`, `sekiban-mv`) and the npm SDKs
-(`@sekiban/ts`, `@sekiban/as-wasm`), so modules and clients built with any of
+(`@sekiban/dcb-client`, `@sekiban/as-wasm`), so modules and clients built with any of
 these SDKs interoperate on the same runtime image.
 
 ## License
