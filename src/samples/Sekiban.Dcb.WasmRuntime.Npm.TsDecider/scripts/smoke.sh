@@ -41,7 +41,7 @@ write_report() {
     printf '%s\n' "- Result: **$result**"
     printf '%s\n' "- Detail: $detail"
     printf '%s\n' "- Runtime image: \`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:${SAMPLE_RUNTIME_IMAGE_TAG:-1.0.0-preview.3}\`"
-    printf '%s\n' "- Sekiban packages: npm \`@sekiban/dcb-core/domain/client@0.1.0\`, \`@sekiban/as-wasm@0.1.0\` (SEKIBAN_NPM_MODE=$NPM_MODE)"
+    printf '%s\n' "- Sekiban packages: npm \`@sekiban/dcb-core/domain/client@0.2.0\`, \`@sekiban/as-wasm@0.1.0\` (SEKIBAN_NPM_MODE=$NPM_MODE)"
     printf '%s\n' "- Runtime URL: \`${RUNTIME_URL:-unresolved}\`"
     printf '%s\n' "- Commit: \`$(git rev-parse HEAD 2>/dev/null || echo unknown)\`"
     [[ -n "${CLIENT_EVIDENCE:-}" ]] && printf '\n## TypeScript client evidence\n\n```json\n%s\n```\n' "$CLIENT_EVIDENCE"
@@ -88,7 +88,7 @@ if [[ ! -s "$MODULE" || ! -s "$CONFIG" ]]; then
   fi
 fi
 
-log "preparing TypeScript client (registry @sekiban/dcb-* 0.1.0)"
+log "preparing TypeScript client (registry @sekiban/dcb-* 0.2.0)"
 CLIENT_DIR="$ROOT/$SAMPLE_DIR/Client"
 CLIENT_BUILD_DIR="$CLIENT_DIR"
 (cd "$CLIENT_DIR" && npm install --no-audit --no-fund >/dev/null 2>&1) \
@@ -189,6 +189,6 @@ done
 [[ "$mv_found" == "1" ]] || fail "materialized view did not catch up forecast $forecast_id in $MV_DB"
 log "materialized-view OK ($mv_detail)"
 
-write_report "PASS" "Typed TypeScript client (@sekiban/dcb-* 0.1.0 + @sekiban/as-wasm 0.1.0, SEKIBAN_NPM_MODE=$NPM_MODE) committed forecast $forecast_id through createSekibanExecutor against the public GHCR runtime, read tag-state and in-memory GetWeatherForecastListQuery/GetWeatherForecastCountQuery, and confirmed WeatherForecast MV catch-up in DcbMaterializedViewPostgres ($mv_detail)."
+write_report "PASS" "Typed TypeScript client (@sekiban/dcb-* 0.2.0 + @sekiban/as-wasm 0.1.0, SEKIBAN_NPM_MODE=$NPM_MODE) committed forecast $forecast_id through createSekibanExecutor against the public GHCR runtime, read tag-state and in-memory GetWeatherForecastListQuery/GetWeatherForecastCountQuery, and confirmed WeatherForecast MV catch-up in DcbMaterializedViewPostgres ($mv_detail)."
 log "PASS"
 exit 0

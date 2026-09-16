@@ -19,7 +19,7 @@ Sekiban package dependencies are exact npm requirements:
 
 ```json
 "@sekiban/as-wasm": "0.1.0"   // Wasm/package.json
-"@sekiban/dcb-client": "0.1.0"        // Client/package.json
+"@sekiban/dcb-client": "0.2.0"        // Client/package.json
 ```
 
 ## Two consumption modes
@@ -37,7 +37,7 @@ packages are resolved via `SEKIBAN_NPM_MODE`:
   package actually resolved from the `.tgz` (never `src/lib`).
 - `registry` (default, becomes the real path after publish): a plain
   `npm install` against the npm registry. This fails today with a 404 for
-  `@sekiban/as-wasm@0.1.0` / `@sekiban/dcb-client@0.1.0` -- that failure is expected
+  `@sekiban/as-wasm@0.1.0` / `@sekiban/dcb-client@0.2.0` -- that failure is expected
   and both scripts report it as `SKIP` rather than `FAIL`. The registry-mode
   run becomes the recorded follow-up once SWR-G058 publishes.
 

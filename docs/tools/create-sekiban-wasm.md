@@ -64,7 +64,7 @@ for the flag explicitly.
 | Language | Registry mode | Dev mode |
 | --- | --- | --- |
 | Rust | Available -- depends on crates.io `sekiban-*` at exact `=0.1.0`. **Already published**; the generated project builds and runs standalone today. | **Available** -- vendors `src/wasm-projectors/rust` into `vendor/`; `cargo check --workspace` succeeds standalone today. |
-| TypeScript | Available -- depends on `@sekiban/dcb-client`/`@sekiban/as-wasm` at exact npm `0.1.0`. Not published yet (SWR-G058); `npm install` 404s until it is. | Not available -- no dev-mode sample exists in the monorepo yet. |
+| TypeScript | Available -- depends on `@sekiban/dcb-client` at exact npm `0.2.0` (published) and `@sekiban/as-wasm` at exact npm `0.1.0` (lane-ready/unpublished). | Not available -- no dev-mode sample exists in the monorepo yet. |
 | Go | Available -- requires the published module `github.com/J-Tech-Japan/SekibanWasmRuntime/src/lib/sekiban-go` at `v0.1.0`. Tag not published yet; `go build` fails to resolve it until it is. | Not available -- no dev-mode sample exists in the monorepo yet. |
 | Swift | Pending -- pins the intended exact `0.1.1` mirror version, but v0.1.1 is not cut yet and generated projects cannot resolve it; published v0.1.0 remains available but superseded. | Not available -- no dev-mode sample exists in the monorepo yet. |
 | MoonBit | Available -- depends on `sekiban/sekiban-wasm-runtime` and `sekiban/sekiban-client` as mooncakes.io registry packages. Not published yet. | Not available -- no dev-mode sample exists in the monorepo yet. |

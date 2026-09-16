@@ -22,7 +22,7 @@
       "available": true,
       "sourceDir": "../../samples/Sekiban.Dcb.WasmRuntime.Npm.TsDecider",
       "sampleDirName": "Sekiban.Dcb.WasmRuntime.Npm.TsDecider",
-      "note": "Depends on published @sekiban/dcb-core, @sekiban/dcb-domain, and @sekiban/dcb-client at exact 0.1.0 plus zod 4.4.3 for the Client, and @sekiban/as-wasm at exact 0.1.0 for the Wasm projector (lane-ready/unpublished)."
+      "note": "Depends on published @sekiban/dcb-core, @sekiban/dcb-domain, and @sekiban/dcb-client at exact 0.2.0 plus zod 4.4.3 for the Client, and @sekiban/as-wasm at exact 0.1.0 for the Wasm projector (lane-ready/unpublished)."
     },
     "dev": {
       "available": false,

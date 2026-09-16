@@ -29,6 +29,10 @@ describe("createHttpTransport V1 wire", () => {
       const body = request.method === "POST" ? await request.clone().json() : undefined;
       calls.push({ path, body });
       if (path.endsWith("/tag-latest-sortable")) {
+        const tag = String((body as { tag?: string })?.tag ?? "");
+        if (committed && tag === "weather:forecast-1") {
+          return response({ exists: true, lastSortableUniqueId: "suid-1" });
+        }
         return response({ exists: false, lastSortableUniqueId: "" });
       }
       if (path.endsWith("/tag-state")) {
@@ -122,7 +126,7 @@ describe("createHttpTransport V1 wire", () => {
       forecastId: "forecast-1",
       newLocation: "Osaka",
     });
-    assert.equal(result.kind, "invalid");
+    assert.equal(result.kind, "transport");
     assert.equal(result.code, "invalid_read_snapshot");
     assert.equal(commitCalls, 0);
   });
@@ -160,7 +164,7 @@ describe("createHttpTransport V1 wire", () => {
       forecastId: "forecast-1",
       newLocation: "Osaka",
     });
-    assert.equal(result.kind, "invalid");
+    assert.equal(result.kind, "transport");
     assert.equal(result.code, "invalid_read_snapshot");
     assert.equal(commitCalls, 0);
   });

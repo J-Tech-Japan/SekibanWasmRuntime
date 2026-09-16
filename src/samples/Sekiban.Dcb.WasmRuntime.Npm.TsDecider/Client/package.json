@@ -9,9 +9,9 @@
     "start": "node dist/main.js"
   },
   "dependencies": {
-    "@sekiban/dcb-client": "0.1.0",
-    "@sekiban/dcb-core": "0.1.0",
-    "@sekiban/dcb-domain": "0.1.0",
+    "@sekiban/dcb-client": "0.2.0",
+    "@sekiban/dcb-core": "0.2.0",
+    "@sekiban/dcb-domain": "0.2.0",
     "zod": "4.4.3"
   },
   "devDependencies": {

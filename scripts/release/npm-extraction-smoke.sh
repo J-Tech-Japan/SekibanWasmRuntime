@@ -30,7 +30,7 @@ write_report() {
     printf '# npm Extraction Smoke\n\n'
     printf '%s\n' "- Result: **$result**"
     printf '%s\n' "- Detail: $detail"
-    printf '%s\n' "- Packages: \`@sekiban/as-wasm@$AS_VERSION\` (packed tarball) + \`@sekiban/dcb-core/domain/client@0.1.0\` (registry)"
+    printf '%s\n' "- Packages: \`@sekiban/as-wasm@$AS_VERSION\` (packed tarball) + \`@sekiban/dcb-core/domain/client@0.2.0\` (registry)"
     printf '%s\n' "- Runtime image: \`$RUNTIME_IMAGE\`"
     printf '%s\n' "- Container load: $CONTAINER_RESULT${CONTAINER_DETAIL:+ — $CONTAINER_DETAIL}"
     printf '%s\n' "- Commit: \`$(git rev-parse HEAD 2>/dev/null || echo unknown)\`"
@@ -84,7 +84,7 @@ cp "$SMALL_CLIENT/package.json" "$CLIENT_SMOKE_DIR/package.json"
 (cd "$CLIENT_SMOKE_DIR" && npm install --no-audit --no-fund >/dev/null 2>&1) || fail "registry npm install failed for DCB client"
 for pkg in @sekiban/dcb-core @sekiban/dcb-domain @sekiban/dcb-client; do
   resolved="$(node -p "require('$CLIENT_SMOKE_DIR/package-lock.json').packages['node_modules/${pkg}'].version || ''")"
-  [[ "$resolved" == "0.1.0" ]] || fail "$pkg resolved to '$resolved' instead of registry 0.1.0"
+  [[ "$resolved" == "0.2.0" ]] || fail "$pkg resolved to '$resolved' instead of registry 0.2.0"
 done
 (cd "$CLIENT_SMOKE_DIR" && npm run build && npm test) || fail "registry-backed client build/test failed"
 
@@ -96,5 +96,5 @@ else
   CONTAINER_DETAIL="Docker unavailable"
 fi
 
-write_report "PASS" "Packed @sekiban/as-wasm projector consumer and registry @sekiban/dcb-* 0.1.0 client build/test succeeded."
+write_report "PASS" "Packed @sekiban/as-wasm projector consumer and registry @sekiban/dcb-* 0.2.0 client build/test succeeded."
 exit 0

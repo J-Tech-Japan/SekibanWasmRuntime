@@ -2,7 +2,7 @@
 
 This document records the package boundaries, metadata decisions, and
 compatibility statement for the first publishable versions of the TypeScript
-SDK surface: `@sekiban/dcb-client` 0.1.0 and `@sekiban/as-wasm` 0.1.0. It is the
+SDK surface: `@sekiban/dcb-client` 0.2.0 (published) and `@sekiban/as-wasm` 0.1.0. It is the
 TypeScript counterpart of `rust-crate-preview-readiness.md`.
 
 No npm publish happened in this slice. Publishing is a separate, human-gated
@@ -119,7 +119,7 @@ sqlite.
 
 ## Compatibility Statement
 
-`@sekiban/dcb-client` 0.1.0 and `@sekiban/as-wasm` 0.1.0 are compatible with:
+`@sekiban/dcb-client` 0.2.0 and `@sekiban/as-wasm` 0.1.0 are compatible with:
 
 - **Runtime image** `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3`
   — proven by the extraction smoke above (module load, command commit,
@@ -135,7 +135,7 @@ sqlite.
 
 SWR-G059 added `src/samples/Sekiban.Dcb.WasmRuntime.Npm.TsDecider`, the npm
 counterpart of the crates.io Rust sample (SWR-G056): an external-consumer
-proof that depends on `@sekiban/as-wasm`/`@sekiban/dcb-client` at exact npm `0.1.0`
+proof that depends on `@sekiban/as-wasm` at exact npm `0.1.0` and `@sekiban/dcb-client` at exact npm `0.2.0`
 versions only (`Wasm/package.json`, `Client/package.json`; no `file:`/
 `link:`/relative-path references, guarded by
 `scripts/verify-no-local-sekiban-paths.sh`), with a sample-owned Aspire
@@ -185,7 +185,7 @@ not addressed in this slice (kept out of scope per the SWR-G059 packet).
 override) is still outstanding and tracked here until the `ts-v*` publish
 batch (SWR-G058) completes; re-run the same three commands with
 `SEKIBAN_NPM_MODE=registry` (or omit it, since that is the default) once
-`@sekiban/dcb-client`/`@sekiban/as-wasm` 0.1.0 are live on npm, and update this
+`@sekiban/dcb-client` 0.2.0 and `@sekiban/as-wasm` 0.1.0 are live on npm, and update this
 section with the result.
 
 ## Out of Scope (deferred)

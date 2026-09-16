@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # External-consumer dependency guard for the npm TypeScript sample.
-# Client must pin exact public @sekiban/dcb-* 0.1.0 packages and zod 4.4.3.
+# Client must pin exact public @sekiban/dcb-* 0.2.0 packages and zod 4.4.3.
 # Wasm keeps @sekiban/as-wasm at exact 0.1.0 with no local path deps.
 set -euo pipefail
 
@@ -53,8 +53,8 @@ done
 grep -Eq '"@sekiban/as-wasm"[[:space:]]*:[[:space:]]*"0\.1\.0"' "$SAMPLE_DIR/Wasm/package.json" \
   || { echo "Wasm must depend on @sekiban/as-wasm@0.1.0" >&2; exit 1; }
 for pkg in dcb-core dcb-domain dcb-client; do
-  grep -Eq "\"@sekiban/${pkg}\"[[:space:]]*:[[:space:]]*\"0\\.1\\.0\"" "$SAMPLE_DIR/Client/package.json" \
-    || { echo "Client must depend on @sekiban/${pkg}@0.1.0" >&2; exit 1; }
+  grep -Eq "\"@sekiban/${pkg}\"[[:space:]]*:[[:space:]]*\"0\\.2\\.0\"" "$SAMPLE_DIR/Client/package.json" \
+    || { echo "Client must depend on @sekiban/${pkg}@0.2.0" >&2; exit 1; }
 done
 grep -Eq '"zod"[[:space:]]*:[[:space:]]*"4\.4\.3"' "$SAMPLE_DIR/Client/package.json" \
   || { echo "Client must pin zod@4.4.3" >&2; exit 1; }
