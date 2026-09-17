@@ -104,6 +104,11 @@ jobs:
           TEMPLATE_TEST_ASPIRE_PACKAGE_VERSION: ${{ env.RUNTIME_PACKAGE_VERSION }}
         run: bash scripts/templates/test-sekiban-wasm-decider.sh
 
+      - name: Prepare validation runtime image for generated smokes
+        env:
+          RUNTIME_IMAGE_TAG: ${{ env.RUNTIME_PACKAGE_VERSION }}
+        run: bash scripts/release/prepare-validation-runtime-image.sh
+
       - name: Generated weather runtime smoke
         id: generated-weather-smoke
         shell: bash
