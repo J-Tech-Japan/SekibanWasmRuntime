@@ -35,8 +35,24 @@ PG_CONTAINER_ID=""
 DOCKER_NETWORK=""
 CONTAINER_RESULT="not-run"
 CONTAINER_DETAIL=""
+SERVICE_ID="${SEKIBAN_SERVICE_ID:-swr-g089-npm-extraction-smoke}"
 
 log() { printf '[npm-extraction-smoke] %s\n' "$*"; }
+
+dump_failure_logs() {
+  local reason="$1"
+  log "failure diagnostics: $reason"
+  if [[ -n "$CONTAINER_ID" ]]; then
+    log "--- runtime container logs ($CONTAINER_ID) ---"
+    docker logs "$CONTAINER_ID" 2>&1 || true
+    log "--- end runtime logs ---"
+  fi
+  if [[ -n "$PG_CONTAINER_ID" ]]; then
+    log "--- postgres sidecar logs ($PG_CONTAINER_ID) ---"
+    docker logs "$PG_CONTAINER_ID" 2>&1 | tail -n 50 || true
+    log "--- end postgres logs ---"
+  fi
+}
 
 resolve_runtime_image() {
   if [[ -n "$RUNTIME_IMAGE" && "${BUILD_RUNTIME_IMAGE_FROM_SOURCE:-0}" != "1" && "$FROM_SOURCE" != "1" ]]; then
@@ -77,6 +93,7 @@ write_report() {
     printf '%s\n' "- Detail: $detail"
     printf '%s\n' "- Packages: \`@sekiban/as-wasm@$AS_VERSION\` (packed tarball) + \`@sekiban/dcb-core/domain/client@0.2.0\` (registry)"
     printf '%s\n' "- Runtime image: \`$RUNTIME_IMAGE\`${RUNTIME_IMAGE_DETAIL:+ ($RUNTIME_IMAGE_DETAIL)}"
+    printf '%s\n' "- Service id: \`$SERVICE_ID\`"
     printf '%s\n' "- Container load: $CONTAINER_RESULT${CONTAINER_DETAIL:+ — $CONTAINER_DETAIL}"
     printf '%s\n' "- Commit: \`$(git rev-parse HEAD 2>/dev/null || echo unknown)\`"
   } > "$REPORT"
@@ -184,7 +201,7 @@ run_container_check() {
     return 1
   fi
 
-  log "starting $RUNTIME_IMAGE on port $port"
+  log "starting $RUNTIME_IMAGE on port $port (SEKIBAN_SERVICE_ID=$SERVICE_ID)"
   CONTAINER_ID="$(docker run -d --rm \
     --network "$DOCKER_NETWORK" \
     -p "$port:8080" \
@@ -192,11 +209,13 @@ run_container_check() {
     -v "$config_dir:/app/config:ro" \
     -e SEKIBAN_MANIFEST_PATH=/app/config/sekiban-manifest.json \
     -e WASM_MODULE_PATH=/app/modules/ts-weather.wasm \
+    -e "SEKIBAN_SERVICE_ID=${SERVICE_ID}" \
     -e "ConnectionStrings__SekibanDcb=Host=smoke-postgres;Port=5432;Database=sekiban;Username=postgres;Password=postgres" \
-    "$RUNTIME_IMAGE" 2>/dev/null)"
+    "$RUNTIME_IMAGE")"
   if [[ -z "$CONTAINER_ID" ]]; then
     CONTAINER_RESULT="FAIL"
     CONTAINER_DETAIL="docker run failed (image pull or start error)"
+    dump_failure_logs "docker run returned no container id"
     return 1
   fi
 
@@ -206,6 +225,7 @@ run_container_check() {
     if ! docker ps -q --no-trunc | grep -q "$CONTAINER_ID"; then
       CONTAINER_RESULT="FAIL"
       CONTAINER_DETAIL="container exited before /ready"
+      dump_failure_logs "container exited before /ready"
       return 1
     fi
     code="$(curl -q -s -o /dev/null --max-time 5 -w '%{http_code}' "http://localhost:$port/ready" || true)"
@@ -215,6 +235,7 @@ run_container_check() {
   if [[ "$ready" != "1" ]]; then
     CONTAINER_RESULT="FAIL"
     CONTAINER_DETAIL="/ready did not return 200 within ${READY_TIMEOUT}s"
+    dump_failure_logs "/ready did not return 200 within ${READY_TIMEOUT}s"
     return 1
   fi
   log "/ready OK — wasm loaded by the runtime container ($RUNTIME_IMAGE)"
@@ -224,6 +245,7 @@ run_container_check() {
   if [[ $? -ne 0 ]]; then
     CONTAINER_RESULT="FAIL"
     CONTAINER_DETAIL="registry DCB client failed against the container: ${evidence:0:400}"
+    dump_failure_logs "registry DCB client failed against the container"
     return 1
   fi
   CONTAINER_RESULT="PASS"
