@@ -20,6 +20,13 @@ public static class WasmBinaryFormatDetector
         Encoding.UTF8.GetBytes("get-event-types")
     ];
 
+    /// <summary>
+    /// Tag-aware apply-event exports declare an <c>event-tags</c> parameter in the component WIT.
+    /// Stale three-argument components omit this marker and must not be treated as tag-correct.
+    /// </summary>
+    private static ReadOnlySpan<byte> ApplyEventTagsParameterName =>
+        "event-tags"u8;
+
     public static bool IsCoreModule(ReadOnlySpan<byte> bytes) =>
         bytes.Length >= 8 &&
         bytes[..4].SequenceEqual(WasmMagic) &&
@@ -78,7 +85,21 @@ public static class WasmBinaryFormatDetector
             }
         }
 
-        return true;
+        return HasTagAwareApplyEventExport(bytes);
+    }
+
+    public static bool HasTagAwareApplyEventExport(ReadOnlySpan<byte> bytes) =>
+        bytes.IndexOf(ApplyEventTagsParameterName) >= 0;
+
+    public static bool HasTagAwareApplyEventExportFile(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        {
+            return false;
+        }
+
+        byte[] bytes = File.ReadAllBytes(filePath);
+        return HasTagAwareApplyEventExport(bytes);
     }
 
     public static bool IsCoreModuleFile(string filePath)

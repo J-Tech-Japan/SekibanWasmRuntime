@@ -7,12 +7,15 @@
     "build": "tsc -p tsconfig.json",
     "build:component": "node ../../../build/scripts/build-dcb-ts-component.mjs",
     "verify:component": "node ../../../build/scripts/verify-dcb-ts-component.mjs",
+    "verify:domain-pin": "node ../../../build/scripts/verify-dcb-ts-domain-pin.mjs",
+    "test": "npm run build && node --test src/tag-fidelity.test.mjs",
     "test:component": "npm run build:component && npm run verify:component"
   },
   "dependencies": {
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@sekiban/dcb-domain": "0.2.0",
     "@bytecodealliance/componentize-js": "0.19.3",
     "@bytecodealliance/jco": "1.16.1",
     "esbuild": "0.27.2",

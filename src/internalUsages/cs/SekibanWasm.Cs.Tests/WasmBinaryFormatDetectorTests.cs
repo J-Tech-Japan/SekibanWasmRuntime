@@ -26,7 +26,7 @@ public sealed class WasmBinaryFormatDetectorTests
     public void IsSekibanProjectionComponent_ReturnsTrue_ForCompleteJsonBridgeExportSet()
     {
         const string exportNames =
-            "create-instance apply-event execute-query execute-list-query serialize-state " +
+            "create-instance apply-event event-tags execute-query execute-list-query serialize-state " +
             "restore-state serialize-event deserialize-event get-event-types";
         byte[] bytes =
         [
@@ -35,6 +35,22 @@ public sealed class WasmBinaryFormatDetectorTests
         ];
 
         Assert.True(WasmBinaryFormatDetector.IsSekibanProjectionComponent(bytes));
+    }
+
+    [Fact]
+    public void IsSekibanProjectionComponent_ReturnsFalse_WhenApplyEventExportIsStale()
+    {
+        const string exportNames =
+            "create-instance apply-event execute-query execute-list-query serialize-state " +
+            "restore-state serialize-event deserialize-event get-event-types";
+        byte[] bytes =
+        [
+            0x00, 0x61, 0x73, 0x6d, 0x0d, 0x00, 0x01, 0x00,
+            ..System.Text.Encoding.UTF8.GetBytes(exportNames)
+        ];
+
+        Assert.False(WasmBinaryFormatDetector.IsSekibanProjectionComponent(bytes));
+        Assert.False(WasmBinaryFormatDetector.HasTagAwareApplyEventExport(bytes));
     }
 
     [Fact]

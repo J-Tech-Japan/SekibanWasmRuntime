@@ -33,6 +33,13 @@ public sealed class WasmtimeComponentProjectionInstance :
             throw new InvalidOperationException($"WASM component was not found: {componentPath}");
         }
 
+        if (!WasmBinaryFormatDetector.HasTagAwareApplyEventExportFile(componentPath))
+        {
+            throw new InvalidOperationException(
+                "WASM component implements a stale apply-event export without event-tags. " +
+                "Rebuild the component against the current WIT before calling ApplyEvent.");
+        }
+
         _projectorType = projectorType;
         string? shimPath = WasmtimePreview2ShimResolver.EnsureAvailableFor(GetType().Assembly);
         if (string.IsNullOrWhiteSpace(shimPath))
@@ -62,7 +69,7 @@ public sealed class WasmtimeComponentProjectionInstance :
         lock (_syncRoot)
         {
             ThrowIfDisposed();
-            _ = CallCore("apply-event", _instanceId, eventType, eventPayloadJson);
+            _ = CallCore("apply-event", _instanceId, eventType, eventPayloadJson, tags.ToArray());
         }
     }
 
@@ -73,7 +80,7 @@ public sealed class WasmtimeComponentProjectionInstance :
             ThrowIfDisposed();
             foreach (var ev in events)
             {
-                _ = CallCore("apply-event", _instanceId, ev.EventType, ev.EventPayloadJson);
+                _ = CallCore("apply-event", _instanceId, ev.EventType, ev.EventPayloadJson, ev.Tags.ToArray());
             }
         }
     }
@@ -89,7 +96,8 @@ public sealed class WasmtimeComponentProjectionInstance :
                     "apply-event",
                     _instanceId,
                     ev.EventPayloadName,
-                    Encoding.UTF8.GetString(ev.Payload));
+                    Encoding.UTF8.GetString(ev.Payload),
+                    ev.Tags.ToArray());
             }
         }
     }

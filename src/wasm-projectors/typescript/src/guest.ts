@@ -1,4 +1,5 @@
 import { meetingRoomDomain } from "./domain.js";
+import { tagProbeProjector } from "./tag-probe-fixture.js";
 import type { JsonValue, RuntimeProjectorDefinition } from "@sekiban/dcb-domain";
 
 interface GuestInstance {
@@ -9,10 +10,15 @@ interface GuestInstance {
 const instances = new Map<number, GuestInstance>();
 let nextInstanceId = 1;
 
+const projectorById = new Map<string, RuntimeProjectorDefinition>([
+  ...meetingRoomDomain.projectors.map(
+    (projector) => [projector.id, projector] as const,
+  ),
+  [tagProbeProjector.id, tagProbeProjector],
+]);
+
 function findProjector(projectorName: string): RuntimeProjectorDefinition {
-  const projector = meetingRoomDomain.projectors.find(
-    (candidate) => candidate.id === projectorName,
-  );
+  const projector = projectorById.get(projectorName);
   if (projector === undefined) {
     throw new Error(`Unknown projector: ${projectorName}`);
   }
@@ -45,6 +51,7 @@ export function applyEvent(
   instanceId: number,
   eventType: string,
   payloadJson: string,
+  eventTags: string[],
 ): void {
   const instance = getInstance(instanceId);
   if (!instance.projector.subscribedEventTypes.includes(eventType)) {
@@ -53,7 +60,7 @@ export function applyEvent(
   instance.state = instance.projector.apply(instance.state, {
     eventType,
     payload: JSON.parse(payloadJson) as unknown,
-    eventTags: [],
+    eventTags,
     provenance: "g32",
   });
 }

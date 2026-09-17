@@ -54,6 +54,35 @@ async function packageVersion(packageName) {
   return JSON.parse(await readFile(path, "utf8")).version;
 }
 
+async function assertExactPackagePin() {
+  const expectedPackageVersion = fixture.dcbDomainPackageVersion ?? "0.2.0";
+  const expectedZod = fixture.zod ?? "4.4.3";
+  const installedPackage = JSON.parse(
+    await readFile(join(packageRoot, "node_modules/@sekiban/dcb-domain/package.json"), "utf8"),
+  );
+  const installedZod = JSON.parse(await readFile(join(packageRoot, "node_modules/zod/package.json"), "utf8"));
+  if (installedPackage.version !== expectedPackageVersion) {
+    throw new Error([
+      "Pinned @sekiban/dcb-domain version mismatch.",
+      `expected=${expectedPackageVersion}`,
+      `actual=${installedPackage.version}`,
+      "Run npm ci in src/wasm-projectors/typescript.",
+    ].join("\n"));
+  }
+  if (installedZod.version !== expectedZod) {
+    throw new Error([
+      "Pinned zod version mismatch.",
+      `expected=${expectedZod}`,
+      `actual=${installedZod.version}`,
+      "Run npm ci in src/wasm-projectors/typescript.",
+    ].join("\n"));
+  }
+  return {
+    dcbDomainPackage: `@sekiban/dcb-domain@${expectedPackageVersion}`,
+    zod: expectedZod,
+  };
+}
+
 async function assertToolchain() {
   const packageJson = JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8"));
   const expectedJco = packageJson.devDependencies["@bytecodealliance/jco"];
@@ -114,12 +143,21 @@ async function verifyPinnedUpstream(upstreamRoot) {
 async function publishedPackageProvenance(upstreamRoot, stageRoot) {
   const upstreamPackageRoot = join(upstreamRoot, "packages/dcb-domain");
   const upstreamPackage = JSON.parse(await readFile(join(upstreamPackageRoot, "package.json"), "utf8"));
+  const expectedPackageVersion = fixture.dcbDomainPackageVersion ?? "0.2.0";
+  if (upstreamPackage.version !== expectedPackageVersion) {
+    throw new Error([
+      "Pinned upstream dcb-domain package version mismatch.",
+      `expected=${expectedPackageVersion}`,
+      `actual=${upstreamPackage.version}`,
+      `commit=${fixture.commit}`,
+    ].join("\n"));
+  }
   const configuredRegistry = process.env.G086_DCB_DOMAIN_REGISTRY;
   const registries = configuredRegistry
     ? [configuredRegistry]
     : ["https://registry.npmjs.org", "https://npm.pkg.github.com"];
   const attempts = [];
-  const packageSpec = `${upstreamPackage.name}@${upstreamPackage.version}`;
+  const packageSpec = `@sekiban/dcb-domain@${expectedPackageVersion}`;
 
   for (const registry of registries) {
     const args = ["view", packageSpec, "version", "--registry", registry, "--json"];
@@ -326,21 +364,40 @@ async function linkStagedPackage(stagedPackage) {
   const scopeDirectory = join(packageRoot, "node_modules/@sekiban");
   const linkPath = join(scopeDirectory, "dcb-domain");
   await mkdir(scopeDirectory, { recursive: true });
-  let created = false;
+  const expectedPackageVersion = fixture.dcbDomainPackageVersion ?? "0.2.0";
+  const stagedRealPath = await realpath(stagedPackage);
   try {
     const current = await lstat(linkPath);
-    if (!current.isSymbolicLink() || (await realpath(linkPath)) !== (await realpath(stagedPackage))) {
-      throw new Error(`Refusing to replace existing ${linkPath}; the build requires a staged pinned package.`);
+    if (current.isSymbolicLink()) {
+      const linkedRealPath = await realpath(linkPath);
+      if (linkedRealPath === stagedRealPath) {
+        return { linkPath, created: false };
+      }
+      throw new Error([
+        `Refusing to replace existing symlink ${linkPath}.`,
+        "Remove the symlink manually or rerun npm ci before rebuilding the component.",
+      ].join("\n"));
     }
+
+    const installedPackage = JSON.parse(await readFile(join(linkPath, "package.json"), "utf8"));
+    if (installedPackage.version !== expectedPackageVersion) {
+      throw new Error([
+        `Refusing to replace npm-installed ${linkPath}.`,
+        `expected=@sekiban/dcb-domain@${expectedPackageVersion}`,
+        `actual=@sekiban/dcb-domain@${installedPackage.version}`,
+        "Run npm ci in src/wasm-projectors/typescript.",
+      ].join("\n"));
+    }
+    return { linkPath, created: false, reusedNpmInstall: true };
   } catch (error) {
     if (error?.code !== "ENOENT") throw error;
     await symlink(stagedPackage, linkPath, "dir");
-    created = true;
+    return { linkPath, created: true };
   }
-  return { linkPath, created };
 }
 
 async function main() {
+  const packagePin = await assertExactPackagePin();
   const toolchain = await assertToolchain();
   const stageRoot = await mkdtemp(join(tmpdir(), "swr-g086-build-"));
   const configuredUpstream = process.env.G086_UPSTREAM_ROOT;
@@ -362,6 +419,12 @@ async function main() {
     packageLink = await linkStagedPackage(stagedPackage);
 
     await run(executable("tsc"), ["-p", "tsconfig.json"], packageRoot);
+    const tagFidelity = await run(
+      process.execPath,
+      ["--test", join(packageRoot, "src/tag-fidelity.test.mjs")],
+      packageRoot,
+    );
+    process.stdout.write(tagFidelity.stdout);
     const reference = await run(
       process.execPath,
       [join(repositoryRoot, "build/scripts/record-dcb-ts-reference.mjs")],
@@ -397,6 +460,7 @@ async function main() {
       schemaVersion: 1,
       package: "sekiban-dcb-ts",
       domainPin: { ...fixture, bytes: upstream.bytes, sha256: upstream.sha256, gitBlob: upstream.gitBlob },
+      packagePin,
       packageProvenance: packageResolution.provenance,
       toolchain,
       upstreamBoundary: boundary,
