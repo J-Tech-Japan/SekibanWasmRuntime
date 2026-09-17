@@ -12,7 +12,7 @@ _No unreleased public-preview changes beyond the sections below._
 
 ## 1.0.0-preview.7
 
-- **SWR-G089 / PR #296:** Retire the unpublished `@sekiban/ts` package. TypeScript
+- **SWR-G089 / PR #296:** Retire the unpublished TypeScript host SDK package. TypeScript
   samples, release smoke, generator metadata, and CI now consume the published
   `@sekiban/dcb-core`, `@sekiban/dcb-domain`, and `@sekiban/dcb-client` `0.2.0`
   packages with `createSekibanExecutor` and registry-backed transport tests.

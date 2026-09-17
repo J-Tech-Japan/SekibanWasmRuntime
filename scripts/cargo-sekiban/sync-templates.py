@@ -187,14 +187,7 @@ def storage_relative(relative: Path) -> Path:
     return Path(*parts)
 
 
-def rewrite_registry_guard(destination_root: Path) -> None:
-    path = destination_root / "scripts/verify-no-local-sekiban-paths.sh"
-    text = path.read_text(encoding="utf-8")
-    old = re.compile(
-        r'SAMPLE_DIR="\."\n\nif rg .*?\nfi\n\n(?=# The end-to-end smoke)',
-        flags=re.DOTALL,
-    )
-    new = r'''SAMPLE_DIR="."
+REGISTRY_GUARD_BODY = r'''SAMPLE_DIR="."
 
 scan_manifests() {
   local pattern="$1"
@@ -246,14 +239,49 @@ contains_pattern() {
 }
 
 '''
-    if not old.search(text):
-        raise SyncError(f"registry guard shape changed; cannot rewrite {path}")
-    rewritten = old.sub(lambda _match: new, text, count=1)
-    old_image_check = "if ! rg -q 'ghcr\\.io/j-tech-japan/sekiban-wasm-runtime-host' \"$APPHOST_PROGRAM\"; then"
-    new_image_check = "if ! contains_pattern 'ghcr\\.io/j-tech-japan/sekiban-wasm-runtime-host' \"$APPHOST_PROGRAM\"; then"
-    if old_image_check not in rewritten:
-        raise SyncError(f"registry AppHost image check shape changed; cannot rewrite {path}")
-    write_text(path, rewritten.replace(old_image_check, new_image_check, 1))
+
+
+def rewrite_registry_guard(destination_root: Path) -> None:
+    path = destination_root / "scripts/verify-no-local-sekiban-paths.sh"
+    text = path.read_text(encoding="utf-8")
+    if "scan_manifests()" in text and "contains_pattern()" in text:
+        return
+
+    legacy_rg = re.compile(
+        r'SAMPLE_DIR="\."\n\nif rg .*?\nfi\n\n(?=# The end-to-end smoke)',
+        flags=re.DOTALL,
+    )
+    sample_scan = re.compile(
+        r'SAMPLE_DIR="\."\n\nscan_(?:cargo|manifests)\(\).*?(?=# The end-to-end smoke)',
+        flags=re.DOTALL,
+    )
+    if legacy_rg.search(text):
+        rewritten = legacy_rg.sub(lambda _match: REGISTRY_GUARD_BODY, text, count=1)
+        old_image_check = (
+            "if ! rg -q 'ghcr\\.io/j-tech-japan/sekiban-wasm-runtime-host' \"$APPHOST_PROGRAM\"; then"
+        )
+        new_image_check = (
+            "if ! contains_pattern 'ghcr\\.io/j-tech-japan/sekiban-wasm-runtime-host' \"$APPHOST_PROGRAM\"; then"
+        )
+        if old_image_check not in rewritten:
+            raise SyncError(f"registry AppHost image check shape changed; cannot rewrite {path}")
+        write_text(path, rewritten.replace(old_image_check, new_image_check, 1))
+        return
+
+    if sample_scan.search(text):
+        rewritten = sample_scan.sub(lambda _match: REGISTRY_GUARD_BODY, text, count=1)
+        old_image_check = (
+            "if ! search_quiet 'ghcr\\.io/j-tech-japan/sekiban-wasm-runtime-host' \"$APPHOST_PROGRAM\"; then"
+        )
+        new_image_check = (
+            "if ! contains_pattern 'ghcr\\.io/j-tech-japan/sekiban-wasm-runtime-host' \"$APPHOST_PROGRAM\"; then"
+        )
+        if old_image_check not in rewritten:
+            raise SyncError(f"registry AppHost image check shape changed; cannot rewrite {path}")
+        write_text(path, rewritten.replace(old_image_check, new_image_check, 1))
+        return
+
+    raise SyncError(f"registry guard shape changed; cannot rewrite {path}")
 
 
 def rewrite_dev_workspace(destination_root: Path) -> None:

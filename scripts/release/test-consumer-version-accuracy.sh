@@ -15,10 +15,7 @@ cp docs/public-packages.md "$fixture"
 # removes the hardcoded current-line copy that rotted on every release.
 package_version="$(grep -oE '`[0-9]+\.[0-9]+\.[0-9]+-preview\.[0-9]+`\. <!-- release-lane: current-package-version -->' docs/public-packages.md | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+-preview\.[0-9]+')"
 mutated_version="${package_version%.*}.$(( ${package_version##*.} + 1 ))"
-runtime_image_version="${RUNTIME_IMAGE_VERSION:-}"
-if [[ -z "$runtime_image_version" ]]; then
-  runtime_image_version="$(RUNTIME_IMAGE_TAG=preview scripts/release/resolve-runtime-host-image-version.sh)"
-fi
+runtime_image_version="${RUNTIME_IMAGE_VERSION:-$package_version}"
 
 python3 scripts/release/check-consumer-version-accuracy.py \
   --package-version "$package_version" \

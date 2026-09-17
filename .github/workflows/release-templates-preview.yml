@@ -85,17 +85,13 @@ jobs:
       - name: Template dependency/version drift
         run: bash scripts/templates/test-template-version-drift.sh
 
-      - name: Resolve runtime-host image version from registry
+      - name: Resolve runtime-host image version for consumer docs
         id: runtime-image
-        env:
-          IMAGE_NAME: ghcr.io/j-tech-japan/sekiban-wasm-runtime-host
-          RUNTIME_IMAGE_TAG: preview
         run: |
           set -euo pipefail
-          version="$(scripts/release/resolve-runtime-host-image-version.sh)"
-          echo "RUNTIME_IMAGE_VERSION=${version}" >> "$GITHUB_ENV"
-          echo "version=${version}" >> "$GITHUB_OUTPUT"
-          echo "Registry ${IMAGE_NAME}:${RUNTIME_IMAGE_TAG} advertises runtime version ${version}"
+          echo "RUNTIME_IMAGE_VERSION=${RUNTIME_PACKAGE_VERSION}" >> "$GITHUB_ENV"
+          echo "version=${RUNTIME_PACKAGE_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Consumer docs target runtime image ${RUNTIME_PACKAGE_VERSION}"
 
       - name: Consumer README accuracy (produced Templates nupkg)
         env:
@@ -227,17 +223,13 @@ jobs:
           dotnet pack templates/Sekiban.Dcb.WasmRuntime.Templates/Sekiban.Dcb.WasmRuntime.Templates.csproj \
             -c Release -o artifacts/publish "-p:Version=${TEMPLATE_PACKAGE_VERSION}"
 
-      - name: Resolve runtime-host image version from registry
+      - name: Resolve runtime-host image version for consumer docs
         id: runtime-image
-        env:
-          IMAGE_NAME: ghcr.io/j-tech-japan/sekiban-wasm-runtime-host
-          RUNTIME_IMAGE_TAG: preview
         run: |
           set -euo pipefail
-          version="$(scripts/release/resolve-runtime-host-image-version.sh)"
-          echo "RUNTIME_IMAGE_VERSION=${version}" >> "$GITHUB_ENV"
-          echo "version=${version}" >> "$GITHUB_OUTPUT"
-          echo "Registry ${IMAGE_NAME}:${RUNTIME_IMAGE_TAG} advertises runtime version ${version}"
+          echo "RUNTIME_IMAGE_VERSION=${RUNTIME_PACKAGE_VERSION}" >> "$GITHUB_ENV"
+          echo "version=${RUNTIME_PACKAGE_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Consumer docs target runtime image ${RUNTIME_PACKAGE_VERSION}"
 
       - name: Consumer README accuracy (produced Templates nupkg)
         env:

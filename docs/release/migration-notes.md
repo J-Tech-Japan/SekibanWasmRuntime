@@ -13,20 +13,20 @@ No breaking public contract change beyond the preview.7 entries below.
 
 ## 1.0.0-preview.7
 
-### TypeScript: `@sekiban/ts` retired in favor of public DCB packages
+### TypeScript: retired host SDK in favor of public DCB packages
 
-- Affected packages / paths: `@sekiban/ts` (removed); TypeScript samples and
-  smoke now use `@sekiban/dcb-core`, `@sekiban/dcb-domain`, and
-  `@sekiban/dcb-client` `0.2.0`.
-- Changed public contract: the unpublished `@sekiban/ts` surface is gone; public
-  DCB TypeScript packages own command/read transport and domain typing.
-- Required consumer action: replace `@sekiban/ts` imports with the published
+- Affected packages / paths: the unpublished TypeScript host SDK (removed);
+  TypeScript samples and smoke now use `@sekiban/dcb-core`, `@sekiban/dcb-domain`,
+  and `@sekiban/dcb-client` `0.2.0`.
+- Changed public contract: the unpublished host SDK surface is gone; public DCB
+  TypeScript packages own command/read transport and domain typing.
+- Required consumer action: replace retired host SDK imports with the published
   `@sekiban/dcb-*` `0.2.0` packages and `createSekibanExecutor`. Regenerate or
   hand-migrate executor wiring per the updated npm TS samples and
   `src/wasm-projectors/typescript/README.md`.
 - Compatibility evidence: SWR-G089 / PR #296 registry-backed smoke and
   transport/read-claim tests.
-- Known fallback: none — `@sekiban/ts` was never published to npm.
+- Known fallback: none — the host SDK package was never published to npm.
 
 ### Component guests: `apply-event` WIT carries `event-tags`
 

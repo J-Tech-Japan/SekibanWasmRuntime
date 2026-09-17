@@ -59,23 +59,19 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      - name: Resolve runtime-host image version from registry
-        id: runtime-image
-        env:
-          IMAGE_NAME: ghcr.io/j-tech-japan/sekiban-wasm-runtime-host
-          RUNTIME_IMAGE_TAG: preview
-        run: |
-          set -euo pipefail
-          version="$(scripts/release/resolve-runtime-host-image-version.sh)"
-          echo "RUNTIME_IMAGE_VERSION=${version}" >> "$GITHUB_ENV"
-          echo "version=${version}" >> "$GITHUB_OUTPUT"
-          echo "Registry ${IMAGE_NAME}:${RUNTIME_IMAGE_TAG} advertises runtime version ${version}"
-
       - name: Resolve package version
         run: |
           version="${RAW_PACKAGE_VERSION#v}"
           echo "PACKAGE_VERSION=$version" >> "$GITHUB_ENV"
           echo "Using PACKAGE_VERSION=$version"
+
+      - name: Resolve runtime-host image version for consumer docs
+        id: runtime-image
+        run: |
+          set -euo pipefail
+          echo "RUNTIME_IMAGE_VERSION=${PACKAGE_VERSION}" >> "$GITHUB_ENV"
+          echo "version=${PACKAGE_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Consumer docs target runtime image ${PACKAGE_VERSION}"
 
       - name: Restore
         run: dotnet restore src/SekibanWasmRuntime.ci.slnx
