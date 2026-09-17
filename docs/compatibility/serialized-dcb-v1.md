@@ -334,7 +334,7 @@ evidence exists, route-specific reserved/recommended canonical spellings are:
 | Condition (when exposed) | Reserved/recommended `code` | Reference HTTP status |
 | --- | --- | --- |
 | invalid tag, tag-state ID, query, or candidate relationship | `invalid_command_input` or more specific `FAILURE_KINDS` key when exact | 400 |
-| duplicate consistency tag or unknown consistency tag | `duplicate_consistency` or `invalid_consistency` when exact | 400 |
+| duplicate consistency tag or unknown consistency tag | `duplicate_consistency_entry` or `invalid_consistency` when exact | 400 |
 
 Those reserved rows do not claim the current host emits a `code` for those
 conditions.
