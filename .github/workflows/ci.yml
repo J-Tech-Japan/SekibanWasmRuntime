@@ -78,6 +78,8 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -98,5 +100,13 @@ jobs:
           npm --prefix src/tools/create-sekiban-wasm ci
           npm --prefix src/tools/create-sekiban-wasm test
           bash src/tools/create-sekiban-wasm/scripts/generate-smoke.sh
+      - name: Build runtime host image from exact-head source
+        run: |
+          docker build \
+            -f src/runtime/Sekiban.Dcb.WasmRuntime.Host/Dockerfile \
+            -t "sekiban-wasm-runtime-host:ci-smoke-${GITHUB_SHA}" \
+            .
+          echo "RUNTIME_IMAGE=sekiban-wasm-runtime-host:ci-smoke-${GITHUB_SHA}" >> "$GITHUB_ENV"
+          docker image inspect "sekiban-wasm-runtime-host:ci-smoke-${GITHUB_SHA}" --format 'Runtime image id={{.Id}}' >> "$GITHUB_STEP_SUMMARY"
       - name: Registry-backed extraction/runtime smoke
         run: bash scripts/release/npm-extraction-smoke.sh

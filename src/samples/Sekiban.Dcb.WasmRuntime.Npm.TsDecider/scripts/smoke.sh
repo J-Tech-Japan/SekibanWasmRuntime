@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # End-to-end smoke for the npm TypeScript external-consumer sample against the
-# public GHCR runtime container. SEKIBAN_NPM_MODE (registry|tarball) selects
-# how @sekiban/as-wasm is resolved for Wasm; Client uses published @sekiban/dcb-*.
+# public GHCR runtime container (SAMPLE_RUNTIME_IMAGE_TAG, default 1.0.0-preview.3).
+# CI npm-extraction-smoke builds the runtime from exact-head source instead; set
+# RUNTIME_IMAGE or SAMPLE_RUNTIME_IMAGE_TAG here to pin a published tag manually.
+# SEKIBAN_NPM_MODE (registry|tarball) selects how @sekiban/as-wasm is resolved
+# for Wasm; Client uses published @sekiban/dcb-*.
 # See build-wasm.sh and
 # the README for details. Skips gracefully (exit 0, "Result: SKIP") when
 # Docker, the .NET SDK, npm, or node are unavailable, or when registry mode

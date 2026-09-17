@@ -1,14 +1,28 @@
 #!/usr/bin/env bash
 # Registry-backed npm extraction smoke for @sekiban/as-wasm and published DCB clients.
+# By default the runtime container is built from this checkout's Dockerfile so CI
+# exercises exact-head host code. Set RUNTIME_IMAGE explicitly (e.g. to a published
+# GHCR tag) for operator/manual runs against a prebuilt image; use --from-source or
+# BUILD_RUNTIME_IMAGE_FROM_SOURCE=1 to force a local rebuild even when RUNTIME_IMAGE
+# is preset.
 set -uo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
 ROOT="$(pwd)"
 
+FROM_SOURCE=0
+for arg in "$@"; do
+  case "$arg" in
+    --from-source) FROM_SOURCE=1 ;;
+  esac
+done
+
 SMOKE_ROOT="${NPM_EXTRACTION_SMOKE_DIR:-$ROOT/artifacts/npm-extraction-smoke}"
 REPORT_DIR="${RELEASE_REPORT_DIR:-$ROOT/artifacts/release}"
 REPORT="$REPORT_DIR/npm-extraction-smoke.md"
-RUNTIME_IMAGE="ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:${SAMPLE_RUNTIME_IMAGE_TAG:-1.0.0-preview.3}"
+RUNTIME_IMAGE="${RUNTIME_IMAGE:-}"
+RUNTIME_IMAGE_DETAIL=""
+LOCAL_SMOKE_TAG="${LOCAL_RUNTIME_IMAGE_TAG:-sekiban-wasm-runtime-host:local-smoke}"
 READY_TIMEOUT="${NPM_EXTRACTION_SMOKE_TIMEOUT:-180}"
 SAMPLE_ROOT="$ROOT/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Ts"
 
@@ -24,6 +38,36 @@ CONTAINER_DETAIL=""
 
 log() { printf '[npm-extraction-smoke] %s\n' "$*"; }
 
+resolve_runtime_image() {
+  if [[ -n "$RUNTIME_IMAGE" && "${BUILD_RUNTIME_IMAGE_FROM_SOURCE:-0}" != "1" && "$FROM_SOURCE" != "1" ]]; then
+    RUNTIME_IMAGE_DETAIL="prebuilt ($RUNTIME_IMAGE)"
+    log "using prebuilt runtime image: $RUNTIME_IMAGE"
+    return 0
+  fi
+
+  command -v docker >/dev/null 2>&1 || fail "docker required to build runtime image from source"
+  docker info >/dev/null 2>&1 || fail "docker daemon required to build runtime image from source"
+
+  local image_tag="${RUNTIME_IMAGE:-$LOCAL_SMOKE_TAG}"
+  log "building runtime host image from exact-head source → $image_tag"
+  docker build \
+    -f src/runtime/Sekiban.Dcb.WasmRuntime.Host/Dockerfile \
+    -t "$image_tag" \
+    "$ROOT" || fail "docker build of runtime host from source failed"
+  RUNTIME_IMAGE="$image_tag"
+  local image_id digest
+  image_id="$(docker image inspect "$RUNTIME_IMAGE" --format '{{.Id}}' 2>/dev/null || true)"
+  digest="$(docker image inspect "$RUNTIME_IMAGE" --format '{{index .RepoDigests 0}}' 2>/dev/null || true)"
+  if [[ -n "$digest" && "$digest" != "<no value>" ]]; then
+    RUNTIME_IMAGE_DETAIL="local-build ($RUNTIME_IMAGE, digest=$digest)"
+  elif [[ -n "$image_id" ]]; then
+    RUNTIME_IMAGE_DETAIL="local-build ($RUNTIME_IMAGE, id=${image_id#sha256:})"
+  else
+    RUNTIME_IMAGE_DETAIL="local-build ($RUNTIME_IMAGE)"
+  fi
+  log "built runtime image: $RUNTIME_IMAGE_DETAIL"
+}
+
 write_report() {
   local result="$1" detail="$2"
   mkdir -p "$REPORT_DIR"
@@ -32,7 +76,7 @@ write_report() {
     printf '%s\n' "- Result: **$result**"
     printf '%s\n' "- Detail: $detail"
     printf '%s\n' "- Packages: \`@sekiban/as-wasm@$AS_VERSION\` (packed tarball) + \`@sekiban/dcb-core/domain/client@0.2.0\` (registry)"
-    printf '%s\n' "- Runtime image: \`$RUNTIME_IMAGE\`"
+    printf '%s\n' "- Runtime image: \`$RUNTIME_IMAGE\`${RUNTIME_IMAGE_DETAIL:+ ($RUNTIME_IMAGE_DETAIL)}"
     printf '%s\n' "- Container load: $CONTAINER_RESULT${CONTAINER_DETAIL:+ — $CONTAINER_DETAIL}"
     printf '%s\n' "- Commit: \`$(git rev-parse HEAD 2>/dev/null || echo unknown)\`"
   } > "$REPORT"
@@ -50,6 +94,8 @@ fail() { log "FAIL: $*"; write_report "FAIL" "$*"; exit 1; }
 
 command -v npm >/dev/null 2>&1 || fail "npm not found"
 command -v node >/dev/null 2>&1 || fail "node not found"
+
+resolve_runtime_image
 
 AS_VERSION="$(node -p "require('$AS_PKG_DIR/package.json').version")"
 rm -rf "$SMOKE_ROOT"
@@ -171,7 +217,7 @@ run_container_check() {
     CONTAINER_DETAIL="/ready did not return 200 within ${READY_TIMEOUT}s"
     return 1
   fi
-  log "/ready OK — wasm loaded by the public runtime container"
+  log "/ready OK — wasm loaded by the runtime container ($RUNTIME_IMAGE)"
 
   local evidence
   evidence="$(cd "$CLIENT_SMOKE_DIR" && RUNTIME_URL="http://localhost:$port" node dist/main.js 2>&1)"
