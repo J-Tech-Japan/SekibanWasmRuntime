@@ -130,7 +130,7 @@ var tsClientApiDir = Path.GetFullPath(Path.Combine(
     "..",
     "ts-clientapi"));
 
-// The TS ClientApi pulls in pg, @sekiban/ts etc. via npm. Install them before the
+// The TS ClientApi pulls in pg, @sekiban/dcb-client etc. via npm. Install them before the
 // server starts so a fresh checkout / CI run doesn't fail with ERR_MODULE_NOT_FOUND.
 var clientApiInstaller = builder
     .AddExecutable(

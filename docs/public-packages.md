@@ -123,7 +123,7 @@ can provision.
 
 | Artifact | Registry | Blocked on |
 | --- | --- | --- |
-| `@sekiban/ts`, `@sekiban/as-wasm`, `@sekiban/aspire` | npm | `@sekiban` scope auth + `npm-release` environment approval |
+| `@sekiban/dcb-client`, `@sekiban/as-wasm`, `@sekiban/aspire` | npm | `@sekiban` scope auth + `npm-release` environment approval |
 | `sekiban/sekiban-wasm-runtime`, `sekiban/sekiban-client` | mooncakes.io | account + `sekiban` scope + `moon publish` auth |
 | `Sekiban.Dcb.WasmRuntime.Templates` (`dotnet new sekiban-wasm-decider`) | NuGet | Trusted Publishing policy for the new package id |
 

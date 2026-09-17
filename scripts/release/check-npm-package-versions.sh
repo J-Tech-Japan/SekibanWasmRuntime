@@ -19,7 +19,6 @@ if [[ ! "$EXPECTED" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
 fi
 
 PACKAGES=(
-  "src/lib/sekiban-ts"
   "src/lib/sekiban-as-wasm"
   "src/lib/sekiban-aspire-ts"
 )

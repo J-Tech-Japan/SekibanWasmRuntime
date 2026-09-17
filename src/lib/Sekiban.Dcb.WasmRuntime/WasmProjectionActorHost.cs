@@ -1270,7 +1270,14 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
         using var document = JsonDocument.Parse(json);
         if (document.RootElement.ValueKind == JsonValueKind.Array)
         {
-            return new WasmListQueryResult(document.RootElement.GetRawText(), null, null, null, null);
+            return CoerceListQueryPagination(
+                document.RootElement.GetRawText(),
+                document.RootElement,
+                totalCount: null,
+                totalPages: null,
+                currentPage: null,
+                pageSize: null,
+                implicitSinglePage: true);
         }
 
         if (document.RootElement.ValueKind != JsonValueKind.Object)
@@ -1289,12 +1296,69 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
             throw new InvalidOperationException("List query result object must contain an items property.");
         }
 
+        return CoerceListQueryPagination(
+            itemsElement.GetRawText(),
+            itemsElement,
+            TryReadInt(document.RootElement, "totalCount", "TotalCount"),
+            TryReadInt(document.RootElement, "totalPages", "TotalPages"),
+            TryReadInt(document.RootElement, "currentPage", "CurrentPage"),
+            TryReadInt(document.RootElement, "pageSize", "PageSize"),
+            implicitSinglePage: false);
+    }
+
+    internal static WasmListQueryResult CoerceListQueryPagination(
+        string itemsJson,
+        JsonElement itemsElement,
+        int? totalCount,
+        int? totalPages,
+        int? currentPage,
+        int? pageSize,
+        bool implicitSinglePage)
+    {
+        var itemCount = itemsElement.ValueKind == JsonValueKind.Array
+            ? itemsElement.GetArrayLength()
+            : 0;
+        var resolvedTotalCount = totalCount ?? itemCount;
+        var resolvedPageSize = pageSize ?? Math.Max(resolvedTotalCount, 1);
+        var resolvedCurrentPage = currentPage ?? 1;
+        var resolvedTotalPages = totalPages ?? (
+            resolvedTotalCount == 0
+                ? 0
+                : implicitSinglePage
+                    ? 1
+                    : (int)Math.Ceiling(resolvedTotalCount / (double)resolvedPageSize));
+
         return new WasmListQueryResult(
-            ItemsJson: itemsElement.GetRawText(),
-            TotalCount: TryReadInt(document.RootElement, "totalCount", "TotalCount"),
-            TotalPages: TryReadInt(document.RootElement, "totalPages", "TotalPages"),
-            CurrentPage: TryReadInt(document.RootElement, "currentPage", "CurrentPage"),
-            PageSize: TryReadInt(document.RootElement, "pageSize", "PageSize"));
+            itemsJson,
+            resolvedTotalCount,
+            resolvedTotalPages,
+            resolvedCurrentPage,
+            resolvedPageSize);
+    }
+
+    public static SerializedListQueryResponse CoerceSerializedListQueryResponse(
+        string itemsJson,
+        int? totalCount,
+        int? totalPages,
+        int? currentPage,
+        int? pageSize)
+    {
+        using var document = JsonDocument.Parse(itemsJson);
+        var coerced = CoerceListQueryPagination(
+            itemsJson,
+            document.RootElement,
+            totalCount,
+            totalPages,
+            currentPage,
+            pageSize,
+            implicitSinglePage: totalCount is null && totalPages is null && currentPage is null && pageSize is null);
+
+        return new SerializedListQueryResponse(
+            coerced.ItemsJson,
+            coerced.TotalCount,
+            coerced.TotalPages,
+            coerced.CurrentPage,
+            coerced.PageSize);
     }
 
     private static int? TryReadInt(JsonElement element, string camelName, string pascalName)
@@ -1396,8 +1460,8 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
 
     internal sealed record WasmListQueryResult(
         string ItemsJson,
-        int? TotalCount,
-        int? TotalPages,
-        int? CurrentPage,
-        int? PageSize);
+        int TotalCount,
+        int TotalPages,
+        int CurrentPage,
+        int PageSize);
 }

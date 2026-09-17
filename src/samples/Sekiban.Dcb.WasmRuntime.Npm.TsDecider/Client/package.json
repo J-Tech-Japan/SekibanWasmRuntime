@@ -5,13 +5,17 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
+    "test": "npm run build && node --test dist/**/*.test.js",
     "start": "node dist/main.js"
   },
   "dependencies": {
-    "@sekiban/ts": "0.1.0"
+    "@sekiban/dcb-client": "0.2.0",
+    "@sekiban/dcb-core": "0.2.0",
+    "@sekiban/dcb-domain": "0.2.0",
+    "zod": "4.4.3"
   },
   "devDependencies": {
-    "typescript": "^5.7.3",
-    "@types/node": "^22.10.5"
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.3"
   }
 }

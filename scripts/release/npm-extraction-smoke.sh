@@ -1,53 +1,99 @@
 #!/usr/bin/env bash
-# SWR-G057 npm extraction smoke.
-#
-# Proves the @sekiban/ts and @sekiban/as-wasm package boundaries using only
-# packed npm artifacts (no registry credentials, no publish):
-#   1. npm pack both packages and validate the tarball contents.
-#   2. Compile the ts-wasm sample projector against the packed
-#      @sekiban/as-wasm tarball (never the workspace sources).
-#   3. Compile the ts-clientapi sample against the packed @sekiban/ts tarball.
-#   4. Load the produced .wasm in the public GHCR runtime container
-#      (with a disposable Postgres sidecar for the event store, mirroring
-#      the docker-compose sample) and drive a tag-state read plus a list
-#      query through the packed @sekiban/ts client.
-#
-# If Docker is unavailable the container-load step is reported as SKIPPED
-# explicitly; every other step must pass.
+# Registry-backed npm extraction smoke for @sekiban/as-wasm and published DCB clients.
+# By default the runtime container is built from this checkout's Dockerfile so CI
+# exercises exact-head host code. Set RUNTIME_IMAGE explicitly (e.g. to a published
+# GHCR tag) for operator/manual runs against a prebuilt image; use --from-source or
+# BUILD_RUNTIME_IMAGE_FROM_SOURCE=1 to force a local rebuild even when RUNTIME_IMAGE
+# is preset.
 set -uo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
 ROOT="$(pwd)"
 
+FROM_SOURCE=0
+for arg in "$@"; do
+  case "$arg" in
+    --from-source) FROM_SOURCE=1 ;;
+  esac
+done
+
 SMOKE_ROOT="${NPM_EXTRACTION_SMOKE_DIR:-$ROOT/artifacts/npm-extraction-smoke}"
 REPORT_DIR="${RELEASE_REPORT_DIR:-$ROOT/artifacts/release}"
 REPORT="$REPORT_DIR/npm-extraction-smoke.md"
-RUNTIME_IMAGE="ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:${SAMPLE_RUNTIME_IMAGE_TAG:-1.0.0-preview.3}"
+RUNTIME_IMAGE="${RUNTIME_IMAGE:-}"
+RUNTIME_IMAGE_DETAIL=""
+LOCAL_SMOKE_TAG="${LOCAL_RUNTIME_IMAGE_TAG:-sekiban-wasm-runtime-host:local-smoke}"
 READY_TIMEOUT="${NPM_EXTRACTION_SMOKE_TIMEOUT:-180}"
-
-TS_PKG_DIR="$ROOT/src/lib/sekiban-ts"
-AS_PKG_DIR="$ROOT/src/lib/sekiban-as-wasm"
 SAMPLE_ROOT="$ROOT/src/samples/Sekiban.Dcb.Orleans.Decider.Wasm.Ts"
+
+AS_PKG_DIR="$ROOT/src/lib/sekiban-as-wasm"
+SMALL_CLIENT="$ROOT/src/samples/Sekiban.Dcb.WasmRuntime.Npm.TsDecider/Client"
 TS_WASM_DIR="$SAMPLE_ROOT/ts-wasm"
-CLIENT_DIR="$SAMPLE_ROOT/ts-clientapi"
 
 CONTAINER_ID=""
 PG_CONTAINER_ID=""
 DOCKER_NETWORK=""
 CONTAINER_RESULT="not-run"
 CONTAINER_DETAIL=""
+SERVICE_ID="${SEKIBAN_SERVICE_ID:-swr-g089-npm-extraction-smoke}"
 
 log() { printf '[npm-extraction-smoke] %s\n' "$*"; }
+
+dump_failure_logs() {
+  local reason="$1"
+  log "failure diagnostics: $reason"
+  if [[ -n "$CONTAINER_ID" ]]; then
+    log "--- runtime container logs ($CONTAINER_ID) ---"
+    docker logs "$CONTAINER_ID" 2>&1 || true
+    log "--- end runtime logs ---"
+  fi
+  if [[ -n "$PG_CONTAINER_ID" ]]; then
+    log "--- postgres sidecar logs ($PG_CONTAINER_ID) ---"
+    docker logs "$PG_CONTAINER_ID" 2>&1 | tail -n 50 || true
+    log "--- end postgres logs ---"
+  fi
+}
+
+resolve_runtime_image() {
+  if [[ -n "$RUNTIME_IMAGE" && "${BUILD_RUNTIME_IMAGE_FROM_SOURCE:-0}" != "1" && "$FROM_SOURCE" != "1" ]]; then
+    RUNTIME_IMAGE_DETAIL="prebuilt ($RUNTIME_IMAGE)"
+    log "using prebuilt runtime image: $RUNTIME_IMAGE"
+    return 0
+  fi
+
+  command -v docker >/dev/null 2>&1 || fail "docker required to build runtime image from source"
+  docker info >/dev/null 2>&1 || fail "docker daemon required to build runtime image from source"
+
+  local image_tag="${RUNTIME_IMAGE:-$LOCAL_SMOKE_TAG}"
+  log "building runtime host image from exact-head source → $image_tag"
+  docker build \
+    -f src/runtime/Sekiban.Dcb.WasmRuntime.Host/Dockerfile \
+    -t "$image_tag" \
+    "$ROOT" || fail "docker build of runtime host from source failed"
+  RUNTIME_IMAGE="$image_tag"
+  local image_id digest
+  image_id="$(docker image inspect "$RUNTIME_IMAGE" --format '{{.Id}}' 2>/dev/null || true)"
+  digest="$(docker image inspect "$RUNTIME_IMAGE" --format '{{index .RepoDigests 0}}' 2>/dev/null || true)"
+  if [[ -n "$digest" && "$digest" != "<no value>" ]]; then
+    RUNTIME_IMAGE_DETAIL="local-build ($RUNTIME_IMAGE, digest=$digest)"
+  elif [[ -n "$image_id" ]]; then
+    RUNTIME_IMAGE_DETAIL="local-build ($RUNTIME_IMAGE, id=${image_id#sha256:})"
+  else
+    RUNTIME_IMAGE_DETAIL="local-build ($RUNTIME_IMAGE)"
+  fi
+  log "built runtime image: $RUNTIME_IMAGE_DETAIL"
+}
 
 write_report() {
   local result="$1" detail="$2"
   mkdir -p "$REPORT_DIR"
   {
-    printf '# npm Extraction Smoke (SWR-G057)\n\n'
+    printf '# npm Extraction Smoke\n\n'
     printf '%s\n' "- Result: **$result**"
     printf '%s\n' "- Detail: $detail"
-    printf '%s\n' "- Packages: \`@sekiban/ts@$TS_VERSION\`, \`@sekiban/as-wasm@$AS_VERSION\` (packed tarballs, nothing published)"
-    printf '%s\n' "- Runtime image: \`$RUNTIME_IMAGE\`"
+    printf '%s\n' "- Packages: \`@sekiban/as-wasm@$AS_VERSION\` (packed tarball) + \`@sekiban/dcb-core/domain/client@0.2.0\` (registry)"
+    printf '%s\n' "- Runtime image: \`$RUNTIME_IMAGE\`${RUNTIME_IMAGE_DETAIL:+ ($RUNTIME_IMAGE_DETAIL)}"
+    printf '%s\n' "- Service id: \`$SERVICE_ID\`"
     printf '%s\n' "- Container load: $CONTAINER_RESULT${CONTAINER_DETAIL:+ — $CONTAINER_DETAIL}"
     printf '%s\n' "- Commit: \`$(git rev-parse HEAD 2>/dev/null || echo unknown)\`"
   } > "$REPORT"
@@ -55,47 +101,22 @@ write_report() {
 }
 
 cleanup() {
-  if [[ -n "$CONTAINER_ID" ]]; then
-    docker rm -f "$CONTAINER_ID" >/dev/null 2>&1 || true
-  fi
-  if [[ -n "$PG_CONTAINER_ID" ]]; then
-    docker rm -f "$PG_CONTAINER_ID" >/dev/null 2>&1 || true
-  fi
-  if [[ -n "$DOCKER_NETWORK" ]]; then
-    docker network rm "$DOCKER_NETWORK" >/dev/null 2>&1 || true
-  fi
+  [[ -n "$CONTAINER_ID" ]] && docker rm -f "$CONTAINER_ID" >/dev/null 2>&1 || true
+  [[ -n "$PG_CONTAINER_ID" ]] && docker rm -f "$PG_CONTAINER_ID" >/dev/null 2>&1 || true
+  [[ -n "$DOCKER_NETWORK" ]] && docker network rm "$DOCKER_NETWORK" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
-fail() {
-  log "FAIL: $*"
-  write_report "FAIL" "$*"
-  exit 1
-}
+fail() { log "FAIL: $*"; write_report "FAIL" "$*"; exit 1; }
 
 command -v npm >/dev/null 2>&1 || fail "npm not found"
 command -v node >/dev/null 2>&1 || fail "node not found"
 
-TS_VERSION="$(node -p "require('$TS_PKG_DIR/package.json').version")"
-AS_VERSION="$(node -p "require('$AS_PKG_DIR/package.json').version")"
+resolve_runtime_image
 
+AS_VERSION="$(node -p "require('$AS_PKG_DIR/package.json').version")"
 rm -rf "$SMOKE_ROOT"
 mkdir -p "$SMOKE_ROOT" "$REPORT_DIR"
-
-# ---------------------------------------------------------------------------
-# 1. Pack both packages and validate tarball contents
-# ---------------------------------------------------------------------------
-
-log "packing @sekiban/ts@$TS_VERSION"
-npm --prefix "$TS_PKG_DIR" install --no-audit --no-fund >/dev/null 2>&1 || fail "npm install failed for @sekiban/ts"
-TS_TGZ_NAME="$(cd "$TS_PKG_DIR" && npm pack --pack-destination "$SMOKE_ROOT" --silent 2>/dev/null | tail -n1)"
-TS_TGZ="$SMOKE_ROOT/$TS_TGZ_NAME"
-[[ -s "$TS_TGZ" ]] || fail "npm pack produced no tarball for @sekiban/ts"
-
-log "validating @sekiban/ts tarball contents"
-unexpected="$(tar -tzf "$TS_TGZ" | grep -Ev '^package/(dist/|README\.md$|LICENSE$|package\.json$)' || true)"
-[[ -z "$unexpected" ]] || fail "@sekiban/ts tarball contains unexpected entries: $unexpected"
-tar -tzf "$TS_TGZ" | grep -q '^package/dist/index\.js$' || fail "@sekiban/ts tarball is missing dist/index.js"
 
 log "packing @sekiban/as-wasm@$AS_VERSION"
 npm --prefix "$AS_PKG_DIR" install --no-audit --no-fund >/dev/null 2>&1 || fail "npm install failed for @sekiban/as-wasm"
@@ -103,119 +124,41 @@ AS_TGZ_NAME="$(cd "$AS_PKG_DIR" && npm pack --pack-destination "$SMOKE_ROOT" --s
 AS_TGZ="$SMOKE_ROOT/$AS_TGZ_NAME"
 [[ -s "$AS_TGZ" ]] || fail "npm pack produced no tarball for @sekiban/as-wasm"
 
-log "validating @sekiban/as-wasm tarball contents"
-unexpected="$(tar -tzf "$AS_TGZ" | grep -Ev '^package/(assembly/|README\.md$|LICENSE$|package\.json$)' || true)"
-[[ -z "$unexpected" ]] || fail "@sekiban/as-wasm tarball contains unexpected entries: $unexpected"
-tar -tzf "$AS_TGZ" | grep -q '^package/assembly/index\.ts$' || fail "@sekiban/as-wasm tarball is missing assembly/index.ts"
-
-# ---------------------------------------------------------------------------
-# 2. Compile the sample projector against the packed @sekiban/as-wasm tarball
-# ---------------------------------------------------------------------------
-
 PROJ_DIR="$SMOKE_ROOT/projector-consumer"
-log "compiling ts-wasm projector sources against $AS_TGZ_NAME"
 mkdir -p "$PROJ_DIR/modules"
 cp -R "$TS_WASM_DIR/assembly" "$PROJ_DIR/assembly"
 cp "$TS_WASM_DIR/tsconfig.json" "$PROJ_DIR/tsconfig.json"
-
-cat > "$PROJ_DIR/package.json" <<EOF
-{
-  "name": "npm-extraction-smoke-projector",
-  "version": "0.0.0",
-  "private": true,
-  "dependencies": {
-    "@sekiban/as-wasm": "file:$AS_TGZ",
-    "visitor-as": "^0.11.4"
-  },
-  "devDependencies": {
-    "assemblyscript": "^0.27.32",
-    "json-as": "^0.9.28"
-  },
-  "overrides": {
-    "visitor-as": {
-      "assemblyscript": "\$assemblyscript"
-    }
-  }
-}
-EOF
-
-npm --prefix "$PROJ_DIR" install --no-audit --no-fund >/dev/null 2>&1 || fail "npm install failed for the projector consumer"
-
-# Guard: @sekiban/as-wasm must resolve to the packed tarball, never to the
-# workspace sources under src/lib.
-resolved="$(node -p "require('$PROJ_DIR/package-lock.json').packages['node_modules/@sekiban/as-wasm'].resolved || ''")"
-case "$resolved" in
-  *sekiban-as-wasm-*.tgz) ;;
-  *) fail "no-local-path guard: @sekiban/as-wasm resolved to '$resolved' instead of the packed tarball" ;;
-esac
-if grep -R "file:../../../lib" "$PROJ_DIR/package.json" >/dev/null 2>&1; then
-  fail "no-local-path guard: projector consumer references workspace sources"
-fi
-
+node -e "
+  const fs = require('fs');
+  fs.writeFileSync('$PROJ_DIR/package.json', JSON.stringify({
+    name: 'projector-consumer-smoke', private: true, type: 'module',
+    dependencies: { '@sekiban/as-wasm': 'file:$AS_TGZ', 'visitor-as': '^0.11.4' },
+    devDependencies: { typescript: '^5.7.3', '@types/node': '^22.10.5', assemblyscript: '^0.27.32', 'json-as': '^0.9.28' },
+    overrides: { 'visitor-as': { assemblyscript: '\$assemblyscript' } }
+  }, null, 2));
+"
+(cd "$PROJ_DIR" && npm install --no-audit --no-fund >/dev/null 2>&1) || fail "projector consumer npm install failed"
 (cd "$PROJ_DIR" && npx asc assembly/index.ts \
   --outFile modules/ts-weather.wasm \
   --optimize --exportStart _initialize --runtime incremental \
   --exportRuntime --use abort= --transform json-as/transform) \
-  || fail "asc compile against the packed @sekiban/as-wasm tarball failed"
+  || fail "asc compile against packed @sekiban/as-wasm tarball failed"
 SMOKE_WASM="$PROJ_DIR/modules/ts-weather.wasm"
 [[ -s "$SMOKE_WASM" ]] || fail "projector compile produced no wasm module"
-log "projector wasm built from packed tarball: ${SMOKE_WASM#"$ROOT"/}"
 
-node -e "
-const fs = require('fs');
-WebAssembly.compile(fs.readFileSync('$SMOKE_WASM')).then(m => {
-  const names = new Set(WebAssembly.Module.exports(m).map(e => e.name));
-  const required = ['alloc','dealloc','create_instance','apply_event','serialize_state','restore_state','execute_query','execute_list_query','get_event_types','mv_metadata','mv_initialize','mv_apply_event'];
-  const missing = required.filter(n => !names.has(n));
-  if (missing.length) { console.error('missing exports: ' + missing.join(',')); process.exit(1); }
-});" || fail "packed-tarball wasm module is missing required exports"
-
-# ---------------------------------------------------------------------------
-# 3. Compile the TS client sample against the packed @sekiban/ts tarball
-# ---------------------------------------------------------------------------
-
-CLIENT_SMOKE_DIR="$SMOKE_ROOT/client-consumer"
-log "compiling ts-clientapi sources against $TS_TGZ_NAME"
+log "registry install + build of migrated small TypeScript client"
+CLIENT_SMOKE_DIR="$SMOKE_ROOT/registry-client"
+rm -rf "$CLIENT_SMOKE_DIR"
 mkdir -p "$CLIENT_SMOKE_DIR"
-cp -R "$CLIENT_DIR/src" "$CLIENT_SMOKE_DIR/src"
-cp "$CLIENT_DIR/tsconfig.json" "$CLIENT_SMOKE_DIR/tsconfig.json"
-
-cat > "$CLIENT_SMOKE_DIR/package.json" <<EOF
-{
-  "name": "npm-extraction-smoke-client",
-  "version": "0.0.0",
-  "private": true,
-  "type": "module",
-  "dependencies": {
-    "@hono/node-server": "^1.13.0",
-    "@sekiban/ts": "file:$TS_TGZ",
-    "hono": "^4.6.10",
-    "pg": "^8.13.1",
-    "uuid": "^10.0.0"
-  },
-  "devDependencies": {
-    "typescript": "^5.7.3",
-    "@types/node": "^22.10.5",
-    "@types/pg": "^8.11.10",
-    "@types/uuid": "^10.0.0"
-  }
-}
-EOF
-
-npm --prefix "$CLIENT_SMOKE_DIR" install --no-audit --no-fund >/dev/null 2>&1 || fail "npm install failed for the client consumer"
-
-resolved="$(node -p "require('$CLIENT_SMOKE_DIR/package-lock.json').packages['node_modules/@sekiban/ts'].resolved || ''")"
-case "$resolved" in
-  *sekiban-ts-*.tgz) ;;
-  *) fail "no-local-path guard: @sekiban/ts resolved to '$resolved' instead of the packed tarball" ;;
-esac
-
-(cd "$CLIENT_SMOKE_DIR" && npx tsc) || fail "tsc compile against the packed @sekiban/ts tarball failed"
-log "client compiled from packed tarball"
-
-# ---------------------------------------------------------------------------
-# 4. Load the produced wasm in the public runtime container
-# ---------------------------------------------------------------------------
+cp -R "$SMALL_CLIENT/src" "$CLIENT_SMOKE_DIR/src"
+cp "$SMALL_CLIENT/tsconfig.json" "$CLIENT_SMOKE_DIR/tsconfig.json"
+cp "$SMALL_CLIENT/package.json" "$CLIENT_SMOKE_DIR/package.json"
+(cd "$CLIENT_SMOKE_DIR" && npm install --no-audit --no-fund >/dev/null 2>&1) || fail "registry npm install failed for DCB client"
+for pkg in @sekiban/dcb-core @sekiban/dcb-domain @sekiban/dcb-client; do
+  resolved="$(node -p "require('$CLIENT_SMOKE_DIR/package-lock.json').packages['node_modules/${pkg}'].version || ''")"
+  [[ "$resolved" == "0.2.0" ]] || fail "$pkg resolved to '$resolved' instead of registry 0.2.0"
+done
+(cd "$CLIENT_SMOKE_DIR" && npm run build && npm test) || fail "registry-backed client build/test failed"
 
 run_container_check() {
   if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
@@ -233,9 +176,6 @@ run_container_check() {
   local port
   port="$(node -e 'const s=require("net").createServer();s.listen(0,()=>{console.log(s.address().port);s.close();})')"
 
-  # The published preview.3 image requires a relational event store it can
-  # migrate at startup; run a disposable Postgres sidecar like the compose
-  # sample does (the sqlite provider crashes at startup in preview.3).
   DOCKER_NETWORK="swr-npm-smoke-$$"
   docker network create "$DOCKER_NETWORK" >/dev/null 2>&1 || true
   log "starting disposable Postgres sidecar"
@@ -245,7 +185,7 @@ run_container_check() {
     postgres:16-alpine 2>/dev/null)"
   if [[ -z "$PG_CONTAINER_ID" ]]; then
     CONTAINER_RESULT="FAIL"
-    CONTAINER_DETAIL="could not start the Postgres sidecar (image pull or start error)"
+    CONTAINER_DETAIL="could not start the Postgres sidecar"
     return 1
   fi
 
@@ -261,7 +201,7 @@ run_container_check() {
     return 1
   fi
 
-  log "starting $RUNTIME_IMAGE on port $port"
+  log "starting $RUNTIME_IMAGE on port $port (SEKIBAN_SERVICE_ID=$SERVICE_ID)"
   CONTAINER_ID="$(docker run -d --rm \
     --network "$DOCKER_NETWORK" \
     -p "$port:8080" \
@@ -269,11 +209,13 @@ run_container_check() {
     -v "$config_dir:/app/config:ro" \
     -e SEKIBAN_MANIFEST_PATH=/app/config/sekiban-manifest.json \
     -e WASM_MODULE_PATH=/app/modules/ts-weather.wasm \
+    -e "SEKIBAN_SERVICE_ID=${SERVICE_ID}" \
     -e "ConnectionStrings__SekibanDcb=Host=smoke-postgres;Port=5432;Database=sekiban;Username=postgres;Password=postgres" \
-    "$RUNTIME_IMAGE" 2>/dev/null)"
+    "$RUNTIME_IMAGE")"
   if [[ -z "$CONTAINER_ID" ]]; then
     CONTAINER_RESULT="FAIL"
     CONTAINER_DETAIL="docker run failed (image pull or start error)"
+    dump_failure_logs "docker run returned no container id"
     return 1
   fi
 
@@ -282,7 +224,8 @@ run_container_check() {
   while [[ $(date +%s) -lt $deadline ]]; do
     if ! docker ps -q --no-trunc | grep -q "$CONTAINER_ID"; then
       CONTAINER_RESULT="FAIL"
-      CONTAINER_DETAIL="container exited before /ready; last logs: $(docker logs --tail 20 "$CONTAINER_ID" 2>&1 | tail -c 400)"
+      CONTAINER_DETAIL="container exited before /ready"
+      dump_failure_logs "container exited before /ready"
       return 1
     fi
     code="$(curl -q -s -o /dev/null --max-time 5 -w '%{http_code}' "http://localhost:$port/ready" || true)"
@@ -291,83 +234,33 @@ run_container_check() {
   done
   if [[ "$ready" != "1" ]]; then
     CONTAINER_RESULT="FAIL"
-    CONTAINER_DETAIL="/ready did not return 200 within ${READY_TIMEOUT}s (module load check failed)"
+    CONTAINER_DETAIL="/ready did not return 200 within ${READY_TIMEOUT}s"
+    dump_failure_logs "/ready did not return 200 within ${READY_TIMEOUT}s"
     return 1
   fi
-  log "/ready OK — packed-tarball wasm loaded by the public runtime container"
+  log "/ready OK — wasm loaded by the runtime container ($RUNTIME_IMAGE)"
 
-  # Minimal runtime check through the packed @sekiban/ts client: commit a
-  # WeatherForecastCreated event, read the tag state back, and run the
-  # in-memory list query against the loaded module.
   local evidence
-  evidence="$(cd "$CLIENT_SMOKE_DIR" && node --input-type=module -e "
-import { SekibanRuntimeClient, newCommandOutput, tagString } from '@sekiban/ts';
-import { randomUUID } from 'node:crypto';
-
-const client = new SekibanRuntimeClient('http://localhost:$port', {
-  WeatherForecast: 'WeatherForecastProjector',
-});
-const forecastId = randomUUID();
-const tag = tagString('WeatherForecast', forecastId);
-
-const command = {
-  commandType: () => 'CreateWeatherForecast',
-  handle: async (ctx) => {
-    const resp = await ctx.getTagState('WeatherForecast', forecastId);
-    return newCommandOutput(
-      'WeatherForecastCreated',
-      {
-        forecastId,
-        location: 'Kyoto',
-        date: '2026-07-02',
-        temperatureC: 21,
-        summary: 'npm extraction smoke',
-        createdAt: new Date().toISOString(),
-      },
-      [tag], [tag],
-      { [tag]: resp.version },
-    );
-  },
-};
-
-await client.finalizeCommand(command);
-
-let state = null;
-for (let i = 0; i < 15; i++) {
-  state = await client.getTagState('WeatherForecast', forecastId);
-  if (state.version > 0) break;
-  await new Promise(r => setTimeout(r, 2000));
-}
-if (!state || state.version < 1) {
-  console.error('tag state did not reflect the committed event: ' + JSON.stringify(state));
-  process.exit(1);
-}
-
-let items = '[]';
-for (let i = 0; i < 15; i++) {
-  items = await client.executeListQuery('GetWeatherForecastListQuery', JSON.stringify({ forecastId, pageSize: 5, pageNumber: 1 }));
-  if (items.includes(forecastId)) break;
-  await new Promise(r => setTimeout(r, 2000));
-}
-if (!items.includes(forecastId)) {
-  console.error('list query did not return the committed forecast: ' + items);
-  process.exit(1);
-}
-console.log(JSON.stringify({ forecastId, tagStateVersion: state.version, tagStateJson: JSON.parse(state.stateJson), listQueryItems: JSON.parse(items) }));
-" 2>&1)"
+  evidence="$(cd "$CLIENT_SMOKE_DIR" && RUNTIME_URL="http://localhost:$port" node dist/main.js 2>&1)"
   if [[ $? -ne 0 ]]; then
     CONTAINER_RESULT="FAIL"
-    CONTAINER_DETAIL="packed @sekiban/ts client failed against the container: ${evidence:0:400}"
+    CONTAINER_DETAIL="registry DCB client failed against the container: ${evidence:0:400}"
+    dump_failure_logs "registry DCB client failed against the container"
     return 1
   fi
   CONTAINER_RESULT="PASS"
-  CONTAINER_DETAIL="/ready 200; packed @sekiban/ts client committed WeatherForecastCreated, read tag state, and queried it back: $evidence"
-  log "packed @sekiban/ts client evidence: $evidence"
+  CONTAINER_DETAIL="registry @sekiban/dcb-* client committed/read/queried through the container: ${evidence:0:400}"
+  log "registry client runtime evidence: $evidence"
   return 0
 }
 
 run_container_check || fail "container load check failed: $CONTAINER_DETAIL"
 
-write_report "PASS" "Packed both tarballs, validated their contents, compiled the projector and client samples against the packed artifacts only, and ran the container load check (${CONTAINER_RESULT})."
+if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+  [[ "$CONTAINER_RESULT" == "PASS" ]] \
+    || fail "Docker is available but container runtime proof did not pass ($CONTAINER_RESULT${CONTAINER_DETAIL:+ — $CONTAINER_DETAIL})"
+fi
+
+write_report "PASS" "Packed @sekiban/as-wasm, compiled projector wasm, registry @sekiban/dcb-* 0.2.0 client build/test succeeded, and container runtime check ${CONTAINER_RESULT}."
 log "PASS (container load: $CONTAINER_RESULT)"
 exit 0

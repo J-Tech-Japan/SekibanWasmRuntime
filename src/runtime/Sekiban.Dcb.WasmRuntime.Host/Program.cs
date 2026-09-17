@@ -765,12 +765,12 @@ static async Task<IResult> ExecuteSerializedQueryAsync(
 
     var listResult = await grain.ExecuteListQueryAsync(parameter);
     var itemsJson = await DecompressToStringAsync(listResult.CompressedItemsJson);
-    return Results.Ok(new SerializedListQueryResponse(
-        ItemsJson: itemsJson,
-        TotalCount: listResult.TotalCount,
-        TotalPages: listResult.TotalPages,
-        CurrentPage: listResult.CurrentPage,
-        PageSize: listResult.PageSize));
+    return Results.Ok(WasmProjectionActorHost.CoerceSerializedListQueryResponse(
+        itemsJson,
+        listResult.TotalCount,
+        listResult.TotalPages,
+        listResult.CurrentPage,
+        listResult.PageSize));
 }
 
 static async Task<IResult?> TryExecuteDirectReplayQueryAsync(
@@ -909,12 +909,12 @@ static async Task<IResult?> TryExecuteDirectReplayQueryAsync(
 
         var value = listResult.GetValue();
         var itemsJson = await DecompressToStringAsync(value.CompressedItemsJson);
-        return Results.Ok(new SerializedListQueryResponse(
-            ItemsJson: itemsJson,
-            TotalCount: value.TotalCount,
-            TotalPages: value.TotalPages,
-            CurrentPage: value.CurrentPage,
-            PageSize: value.PageSize));
+        return Results.Ok(WasmProjectionActorHost.CoerceSerializedListQueryResponse(
+            itemsJson,
+            value.TotalCount,
+            value.TotalPages,
+            value.CurrentPage,
+            value.PageSize));
     }
     finally
     {
@@ -1108,12 +1108,12 @@ static async Task<IResult?> TryExecuteDirectSnapshotQueryAsync(
             value.TotalCount,
             value.CurrentPage,
             value.PageSize);
-        var listResponse = Results.Ok(new SerializedListQueryResponse(
-            ItemsJson: itemsJson,
-            TotalCount: value.TotalCount,
-            TotalPages: value.TotalPages,
-            CurrentPage: value.CurrentPage,
-            PageSize: value.PageSize));
+        var listResponse = Results.Ok(WasmProjectionActorHost.CoerceSerializedListQueryResponse(
+            itemsJson,
+            value.TotalCount,
+            value.TotalPages,
+            value.CurrentPage,
+            value.PageSize));
         if (cache.ShouldResetActiveEntryOnMemoryPressure())
         {
             logger.LogWarning(

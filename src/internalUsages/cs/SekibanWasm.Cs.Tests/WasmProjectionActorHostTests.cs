@@ -56,6 +56,78 @@ public class WasmProjectionActorHostTests
     }
 
     [Fact]
+    public async Task ExecuteListQueryAsync_BareArrayGuest_SuppliesNumericPaginationDefaults()
+    {
+        var instance = new StubPrimitiveProjectionInstance
+        {
+            ListQueryResponseJson = """[{"forecastId":"wf-1","location":"Kyoto"}]"""
+        };
+        var host = CreateHost(instance);
+
+        var result = await host.ExecuteListQueryAsync(
+            new SerializableQueryParameter
+            {
+                QueryTypeName = "GetWeatherForecastListQuery",
+                CompressedQueryJson = await CompressStringAsync("{}")
+            },
+            safeVersion: null,
+            safeThreshold: null,
+            safeThresholdTime: null,
+            unsafeVersion: null);
+
+        Assert.True(result.IsSuccess);
+        var payload = result.GetValue();
+        Assert.Equal(1, payload.TotalCount);
+        Assert.Equal(1, payload.TotalPages);
+        Assert.Equal(1, payload.CurrentPage);
+        Assert.Equal(1, payload.PageSize);
+    }
+
+    [Fact]
+    public async Task ExecuteListQueryAsync_EmptyBareArrayGuest_SuppliesZeroTotalPages()
+    {
+        var instance = new StubPrimitiveProjectionInstance { ListQueryResponseJson = "[]" };
+        var host = CreateHost(instance);
+
+        var result = await host.ExecuteListQueryAsync(
+            new SerializableQueryParameter
+            {
+                QueryTypeName = "GetWeatherForecastListQuery",
+                CompressedQueryJson = await CompressStringAsync("{}")
+            },
+            safeVersion: null,
+            safeThreshold: null,
+            safeThresholdTime: null,
+            unsafeVersion: null);
+
+        Assert.True(result.IsSuccess);
+        var payload = result.GetValue();
+        Assert.Equal(0, payload.TotalCount);
+        Assert.Equal(0, payload.TotalPages);
+        Assert.Equal(1, payload.CurrentPage);
+        Assert.Equal(1, payload.PageSize);
+    }
+
+    [Fact]
+    public void CoerceSerializedListQueryResponse_EmitsNumericPaginationFieldsForFacade()
+    {
+        var response = WasmProjectionActorHost.CoerceSerializedListQueryResponse(
+            """[{"forecastId":"wf-1"}]""",
+            totalCount: null,
+            totalPages: null,
+            currentPage: null,
+            pageSize: null);
+
+        var json = JsonSerializer.Serialize(response, DomainJsonOptions);
+        using var document = JsonDocument.Parse(json);
+        Assert.Equal(JsonValueKind.Number, document.RootElement.GetProperty("totalCount").ValueKind);
+        Assert.Equal(JsonValueKind.Number, document.RootElement.GetProperty("totalPages").ValueKind);
+        Assert.Equal(JsonValueKind.Number, document.RootElement.GetProperty("currentPage").ValueKind);
+        Assert.Equal(JsonValueKind.Number, document.RootElement.GetProperty("pageSize").ValueKind);
+        Assert.Equal(JsonValueKind.String, document.RootElement.GetProperty("itemsJson").ValueKind);
+    }
+
+    [Fact]
     public async Task Snapshot_Restores_State_And_Metadata()
     {
         var instance = new StubPrimitiveProjectionInstance();

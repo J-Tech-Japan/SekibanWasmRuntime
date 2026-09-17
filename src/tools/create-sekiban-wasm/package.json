@@ -37,7 +37,7 @@
     "build": "tsc",
     "sync-templates": "node scripts/sync-templates.mjs",
     "pretest": "npm run sync-templates && npm run build",
-    "test": "node --test",
+    "test": "node --test test/*.js",
     "prepack": "npm run sync-templates && npm run build"
   },
   "devDependencies": {
