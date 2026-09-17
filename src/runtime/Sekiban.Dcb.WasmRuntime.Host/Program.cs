@@ -477,7 +477,7 @@ app.MapPost("/api/sekiban/serialized/tag-state", async (HttpContext http, TagSta
     }
     catch (TimeoutException ex)
     {
-        return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status504GatewayTimeout);
+        return RuntimeHostErrorResults.ReadTimeout(ex.Message);
     }
     catch (OperationCanceledException)
     {
@@ -559,7 +559,7 @@ app.MapPost("/api/sekiban/serialized/commit", async (
     }
     catch (TimeoutException ex)
     {
-        return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status504GatewayTimeout);
+        return RuntimeHostErrorResults.CommitUnknownOutcome(ex.Message);
     }
     catch (OperationCanceledException)
     {
@@ -591,7 +591,7 @@ if (projectionModeEnabled)
         }
         catch (TimeoutException ex)
         {
-            return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status504GatewayTimeout);
+            return RuntimeHostErrorResults.ReadTimeout(ex.Message);
         }
         catch (OperationCanceledException)
         {
@@ -610,7 +610,7 @@ if (projectionModeEnabled)
         }
         catch (TimeoutException ex)
         {
-            return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status504GatewayTimeout);
+            return RuntimeHostErrorResults.ReadTimeout(ex.Message);
         }
         catch (OperationCanceledException)
         {
@@ -620,9 +620,8 @@ if (projectionModeEnabled)
 }
 else
 {
-    static IResult QueryDisabled() => Results.Json(
-        new { error = "MultiProjection disabled via SEKIBAN_PROJECTION_MODE=materialized-view-only." },
-        statusCode: StatusCodes.Status503ServiceUnavailable);
+    static IResult QueryDisabled() => RuntimeHostErrorResults.ProjectionUnavailable(
+        "MultiProjection disabled via SEKIBAN_PROJECTION_MODE=materialized-view-only.");
 
     app.MapPost("/api/sekiban/serialized/query", () => QueryDisabled());
     app.MapPost("/api/sekiban/serialized/list-query", () => QueryDisabled());
