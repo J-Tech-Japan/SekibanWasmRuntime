@@ -5,31 +5,110 @@ componentize-js build for the pinned `sekiban-dcb-ts` meeting-room domain. The
 copied `src/domain.ts` is not adapted to compile: its bytes are checked against
 `fixtures/domain-pin.json` by `build/scripts/verify-dcb-ts-domain-pin.mjs`.
 
+## Component apply-event ABI (SWR-G092)
+
+The WIT export carries saved event tags across the component boundary:
+
+```wit
+export apply-event: func(
+  instance-id: u32,
+  event-type: string,
+  payload-json: string,
+  event-tags: list<string>,
+);
+```
+
+The export-name set remains the same nine names; only the `apply-event` function
+type changed. There is still no `execute-command` export.
+
+`WasmtimeComponentProjectionInstance` passes the exact ordered tag list as the
+fourth Preview2 JSON-array bridge argument for `ApplyEvent`, `ApplyEvents`, and
+`ApplySerializableEvents`. The TypeScript guest forwards that list unchanged as
+`RuntimeProjectionEvent.eventTags`.
+
+Core-module guests are **not** affected by this WIT change. Rust and C#
+core-module paths keep their existing tag-aware metadata APIs; run focused
+core-module regressions separately when touching the host adapter.
+
+Rebuilding the component artifact is required after any WIT or guest change:
+
+```sh
+npm run build:component
+npm run verify:component
+```
+
+Stale component binaries implement the old three-argument `apply-event` type and
+fail visibly at instantiation or call time rather than silently dropping tags.
+
+## Domain pin provenance
+
+`fixtures/domain-pin.json` records the upstream meeting-room domain tuple:
+
+| field | value |
+| --- | --- |
+| repository | `J-Tech-Japan/sekiban-dcb-ts` |
+| commit | `681da42f3b114f8e5f46422f3eff3e01feb3ccff` (SDT-G88) |
+| domainPath | `samples/meeting-room/src/domain.ts` |
+| gitBlob | `78b0c67e5f9e208cccdd7a66f807e8c654542d39` |
+| sha256 | `2f5c15be3f97ca9e0f355e828541795b9b18087add31f2a139dc81fed4c93705` |
+| bytes | `13769` |
+| dcbDomainPackage | `@sekiban/dcb-domain@0.2.0` |
+| zod | `4.4.3` |
+
+Advance the pin deliberately: update the fixture, re-fetch `src/domain.ts` from
+the recorded commit (do not hand-edit the copied upstream file), then verify:
+
+```sh
+npm run verify:domain-pin
+```
+
+## Tag-fidelity evidence
+
+`src/tag-probe-fixture.ts` defines a local `TagProbeProjector` whose serialized
+state records the exact `eventTags` ids observed on apply. This fixture is
+local to the guest; it is not part of the pinned upstream domain.
+
+- `src/tag-fidelity.test.mjs` — Node controls against `@sekiban/dcb-domain@0.2.0`:
+  - distinctive multi-tag input is preserved in state;
+  - `eventTags: []` throws `RUNTIME_EVENT_TAGS_EMPTY`;
+  - omitted `eventTags` yields synthetic `probe:__runtime__`, unequal to real tags.
+- `TypeScriptComponentGuestTests.PinnedTypeScriptComponent_ShouldPreserveDistinctiveEventTagsThroughRealHostPath`
+  — integration path through C# host → Preview2 JSON-array bridge → component WIT
+  → guest, asserting `observedTagIds` equals
+  `["probe:alpha","probe:beta","probe:gamma"]` in order for both `ApplyEvent`
+  and `ApplyEvents`.
+
 ## Build and verification
 
 From this directory:
 
 ```sh
 npm ci
+npm run verify:domain-pin
+npm run test
 npm run test:component
 dotnet test ../../internalUsages/cs/SekibanWasm.Cs.Tests/SekibanWasm.Cs.Tests.csproj \
   --filter FullyQualifiedName~TypeScriptComponentGuestTests
 ```
 
+Build the Preview2 shim first when it is absent:
+
+```sh
+cargo build --release --manifest-path ../../external/wasmtime-dotnet/native/wasmtime-preview2-shim/Cargo.toml
+```
+
 Normal CI deliberately excludes `TypeScriptComponentGuestTests`, which carry
 the xUnit trait `[Trait("Category", "PrivateUpstreamComponent")]`, with
 `--filter 'Category!=PrivateUpstreamComponent'`. The component path depends on
-the private upstream checkout and the not-yet-public `@sekiban/dcb-domain`
-package. This is an explicit test selection, not a pass-on-missing-artifact
-fallback: the local commands above remain runnable for authorized developers
-and still fail when the component or Preview2 shim is absent. Once the npm
-package is public and clean CI can restore the pinned toolchain, remove this
-trait/filter and restore the component build steps to normal CI.
+the pinned upstream checkout and `@sekiban/dcb-domain@0.2.0`. This is an
+explicit test selection, not a pass-on-missing-artifact fallback: the local
+commands above remain runnable for authorized developers and still fail when the
+component or Preview2 shim is absent.
 
 `npm run build:component` performs all of the following in scratch space:
 
 - checks the pinned upstream commit, Git blob, byte length, and SHA-256;
-- checks `@sekiban/dcb-domain` provenance before choosing an input;
+- resolves `@sekiban/dcb-domain@0.2.0` from the public npm registry when available;
 - runs the pinned upstream boundary checker without modifying it;
 - compiles the consumer with zod `4.4.3` and the locked `jco@1.16.1` /
   `componentize-js@0.19.3` toolchain;
@@ -53,54 +132,3 @@ execute-query, get-event-types, restore-state, serialize-event, serialize-state
 There is no command export and no `execute_command` entry. Commands remain
 outside this guest; `toRuntimeDomain` may still construct command closures
 internally as part of the upstream runtime domain.
-
-## Package provenance finding
-
-The pinned upstream checkout declares `@sekiban/dcb-domain@0.1.0` as private,
-with no `publishConfig` and no `.npmrc` registry declaration. The build checked
-both registries and found no published artifact:
-
-```text
-npm view @sekiban/dcb-domain@0.1.0 version --registry https://registry.npmjs.org --json
-=> E404: '@sekiban/dcb-domain@0.1.0' is not in this registry.
-
-npm view @sekiban/dcb-domain@0.1.0 version --registry https://npm.pkg.github.com --json
-=> E404: npm package "dcb-domain" does not exist under owner "sekiban".
-```
-
-Therefore this run does **not** claim to consume a published ESM artifact. It
-uses a clearly labelled fallback: a temporary package `dist/` is built from
-the unchanged source at upstream commit
-`d9859e71e287c87b872bd9347e117d1b7ee08512`, while the copied consumer domain
-remains pinned by SHA-256
-`58bcf1aaa141e8f23a5f148b7e8656455ef9a649f8602350794ddb0927fb71dd`.
-The generated `build/measurements.json` preserves the complete command output
-and fallback provenance.
-
-## First componentize-js evidence
-
-The observed run on 2026-08-25 produced:
-
-| measurement | result | interpretation |
-| --- | ---: | --- |
-| bundle | 1,138,527 bytes | bundled JS before componentization |
-| component | 21,864,350 bytes | componentize-js output |
-| componentize-js duration | 2,263.77 ms | build/componentize cost only |
-| Preview2 cold start | 614.1996 ms | native Preview2 shim + component instantiation |
-| Preview2 per call | 0.01709 ms | 100 calls through the JSON-array P/Invoke bridge |
-
-The Preview2 figures are not componentize-js figures: the existing shim
-serializes arguments/results as JSON arrays and crosses P/Invoke. The test
-writes the separate `build/preview2-measurements.json` artifact so the two
-costs cannot be conflated. This is the first real componentize-js execution
-evidence for this domain path and is reported for upstream `sekiban-dcb-ts`
-and SekibanCloud as well as this runtime.
-
-The zod `4.4.3` runtime scan covered 210 shipped JavaScript/CJS files. It found
-no `eval`, dynamic import, top-level await, or `Date.now`, but did find zod's
-`Function` constructor probes/generators, `Math.random` helper, and
-Node/global references (including CJS `require`). The emitted bundle retains
-those zod `Function` constructors and `Math.random`/`globalThis` references;
-componentize-js still completed and the guest executed successfully. These are
-dependency findings from the first real run—not edits to the upstream domain—
-and are recorded for upstream follow-up.

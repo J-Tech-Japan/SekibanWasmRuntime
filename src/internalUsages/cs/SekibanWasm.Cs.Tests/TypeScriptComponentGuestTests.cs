@@ -111,6 +111,58 @@ public sealed class TypeScriptComponentGuestTests
     }
 
     [Fact]
+    public void PinnedTypeScriptComponent_ShouldPreserveDistinctiveEventTagsThroughRealHostPath()
+    {
+        string repositoryRoot = FindRepositoryRoot();
+        string componentPath = Path.Combine(repositoryRoot, "src/wasm-projectors/typescript/build/module.wasm");
+        string shimPath = FindPreview2Shim(repositoryRoot);
+        string[] expectedTags = ["probe:alpha", "probe:beta", "probe:gamma"];
+        string previousShimPath = Environment.GetEnvironmentVariable("WASMTIME_PREVIEW2_SHIM_PATH") ?? string.Empty;
+        Environment.SetEnvironmentVariable("WASMTIME_PREVIEW2_SHIM_PATH", shimPath);
+        try
+        {
+            using var runtime = new WasmtimeRuntime();
+            using var host = new WasmtimePrimitiveProjectionHost(
+                runtime,
+                new WasmtimeModuleCache(runtime),
+                new WasmtimeHostOptions
+                {
+                    DefaultModulePath = componentPath,
+                    EnableInstancePooling = false,
+                    MaxPooledInstancesPerProjector = 0,
+                });
+
+            using IPrimitiveProjectionInstance probe = host.CreateInstance("TagProbeProjector");
+            probe.ApplyEvent("ProbePing", "{}", expectedTags, "0001");
+            using JsonDocument state = JsonDocument.Parse(probe.SerializeState());
+            JsonElement observed = state.RootElement.GetProperty("observedTagIds");
+            Assert.Equal(expectedTags.Length, observed.GetArrayLength());
+            for (int index = 0; index < expectedTags.Length; index++)
+            {
+                Assert.Equal(expectedTags[index], observed[index].GetString());
+            }
+
+            using IPrimitiveProjectionInstance batchProbe = host.CreateInstance("TagProbeProjector");
+            batchProbe.ApplyEvents([
+                new PrimitiveProjectionEventEnvelope("ProbePing", "{}", expectedTags, "0001"),
+            ]);
+            using JsonDocument batchState = JsonDocument.Parse(batchProbe.SerializeState());
+            JsonElement batchObserved = batchState.RootElement.GetProperty("observedTagIds");
+            Assert.Equal(expectedTags.Length, batchObserved.GetArrayLength());
+            for (int index = 0; index < expectedTags.Length; index++)
+            {
+                Assert.Equal(expectedTags[index], batchObserved[index].GetString());
+            }
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(
+                "WASMTIME_PREVIEW2_SHIM_PATH",
+                string.IsNullOrEmpty(previousShimPath) ? null : previousShimPath);
+        }
+    }
+
+    [Fact]
     public void PinnedTypeScriptComponent_ShouldRecordPreview2JsonBridgeMeasurements()
     {
         string repositoryRoot = FindRepositoryRoot();

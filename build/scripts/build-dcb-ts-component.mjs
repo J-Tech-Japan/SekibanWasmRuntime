@@ -327,10 +327,14 @@ async function linkStagedPackage(stagedPackage) {
   const linkPath = join(scopeDirectory, "dcb-domain");
   await mkdir(scopeDirectory, { recursive: true });
   let created = false;
+  const stagedRealPath = await realpath(stagedPackage);
   try {
     const current = await lstat(linkPath);
-    if (!current.isSymbolicLink() || (await realpath(linkPath)) !== (await realpath(stagedPackage))) {
-      throw new Error(`Refusing to replace existing ${linkPath}; the build requires a staged pinned package.`);
+    const linkedRealPath = current.isSymbolicLink() ? await realpath(linkPath) : null;
+    if (linkedRealPath !== stagedRealPath) {
+      await rm(linkPath, { recursive: true, force: true });
+      await symlink(stagedPackage, linkPath, "dir");
+      created = true;
     }
   } catch (error) {
     if (error?.code !== "ENOENT") throw error;
@@ -362,6 +366,12 @@ async function main() {
     packageLink = await linkStagedPackage(stagedPackage);
 
     await run(executable("tsc"), ["-p", "tsconfig.json"], packageRoot);
+    const tagFidelity = await run(
+      process.execPath,
+      ["--test", join(packageRoot, "src/tag-fidelity.test.mjs")],
+      packageRoot,
+    );
+    process.stdout.write(tagFidelity.stdout);
     const reference = await run(
       process.execPath,
       [join(repositoryRoot, "build/scripts/record-dcb-ts-reference.mjs")],

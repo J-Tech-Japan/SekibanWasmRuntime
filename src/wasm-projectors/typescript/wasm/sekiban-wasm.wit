@@ -2,7 +2,7 @@ package sekiban:wasm;
 
 world sekiban-projector {
   export create-instance: func(projector-type: string) -> u32;
-  export apply-event: func(instance-id: u32, event-type: string, payload-json: string);
+  export apply-event: func(instance-id: u32, event-type: string, payload-json: string, event-tags: list<string>);
   export execute-query: func(instance-id: u32, query-type: string, params-json: string) -> string;
   export execute-list-query: func(instance-id: u32, query-type: string, params-json: string) -> string;
   export serialize-state: func(instance-id: u32) -> string;

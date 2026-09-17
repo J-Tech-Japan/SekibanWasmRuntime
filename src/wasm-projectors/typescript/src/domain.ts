@@ -79,7 +79,6 @@ const roomState = stateUnion(z.discriminatedUnion("status", [
   z.object({ status: z.literal("created"), version: z.number().int().nonnegative(), roomId: z.string(), name: z.string() }),
   z.object({ status: z.literal("released"), version: z.number().int().nonnegative(), roomId: z.string(), name: z.string() }),
 ]), {
-  discriminator: "status",
   initial: { status: "empty", version: 0, roomId: null, name: "" },
 });
 
@@ -88,12 +87,8 @@ const reservationState = stateUnion(z.discriminatedUnion("status", [
   z.object({ status: z.literal("reserved"), version: z.number().int().nonnegative(), reservationId: z.string(), roomId: z.string() }),
   z.object({ status: z.literal("cancelled"), version: z.number().int().nonnegative(), reservationId: z.string(), roomId: z.string().nullable() }),
 ]), {
-  discriminator: "status",
   initial: { status: "empty", version: 0, reservationId: null, roomId: null },
 });
-
-const roomInitialState: RoomState = { status: "empty", version: 0, roomId: null, name: "" };
-const reservationInitialState: ReservationState = { status: "empty", version: 0, reservationId: null, roomId: null };
 
 type RoomEvent = typeof roomCreated | typeof roomReleased;
 type ReservationEvent = typeof roomReserved | typeof reservationCancelled;
@@ -180,7 +175,6 @@ const roomProjector: ProjectorDefinition<RoomState, "room", [typeof roomCreated,
   tag: room,
   state: roomState,
   events: [roomCreated, roomReleased],
-  initialState: roomInitialState,
   handlers: {
     RoomCreated: (state, eventValue) => evolveRoomCreated(state, roomCreatedEvent(eventValue)),
     RoomReleased: (state, eventValue) => evolveRoomReleased(state, roomReleasedEvent(eventValue)),
@@ -193,7 +187,6 @@ const reservationProjector: ProjectorDefinition<ReservationState, "reservation",
   tag: reservation,
   state: reservationState,
   events: [roomReserved, reservationCancelled],
-  initialState: reservationInitialState,
   handlers: {
     RoomReserved: (state, eventValue) => evolveRoomReserved(state, roomReservedEvent(eventValue)),
     ReservationCancelled: (state, eventValue) => evolveReservationCancelled(state, reservationCancelledEvent(eventValue)),
@@ -312,11 +305,6 @@ export const meetingRoomViews = Object.freeze([
   { id: "ReservationProjector", source: "ReservationProjector", projector: "ReservationProjector", deliveryClass: "immediate-preferred" },
 ] satisfies readonly DomainViewDefinition[]);
 
-export const meetingRoomDeliveryPolicy = {
-  RoomProjector: "immediate-preferred",
-  ReservationProjector: "immediate-preferred",
-} satisfies Readonly<Record<string, "immediate-preferred" | "queued">>;
-
 export const meetingRoomAuthoringDomain = domain({
   events: [roomCreated, roomReserved, reservationCancelled, roomReleased],
   commands: [createRoomCommand, reserveRoomCommand, cancelReservationCommand, releaseRoomCommand],
@@ -324,15 +312,15 @@ export const meetingRoomAuthoringDomain = domain({
   views: meetingRoomViews,
 });
 
-/** Runtime consumers receive only the G28 bridge, never the old define* API. */
+/**
+ * Runtime consumers receive only the G28 bridge, never the old define* API.
+ * Its views carry each view's effective deliveryClass, the per-view doorbell
+ * policy authority (derive it with `deliveryPolicyFromDomain`).
+ */
 export const meetingRoomDomain: RuntimeDomainDefinition = toRuntimeDomain(meetingRoomAuthoringDomain);
 
 export const meetingRoomRuntimeConfig = {
   deliveryClass: "immediate-preferred",
-  deliveryViews: Object.freeze([
-    { id: "RoomProjector", deliveryClass: meetingRoomDeliveryPolicy.RoomProjector },
-    { id: "ReservationProjector", deliveryClass: meetingRoomDeliveryPolicy.ReservationProjector },
-  ]),
   projectorPayloadNames: {
     RoomProjector: "RoomState",
     ReservationProjector: "ReservationState",
@@ -340,7 +328,6 @@ export const meetingRoomRuntimeConfig = {
   queries: [roomQuery, reservationQuery],
 } satisfies {
   readonly deliveryClass: "immediate-preferred" | "queued";
-  readonly deliveryViews: readonly { readonly id: string; readonly deliveryClass: "immediate-preferred" | "queued" }[];
   readonly projectorPayloadNames: Readonly<Record<string, string>>;
   readonly queries: readonly {
     readonly id: string;

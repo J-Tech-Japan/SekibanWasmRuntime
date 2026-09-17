@@ -15,12 +15,28 @@ if (roomProjector === undefined || reservationProjector === undefined) {
 }
 
 const roomEvents = [
-  { eventType: "RoomCreated", payload: { roomId: "room-1", name: "Boardroom" } },
-  { eventType: "RoomReserved", payload: { roomId: "room-1", reservationId: "reservation-1", userId: "user-1" } },
+  {
+    eventType: "RoomCreated",
+    payload: { roomId: "room-1", name: "Boardroom" },
+    eventTags: ["room:room-1"],
+  },
+  {
+    eventType: "RoomReserved",
+    payload: { roomId: "room-1", reservationId: "reservation-1", userId: "user-1" },
+    eventTags: ["room:room-1", "reservation:reservation-1"],
+  },
 ];
 const reservationEvents = [
-  { eventType: "RoomReserved", payload: { roomId: "room-1", reservationId: "reservation-1", userId: "user-1" } },
-  { eventType: "ReservationCancelled", payload: { reservationId: "reservation-1", roomId: "room-1" } },
+  {
+    eventType: "RoomReserved",
+    payload: { roomId: "room-1", reservationId: "reservation-1", userId: "user-1" },
+    eventTags: ["room:room-1", "reservation:reservation-1"],
+  },
+  {
+    eventType: "ReservationCancelled",
+    payload: { reservationId: "reservation-1", roomId: "room-1" },
+    eventTags: ["reservation:reservation-1"],
+  },
 ];
 
 function reduce(projector, events) {
@@ -29,7 +45,7 @@ function reduce(projector, events) {
     return projector.apply(state, {
       eventType: event.eventType,
       payload: event.payload,
-      eventTags: [],
+      eventTags: event.eventTags,
       provenance: "g32",
     });
   }, projector.initialState);
