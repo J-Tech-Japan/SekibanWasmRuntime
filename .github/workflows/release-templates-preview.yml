@@ -101,6 +101,7 @@ jobs:
       - name: Generation test (pack, install, generate, build, residue check)
         env:
           TEMPLATE_TEST_PACKAGE_VERSION: ${{ env.TEMPLATE_PACKAGE_VERSION }}
+          TEMPLATE_TEST_ASPIRE_PACKAGE_VERSION: ${{ env.RUNTIME_PACKAGE_VERSION }}
         run: bash scripts/templates/test-sekiban-wasm-decider.sh
 
       - name: Generated weather runtime smoke

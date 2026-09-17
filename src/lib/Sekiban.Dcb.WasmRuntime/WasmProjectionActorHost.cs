@@ -1004,6 +1004,11 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
         }
 
         IMultiProjectionPayload payload = payloadResult.GetValue();
+        if (payload is WasmProjectionPayload wasmPayload)
+        {
+            return Encoding.UTF8.GetBytes(wasmPayload.StateJson);
+        }
+
         return JsonSerializer.SerializeToUtf8Bytes(payload, payload.GetType(), _jsonOptions);
     }
 
@@ -1455,8 +1460,6 @@ public sealed class WasmProjectionActorHost : IProjectionActorHost, IDisposable
             _ => defaultValue
         };
     }
-
-    internal sealed record WasmProjectionPayload(string ProjectorName, string StateJson) : IMultiProjectionPayload;
 
     internal sealed record WasmListQueryResult(
         string ItemsJson,
