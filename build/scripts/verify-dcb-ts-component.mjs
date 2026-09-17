@@ -48,6 +48,22 @@ function run(command, args, cwd) {
 const wasmTools = process.env.WASM_TOOLS ?? "wasm-tools";
 await run(wasmTools, ["validate", artifactPath], repositoryRoot);
 const wit = await run(wasmTools, ["component", "wit", artifactPath], repositoryRoot);
+const applyEventExport = wit.match(
+  /export\s+apply-event:\s*func\(([^)]*)\)/i,
+);
+if (!applyEventExport) {
+  throw new Error("Component WIT is missing an apply-event export.");
+}
+const applyEventParams = applyEventExport[1]
+  .split(",")
+  .map((part) => part.trim())
+  .filter(Boolean);
+if (applyEventParams.length !== 4 || !applyEventParams.at(-1)?.includes("event-tags")) {
+  throw new Error([
+    "apply-event export must accept four parameters ending with event-tags.",
+    `actual=${applyEventExport[0]}`,
+  ].join("\n"));
+}
 const actualExports = [...wit.matchAll(/^\s*export\s+([a-z][a-z0-9-]*):/gmi)]
   .map((match) => match[1])
   .sort();
@@ -82,10 +98,12 @@ if (
 }
 if (
   measurements.packageProvenance?.status === undefined ||
+  measurements.packagePin?.dcbDomainPackage !== "@sekiban/dcb-domain@0.2.0" ||
+  measurements.packagePin?.zod !== "4.4.3" ||
   measurements.zodStaticScan?.runtimeFiles === undefined ||
   measurements.componentBundleScan === undefined
 ) {
-  throw new Error("Package provenance and dependency/static-scan evidence are missing from build/measurements.json.");
+  throw new Error("Package provenance, exact package pin, and dependency/static-scan evidence are missing from build/measurements.json.");
 }
 if (
   measurements.packageProvenance.status === "published-artifact-unavailable" &&

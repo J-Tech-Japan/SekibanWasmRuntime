@@ -1,8 +1,5 @@
 import { meetingRoomDomain } from "./domain.js";
-import {
-  tagProbeProjector,
-  tagProbeSubscribedEventTypes,
-} from "./tag-probe-fixture.js";
+import { tagProbeProjector } from "./tag-probe-fixture.js";
 import type { JsonValue, RuntimeProjectorDefinition } from "@sekiban/dcb-domain";
 
 interface GuestInstance {
@@ -136,8 +133,5 @@ export function deserializeEvent(eventType: string, json: string): string {
 }
 
 export function getEventTypes(): string[] {
-  return [
-    ...meetingRoomDomain.events.map((event) => event.eventType),
-    ...tagProbeSubscribedEventTypes,
-  ];
+  return meetingRoomDomain.events.map((event) => event.eventType);
 }

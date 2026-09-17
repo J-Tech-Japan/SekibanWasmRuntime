@@ -30,6 +30,9 @@ Core-module guests are **not** affected by this WIT change. Rust and C#
 core-module paths keep their existing tag-aware metadata APIs; run focused
 core-module regressions separately when touching the host adapter.
 
+This repository ships one Component Model guest: the componentize-js TypeScript
+guest in this directory. There is no other in-repo C# Component Model guest.
+
 Rebuilding the component artifact is required after any WIT or guest change:
 
 ```sh
@@ -37,8 +40,13 @@ npm run build:component
 npm run verify:component
 ```
 
-Stale component binaries implement the old three-argument `apply-event` type and
-fail visibly at instantiation or call time rather than silently dropping tags.
+Stale component binaries implement the old three-argument `apply-event` type.
+The Preview2 JSON-array bridge zips host arguments against the component's
+declared parameter list, so extra host-side tags are dropped silently against a
+stale export rather than failing at instantiation. The host therefore rejects
+components that lack the `event-tags` WIT marker before `ApplyEvent` is called,
+and `npm run verify:component` asserts the built artifact exposes a four-argument
+`apply-event` export ending with `event-tags`.
 
 ## Domain pin provenance
 
@@ -66,7 +74,10 @@ npm run verify:domain-pin
 
 `src/tag-probe-fixture.ts` defines a local `TagProbeProjector` whose serialized
 state records the exact `eventTags` ids observed on apply. This fixture is
-local to the guest; it is not part of the pinned upstream domain.
+local to the guest; it is not part of the pinned upstream domain. It is reachable
+via `create-instance("TagProbeProjector")` for tag-fidelity integration tests but
+is deliberately omitted from `get-event-types`, which remains the pinned
+meeting-room surface only.
 
 - `src/tag-fidelity.test.mjs` — Node controls against `@sekiban/dcb-domain@0.2.0`:
   - distinctive multi-tag input is preserved in state;

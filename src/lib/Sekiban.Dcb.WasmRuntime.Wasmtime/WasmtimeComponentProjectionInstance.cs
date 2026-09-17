@@ -33,6 +33,13 @@ public sealed class WasmtimeComponentProjectionInstance :
             throw new InvalidOperationException($"WASM component was not found: {componentPath}");
         }
 
+        if (!WasmBinaryFormatDetector.HasTagAwareApplyEventExportFile(componentPath))
+        {
+            throw new InvalidOperationException(
+                "WASM component implements a stale apply-event export without event-tags. " +
+                "Rebuild the component against the current WIT before calling ApplyEvent.");
+        }
+
         _projectorType = projectorType;
         string? shimPath = WasmtimePreview2ShimResolver.EnsureAvailableFor(GetType().Assembly);
         if (string.IsNullOrWhiteSpace(shimPath))
