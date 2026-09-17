@@ -7,14 +7,14 @@ using System.IO;
 // AddSekibanWasmRuntime call (referenced as a project here until the package is
 // published; an external consumer uses the NuGet package).
 
-// Defaults to 1.0.0-preview.3 — the verified, recommended public tag: a multi-arch
+// Defaults to 1.0.0-preview.7 — the verified, recommended public tag: a multi-arch
 // (linux/amd64 + linux/arm64) manifest list carrying both libwasmtime.so and the
 // WASI preview2 shim, so list-query and Materialized View catch-up work and no
 // DOCKER_DEFAULT_PLATFORM=linux/amd64 override is needed on Apple Silicon. Override
 // with SAMPLE_RUNTIME_IMAGE_TAG to pin a different published tag.
 var runtimeImageTag = Environment.GetEnvironmentVariable("SAMPLE_RUNTIME_IMAGE_TAG") is { Length: > 0 } tagOverride
     ? tagOverride
-    : "1.0.0-preview.3";
+    : "1.0.0-preview.7";
 const string ModuleFileName = "public-container-cs-decider.wasm";
 
 var builder = DistributedApplication.CreateBuilder(args);

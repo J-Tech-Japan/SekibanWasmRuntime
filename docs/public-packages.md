@@ -30,11 +30,11 @@ The current-state versus historical-evidence rule is defined in
 ### Runtime container — the thing everything else talks to
 
 ```
-ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3
+ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.7
 ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:preview
 ```
 
-The registry-verified current runtime-host tag is `1.0.0-preview.3`. <!-- release-lane: current-runtime-image-version -->
+The registry-verified current runtime-host tag is `1.0.0-preview.7`. <!-- release-lane: current-runtime-image-version -->
 
 The serialized HTTP runtime that loads your WASM projector and serves
 `/api/sekiban/serialized/{tag-state,commit,query,list-query}`. Bring your own
@@ -56,20 +56,21 @@ The registry is the source of truth for a consumer image. On 2026-08-14,
 The repository tag history currently exposes only
 `runtime-host-v1.0.0-preview.1`, whose registry digest is the older amd64-only
 `sha256:5b94ca79f10507aaee6ff3652e45451ea3b3ff47c55d05465a4424ec3be45e59`.
-Therefore the stale side of the discrepancy was the source tag-lane
-assumption, not the consumer-facing `.3` tag. The `.3` image reference above is
-retained and is the value checked by the release-lane marker.
+That 2026-08-14 observation recorded the NuGet lane ahead of GHCR. Preview.7
+recreates the runtime-host image on the same `1.0.0-preview.7` line as the NuGet
+packages; post-merge operators publish `runtime-host-v1.0.0-preview.7` and
+refresh registry evidence before the next release-lane check.
 
 ### .NET — NuGet
 
 ```xml
-<PackageReference Include="Sekiban.Dcb.WasmRuntime" Version="1.0.0-preview.6" />
-<PackageReference Include="Sekiban.Dcb.WasmRuntime.Remote" Version="1.0.0-preview.6" />
-<PackageReference Include="Sekiban.Dcb.WasmRuntime.Aspire" Version="1.0.0-preview.6" />
+<PackageReference Include="Sekiban.Dcb.WasmRuntime" Version="1.0.0-preview.7" />
+<PackageReference Include="Sekiban.Dcb.WasmRuntime.Remote" Version="1.0.0-preview.7" />
+<PackageReference Include="Sekiban.Dcb.WasmRuntime.Aspire" Version="1.0.0-preview.7" />
 ```
 
-The current published NuGet package line is `1.0.0-preview.6`. <!-- release-lane: current-package-version -->
-The current Sekiban.Dcb baseline is `10.19.0`. <!-- release-lane: current-dcb-version -->
+The current published NuGet package line is `1.0.0-preview.7`. <!-- release-lane: current-package-version -->
+The current Sekiban.Dcb baseline is `10.22.0`. <!-- release-lane: current-dcb-version -->
 
 | Package | What it is |
 | --- | --- |
@@ -77,7 +78,7 @@ The current Sekiban.Dcb baseline is `10.19.0`. <!-- release-lane: current-dcb-ve
 | `Sekiban.Dcb.WasmRuntime.Remote` | `RemoteSekibanExecutor` — typed client over the serialized HTTP contract |
 | `Sekiban.Dcb.WasmRuntime.Aspire` | `AddSekibanWasmRuntime(name, opts)` for a C# Aspire AppHost |
 
-All three sit on Sekiban.Dcb `10.19.0`. `Sekiban.Cloud.Client 1.0.0-preview.1` is
+All three sit on Sekiban.Dcb `10.22.0`. `Sekiban.Cloud.Client 1.0.0-preview.1` is
 also on NuGet but predates that baseline.
 
 ### Rust — crates.io

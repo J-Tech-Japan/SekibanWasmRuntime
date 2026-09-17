@@ -3,7 +3,7 @@ using System.IO;
 const string RuntimeImage = "ghcr.io/j-tech-japan/sekiban-wasm-runtime-host";
 var runtimeImageTag = Environment.GetEnvironmentVariable("SAMPLE_RUNTIME_IMAGE_TAG") is { Length: > 0 } tagOverride
     ? tagOverride
-    : "1.0.0-preview.3";
+    : "1.0.0-preview.7";
 const string ModuleFileName = "crates-io-rs-decider.wasm";
 
 var builder = DistributedApplication.CreateBuilder(args);

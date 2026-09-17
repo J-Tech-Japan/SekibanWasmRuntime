@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # End-to-end smoke for the npm TypeScript external-consumer sample against the
-# public GHCR runtime container (SAMPLE_RUNTIME_IMAGE_TAG, default 1.0.0-preview.3).
+# public GHCR runtime container (SAMPLE_RUNTIME_IMAGE_TAG, default 1.0.0-preview.7).
 # CI npm-extraction-smoke builds the runtime from exact-head source instead; set
 # RUNTIME_IMAGE or SAMPLE_RUNTIME_IMAGE_TAG here to pin a published tag manually.
 # SEKIBAN_NPM_MODE (registry|tarball) selects how @sekiban/as-wasm is resolved
@@ -43,7 +43,7 @@ write_report() {
     printf '# npm TypeScript Decider Smoke (SWR-G059)\n\n'
     printf '%s\n' "- Result: **$result**"
     printf '%s\n' "- Detail: $detail"
-    printf '%s\n' "- Runtime image: \`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:${SAMPLE_RUNTIME_IMAGE_TAG:-1.0.0-preview.3}\`"
+    printf '%s\n' "- Runtime image: \`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:${SAMPLE_RUNTIME_IMAGE_TAG:-1.0.0-preview.7}\`"
     printf '%s\n' "- Sekiban packages: npm \`@sekiban/dcb-core/domain/client@0.2.0\`, \`@sekiban/as-wasm@0.1.0\` (SEKIBAN_NPM_MODE=$NPM_MODE)"
     printf '%s\n' "- Runtime URL: \`${RUNTIME_URL:-unresolved}\`"
     printf '%s\n' "- Commit: \`$(git rev-parse HEAD 2>/dev/null || echo unknown)\`"

@@ -8,13 +8,28 @@ for the version, changelog, migration-note, and compatibility evidence rules.
 
 ## Unreleased
 
-- Updated every `Sekiban.Dcb.*` package dependency and the matching Sekiban
-  source submodule from 10.7.0 to 10.8.0 for the `1.0.0-preview.3` package
-  refresh.
-- Re-verified the V1 serialized commit envelope against the published
-  Sekiban.Dcb 10.8.0 package. The wire shape is unchanged, while tag reservation
-  now treats an empty expected version as "expect empty"; the C# sample clients
-  therefore propagate the current tag version for updates and deletes.
+_No unreleased public-preview changes beyond the sections below._
+
+## 1.0.0-preview.7
+
+- **SWR-G089 / PR #296:** Retire the unpublished `@sekiban/ts` package. TypeScript
+  samples, release smoke, generator metadata, and CI now consume the published
+  `@sekiban/dcb-core`, `@sekiban/dcb-domain`, and `@sekiban/dcb-client` `0.2.0`
+  packages with `createSekibanExecutor` and registry-backed transport tests.
+- **SWR-G092 / PR #298:** Extend the component WIT `apply-event` export with
+  `event-tags`, pass the ordered tag list through
+  `WasmtimeComponentProjectionInstance`, and forward it unchanged in the
+  TypeScript guest. Advance the meeting-room domain pin to `681da42`
+  (`@sekiban/dcb-domain@0.2.0`) with `TagProbeProjector` tag-fidelity evidence.
+- **DCB baseline 10.22.0:** Update every centrally managed `Sekiban.Dcb.*`
+  package dependency, align `submodules/Sekiban` to tag `dcb-v10.22.0`, and
+  raise `Microsoft.Orleans.*` to `10.3.1` plus `Microsoft.Extensions.*` to
+  `10.0.5` for the DCB 10.22 transitive graph. The local serialized-commit raw
+  gate (SWR-G087 / F-007) remains fail-closed on explicit-`null` collection
+  members despite the upstream 10.20.0+ presence gate.
+- **GHCR runtime-host catch-up:** Move release-lane defaults and consumer docs
+  to `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.7` so the
+  image lane matches the NuGet preview.7 package line after operator publish.
 
 ## 1.0.0-preview.1
 

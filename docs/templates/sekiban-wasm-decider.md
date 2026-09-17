@@ -10,10 +10,10 @@ the **public Sekiban WASM runtime container**
 - Source name (replaced by `-n`): `SekibanDcbDecider`
 - Package source tree: `templates/Sekiban.Dcb.WasmRuntime.Templates/`
 
-The generated Domain pins `Sekiban.Dcb.WithoutResult` `10.19.0`, while the
-generated AppHost pins `Sekiban.Dcb.WasmRuntime.Aspire` `1.0.0-preview.6`.
+The generated Domain pins `Sekiban.Dcb.WithoutResult` `10.22.0`, while the
+generated AppHost pins `Sekiban.Dcb.WasmRuntime.Aspire` `1.0.0-preview.7`.
 These are package dependencies; the independently released runtime container
-default remains the registry-verified `1.0.0-preview.3` image.
+default remains the registry-verified `1.0.0-preview.7` image.
 
 ## Install
 
@@ -69,7 +69,7 @@ dotnet run --project MyWeather.AppHost    # Postgres + public runtime container
 bash scripts/smoke.sh
 ```
 
-The runtime image tag defaults to `1.0.0-preview.3`; override with
+The runtime image tag defaults to `1.0.0-preview.7`; override with
 `SAMPLE_RUNTIME_IMAGE_TAG`. Without Docker you can still build and test the
 Domain/AppHost/Tests projects (`dotnet build`, `dotnet test`) — only the wasm
 build (on macOS/Windows) and the live container run need Docker.

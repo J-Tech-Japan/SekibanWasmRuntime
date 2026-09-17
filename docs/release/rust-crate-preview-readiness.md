@@ -257,7 +257,7 @@ published crates.io Sekiban crates against the public GHCR runtime container
 together. A sample-owned Aspire AppHost
 (`AppHost/CratesIoRsDecider.AppHost.csproj`) provisions Postgres and the public
 image `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host` (default
-`1.0.0-preview.3`, `SAMPLE_RUNTIME_IMAGE_TAG` override), and
+`1.0.0-preview.7`, `SAMPLE_RUNTIME_IMAGE_TAG` override), and
 `scripts/smoke.sh` runs the typed Rust client and validates command execution,
 tag-state readback, in-memory projection queries, and materialized-view catch-up
 in `DcbMaterializedViewPostgres`.

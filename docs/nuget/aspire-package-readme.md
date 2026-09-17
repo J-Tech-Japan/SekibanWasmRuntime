@@ -20,8 +20,8 @@ The package targets Aspire AppHost projects only (it depends on
 instead — `Sekiban.Dcb.WasmRuntime`, `.Remote`, or `.Wasmtime` (see
 [Related packages](#related-packages)).
 
-The current published package line is `1.0.0-preview.6`. <!-- release-lane: current-package-version -->
-The current Sekiban.Dcb baseline is `10.19.0`. <!-- release-lane: current-dcb-version -->
+The current published package line is `1.0.0-preview.7`. <!-- release-lane: current-package-version -->
+The current Sekiban.Dcb baseline is `10.22.0`. <!-- release-lane: current-dcb-version -->
 
 ## Usage
 
@@ -37,7 +37,7 @@ var materializedViewDb = postgres.AddDatabase("DcbMaterializedViewPostgres");
 
 builder.AddSekibanWasmRuntime("runtime", new SekibanWasmRuntimeOptions
 {
-    // Image defaults to ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3.
+    // Image defaults to ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.7.
     ConfigDirectory = "/path/to/config",   // mounted read-only at /app/config
     ModulesDirectory = "/path/to/modules", // mounted read-only at /app/modules
     WasmModulePath = "/app/modules/my-projector.wasm",
@@ -48,7 +48,7 @@ builder.AddSekibanWasmRuntime("runtime", new SekibanWasmRuntimeOptions
 builder.Build().Run();
 ```
 
-The registry-verified default runtime-host tag is `1.0.0-preview.3`. <!-- release-lane: current-runtime-image-version -->
+The registry-verified default runtime-host tag is `1.0.0-preview.7`. <!-- release-lane: current-runtime-image-version -->
 
 ## Options
 
@@ -57,7 +57,7 @@ contract:
 
 | Option | Default | Maps to |
 | --- | --- | --- |
-| `Image` / `Tag` | public GHCR image, `1.0.0-preview.3` | container image |
+| `Image` / `Tag` | public GHCR image, `1.0.0-preview.7` | container image |
 | `ConfigDirectory` | – | read-only bind mount at `/app/config` |
 | `ModulesDirectory` | – | read-only bind mount at `/app/modules` |
 | `ManifestPath` | `/app/config/sekiban-manifest.json` | `SEKIBAN_MANIFEST_PATH` |
