@@ -49,6 +49,8 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      - uses: docker/setup-buildx-action@v3
+
       - name: Add Rust wasm32-wasip1 target
         run: rustup target add wasm32-wasip1
 
@@ -83,6 +85,11 @@ jobs:
 
       - name: Cargo tests
         run: cargo test --manifest-path src/tools/cargo-sekiban/Cargo.toml
+
+      - name: Prepare validation runtime image for generated smokes
+        env:
+          RUNTIME_IMAGE_TAG: 1.0.0-preview.7
+        run: bash scripts/release/prepare-validation-runtime-image.sh
 
       - name: Standalone generated-workspace proof
         env:

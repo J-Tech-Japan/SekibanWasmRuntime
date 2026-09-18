@@ -5,7 +5,7 @@ consumes the Go SDK as the published subdirectory module
 `github.com/J-Tech-Japan/SekibanWasmRuntime/src/lib/sekiban-go` — the committed
 `go.mod` has **no replace directives and no local Sekiban paths** — and proves
 the four consumer checks against the **public GHCR runtime container**
-(`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3`):
+(`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.7`):
 
 1. **Command execution** — `CreateWeatherForecast` + `UpdateWeatherForecastLocation`
    through the typed `client.SekibanRuntimeClient` command flow.

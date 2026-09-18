@@ -127,7 +127,7 @@ remediation is follow-up work per the SWR-G063 scope. Evidence:
 ## Compatibility
 
 `sekiban-swift` 0.1.0 and 0.1.1 pair with runtime image
-`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3` and implements
+`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.7` and implements
 the same guest ABI as the Rust `sekiban-wasm`/`sekiban-mv` 0.1.0 crates — see
 `sdk-runtime-compatibility.md`. The Swift external-consumer sample against the
 public container is SWR-G063 (above).

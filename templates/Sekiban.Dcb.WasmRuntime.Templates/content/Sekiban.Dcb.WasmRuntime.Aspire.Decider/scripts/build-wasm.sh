@@ -72,6 +72,10 @@ fi
 cp "$WASM_FILE" "$MODULES_DIR/$MODULE_NAME"
 echo "[build-wasm] module: modules/$MODULE_NAME ($(wc -c < "$MODULES_DIR/$MODULE_NAME") bytes)"
 
+# shellcheck source=effective-module-sha256.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/effective-module-sha256.sh"
+MODULE_SHA256="$(effective_module_sha256 "$MODULES_DIR/$MODULE_NAME")"
+
 # Runtime manifest for the weather Decider domain (mounted into the container).
 cat > "$CONFIG_DIR/sekiban-manifest.json" <<JSON
 {
@@ -107,6 +111,9 @@ cat > "$CONFIG_DIR/sekiban-manifest.json" <<JSON
     {
       "viewName": "WeatherForecast",
       "viewVersion": 1,
+      "abiVersion": "sekiban-wasm-mv/1",
+      "capabilities": ["query-rows"],
+      "moduleSha256": "$MODULE_SHA256",
       "modulePath": "/app/modules/$MODULE_NAME",
       "logicalTables": [
         "weather_forecast"

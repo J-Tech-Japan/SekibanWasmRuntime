@@ -113,12 +113,22 @@ import sys
 from pathlib import Path
 
 root = Path(sys.argv[1])
-sekiban = ("sekiban-core", "sekiban-derive", "sekiban-wasm", "sekiban-mv", "sekiban-executor")
+pins = {
+    "sekiban-core": "=0.1.0",
+    "sekiban-derive": "=0.1.0",
+    "sekiban-wasm": "=0.1.0",
+    "sekiban-mv": "=0.1.1",
+    "sekiban-executor": "=0.1.0",
+}
 manifests = sorted(root.glob("*/Cargo.toml"))
 text = "\n".join(path.read_text(encoding="utf-8") for path in manifests)
-for crate in sekiban:
-    if not re.search(rf"^\s*{re.escape(crate)}\s*=\s*\"=0\.1\.0\"\s*$", text, re.MULTILINE):
-        raise SystemExit(f"{crate} is not pinned to exact =0.1.0")
+for crate, pin in pins.items():
+    if not re.search(
+        rf"^\s*{re.escape(crate)}\s*=\s*\"{re.escape(pin)}\"\s*$",
+        text,
+        re.MULTILINE,
+    ):
+        raise SystemExit(f"{crate} is not pinned to exact {pin}")
     if re.search(rf"^\s*{re.escape(crate)}\s*=.*path\s*=", text, re.MULTILINE):
         raise SystemExit(f"{crate} has a local path dependency")
 PY
@@ -202,6 +212,7 @@ for output in "$REGISTRY" "$DEV"; do
     || fail "generated output is missing fixture proof: $output"
 done
 
+bash "$ROOT/scripts/release/maybe-patch-sekiban-mv-from-checkout.sh" "$REGISTRY"
 assert_registry_contract "$REGISTRY"
 assert_dev_contract "$DEV"
 build_wasm_if_available "$REGISTRY"

@@ -36,7 +36,7 @@ TinyGo to a WASI module; `go-clientapi` drives the runtime over HTTP).
 ## Runtime pairing
 
 `sekiban-go` 0.1.x targets the public runtime container image
-`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3`:
+`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.7`:
 
 ```bash
 docker run -p 8080:8080 \
@@ -44,7 +44,7 @@ docker run -p 8080:8080 \
   -e SEKIBAN_MANIFEST_PATH=/app/config/sekiban-manifest.json \
   -e WASM_MODULE_PATH=/app/modules/my-projector.wasm \
   -e "ConnectionStrings__SekibanDcb=<postgres connection string>" \
-  ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3
+  ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.7
 ```
 
 It speaks the same serialized HTTP contract and guest ABI as the Rust 0.1.0

@@ -61,8 +61,8 @@ See [src/internalUsages/README.md](src/internalUsages/README.md) for detailed ar
 
 The first public packages are preview packages versioned as `1.0.0-preview.*`.
 
-The current published NuGet package line is `1.0.0-preview.6`. <!-- release-lane: current-package-version -->
-The current Sekiban.Dcb baseline is `10.19.0`. <!-- release-lane: current-dcb-version -->
+The current published NuGet package line is `1.0.0-preview.7`. <!-- release-lane: current-package-version -->
+The current Sekiban.Dcb baseline is `10.22.0`. <!-- release-lane: current-dcb-version -->
 
 | Package | Install when | Support tier |
 | --- | --- | --- |
@@ -178,10 +178,10 @@ A preview image is also published to GitHub Container Registry, so you can run
 the runtime without building from source:
 
 ```bash
-docker pull ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3
+docker pull ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.7
 ```
 
-The registry-verified current runtime-host tag is `1.0.0-preview.3`. <!-- release-lane: current-runtime-image-version -->
+The registry-verified current runtime-host tag is `1.0.0-preview.7`. <!-- release-lane: current-runtime-image-version -->
 
 The image is published by the
 [`release-ghcr-image-preview`](.github/workflows/release-ghcr-image-preview.yml)

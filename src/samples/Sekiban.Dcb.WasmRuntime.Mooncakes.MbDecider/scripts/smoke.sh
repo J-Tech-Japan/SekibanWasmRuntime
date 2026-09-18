@@ -62,7 +62,7 @@ write_report() {
     printf '%s\n' "- Result: **$result**"
     printf '%s\n' "- Mode: $MODE_DETAIL"
     printf '%s\n' "- Detail: $detail"
-    printf '%s\n' "- Runtime image: \`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:${SAMPLE_RUNTIME_IMAGE_TAG:-1.0.0-preview.3}\`"
+    printf '%s\n' "- Runtime image: \`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:${SAMPLE_RUNTIME_IMAGE_TAG:-1.0.0-preview.7}\`"
     printf '%s\n' "- MoonBit packages: \`sekiban/sekiban-wasm-runtime\` + \`sekiban/sekiban-client\` 0.1.0 (committed manifests are registry-only)"
     printf '%s\n' "- Runtime URL: \`${RUNTIME_URL:-unresolved}\`"
     printf '%s\n' "- Commit: \`$(git rev-parse HEAD 2>/dev/null || echo unknown)\`"

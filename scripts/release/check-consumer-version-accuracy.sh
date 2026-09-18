@@ -3,13 +3,15 @@ set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
 
-package_version="${PACKAGE_VERSION:-${1:-1.0.0-preview.6}}"
+package_version="${PACKAGE_VERSION:-${1:-1.0.0-preview.7}}"
 package_version="${package_version#v}"
 runtime_image_version="${RUNTIME_IMAGE_VERSION:-}"
 nuget_dir="${NUGET_OUTPUT_DIR:-artifacts/nuget}"
 
 if [[ -z "$runtime_image_version" ]]; then
-  runtime_image_version="$(RUNTIME_IMAGE_TAG=preview scripts/release/resolve-runtime-host-image-version.sh)"
+  # During preview prep the moving GHCR `preview` tag may still advertise the
+  # previous immutable image; the lane's package version is the release input.
+  runtime_image_version="$package_version"
 fi
 
 if [[ ! "$package_version" =~ ^1\.0\.0-preview\.[0-9A-Za-z.-]+$ ]]; then

@@ -16,8 +16,8 @@ import sys
 from pathlib import Path
 
 
-EXPECTED_DCB_VERSION = "10.19.0"
-EXPECTED_RUNTIME_PACKAGE_VERSION = "1.0.0-preview.6"
+EXPECTED_DCB_VERSION = "10.22.0"
+EXPECTED_RUNTIME_PACKAGE_VERSION = "1.0.0-preview.7"
 
 DOMAIN_PROJECT = Path(
     "templates/Sekiban.Dcb.WasmRuntime.Templates/content/"

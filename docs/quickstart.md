@@ -17,8 +17,8 @@ All three packages are currently preview packages versioned as
 The Wasmtime package is included in the preview matrix while native asset
 packaging and host policy are finalized.
 
-The current published package line is `1.0.0-preview.6`. <!-- release-lane: current-package-version -->
-The current Sekiban.Dcb baseline is `10.19.0`. <!-- release-lane: current-dcb-version -->
+The current published package line is `1.0.0-preview.7`. <!-- release-lane: current-package-version -->
+The current Sekiban.Dcb baseline is `10.22.0`. <!-- release-lane: current-dcb-version -->
 
 Install with prerelease resolution enabled:
 
@@ -172,7 +172,7 @@ platforms with
 `docker buildx imagetools inspect ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:<tag>`.
 Preview 2 (`1.0.0-preview.2`) is multi-arch but **shim-less** (it predates the
 WASI preview2 shim fix), so `list-query` / materialized-view paths fail against
-it. **Use `1.0.0-preview.3` — the verified, recommended public runtime tag.** <!-- release-lane: current-runtime-image-version --> It
+it. **Use `1.0.0-preview.7` — the verified, recommended public runtime tag.** <!-- release-lane: current-runtime-image-version --> It
 is a published `linux/amd64` + `linux/arm64` manifest list
 (digest `sha256:8bdebccd…`) whose images both carry `/app/libwasmtime.so` **and**
 `/app/libwasmtime_preview2_shim.so`, the moving `preview` tag points at the same
@@ -182,10 +182,11 @@ and Materialized View catch-up). See the verification evidence in
 [`docs/release/runtime-host-preview-3-release-verification.md`](release/runtime-host-preview-3-release-verification.md).
 
 The GHCR runtime-host **container** tag and the **NuGet** package versions are
-independent lanes and move on their own cadence: the latest verified runtime-host
-container tag is **`1.0.0-preview.3`**, while the latest public NuGet packages
-(`Sekiban.Dcb.WasmRuntime`, `…Remote`, `…Wasmtime`) are **`1.0.0-preview.6`**. Do
-not assume the two share a version number.
+independent release lanes that may share a compatible version string. Preview.7
+aligns both at **`1.0.0-preview.7`**: the NuGet packages and the runtime-host
+image tag use the same preview number after the GHCR catch-up publish. Older
+pairs (for example NuGet preview.6 with GHCR preview.3) remain documented as
+historical evidence only.
 
 Rust support now has two lanes. Existing repo-development samples continue to
 use local path dependencies under `src/wasm-projectors/rust`, while the
@@ -196,7 +197,7 @@ versions:
 sekiban-core = "=0.1.0"
 sekiban-derive = "=0.1.0"
 sekiban-wasm = "=0.1.0"
-sekiban-mv = "=0.1.0"
+sekiban-mv = "=0.1.1"
 sekiban-executor = "=0.1.0"
 ```
 
@@ -231,7 +232,7 @@ env -u SAMPLE_RUNTIME_IMAGE_TAG \
 
 It validates command execution, tag-state readback, in-memory projection
 queries, and materialized-view catch-up using only crates.io `=0.1.0` Sekiban
-dependencies and the public runtime image (default `1.0.0-preview.3`, override
+dependencies and the public runtime image (default `1.0.0-preview.7`, override
 with `SAMPLE_RUNTIME_IMAGE_TAG`). This is the published-package counterpart to
 the local path-based `PublicContainer.RsDecider` sample below: same public
 runtime container, but consuming the published crates instead of repository-local

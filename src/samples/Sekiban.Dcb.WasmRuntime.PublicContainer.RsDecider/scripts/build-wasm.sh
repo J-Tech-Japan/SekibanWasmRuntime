@@ -28,6 +28,8 @@ fi
 cp "$WASM_FILE" "$MODULES_DIR/$MODULE_NAME"
 echo "[build-wasm] module: $ARTIFACT_DIR/modules/$MODULE_NAME ($(wc -c < "$MODULES_DIR/$MODULE_NAME") bytes)"
 
+MODULE_SHA256="$(sha256sum "$MODULES_DIR/$MODULE_NAME" | awk '{print $1}')"
+
 cat > "$CONFIG_DIR/sekiban-manifest.json" <<JSON
 {
   "defaultModulePath": "/app/modules/$MODULE_NAME",
@@ -62,6 +64,9 @@ cat > "$CONFIG_DIR/sekiban-manifest.json" <<JSON
     {
       "viewName": "WeatherForecast",
       "viewVersion": 1,
+      "abiVersion": "sekiban-wasm-mv/1",
+      "capabilities": ["query-rows"],
+      "moduleSha256": "$MODULE_SHA256",
       "modulePath": "/app/modules/$MODULE_NAME",
       "logicalTables": [
         "weather_forecast"
