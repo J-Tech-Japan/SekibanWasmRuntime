@@ -88,7 +88,7 @@ also on NuGet but predates that baseline.
 sekiban-core = "0.1.0"
 sekiban-derive = "0.1.0"
 sekiban-wasm = "0.1.0"      # projector-side
-sekiban-mv = "0.1.0"        # materialized views
+sekiban-mv = "0.1.1"        # materialized views (0.1.0 omits mv_metadata abiVersion)
 sekiban-executor = "0.1.0"  # client-side
 ```
 

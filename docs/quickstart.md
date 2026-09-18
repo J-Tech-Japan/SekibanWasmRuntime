@@ -197,7 +197,7 @@ versions:
 sekiban-core = "=0.1.0"
 sekiban-derive = "=0.1.0"
 sekiban-wasm = "=0.1.0"
-sekiban-mv = "=0.1.0"
+sekiban-mv = "=0.1.1"
 sekiban-executor = "=0.1.0"
 ```
 

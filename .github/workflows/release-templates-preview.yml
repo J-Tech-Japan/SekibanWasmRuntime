@@ -109,6 +109,11 @@ jobs:
           RUNTIME_IMAGE_TAG: ${{ env.RUNTIME_PACKAGE_VERSION }}
         run: bash scripts/release/prepare-validation-runtime-image.sh
 
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install wasm-tools (component moduleSha256 for generated build-wasm.sh)
+        run: cargo install wasm-tools --locked
+
       - name: Generated weather runtime smoke
         id: generated-weather-smoke
         shell: bash

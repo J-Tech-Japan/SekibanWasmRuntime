@@ -17,9 +17,13 @@ Sekiban package dependencies are exact crates.io requirements:
 sekiban-core = "=0.1.0"
 sekiban-derive = "=0.1.0"
 sekiban-wasm = "=0.1.0"
-sekiban-mv = "=0.1.0"
+sekiban-mv = "=0.1.1"
 sekiban-executor = "=0.1.0"
 ```
+
+`sekiban-mv` `0.1.0` on crates.io omitted `abiVersion`/`capabilities` from the
+WASM `mv_metadata` export; pin `0.1.1` or newer so the runtime host accepts the
+module.
 
 Run the dependency guard and compile check from the repository root:
 

@@ -21,7 +21,7 @@ sample/reference crates marked `publish = false`.
 | `sekiban-core` | `sekiban-core/Cargo.toml` | Public | Published `0.1.0` |
 | `sekiban-derive` | `sekiban-derive/Cargo.toml` | Public | Published `0.1.0` |
 | `sekiban-wasm` | `sekiban-wasm/Cargo.toml` | Public | Published `0.1.0` |
-| `sekiban-mv` | `sekiban-mv/Cargo.toml` | Public | Published `0.1.0` |
+| `sekiban-mv` | `sekiban-mv/Cargo.toml` | Public | Published `0.1.0`; `0.1.1` adds MV export `abiVersion`/`capabilities` (publish via `rust-v0.1.1`) |
 | `sekiban-executor` | `sekiban-executor/Cargo.toml` | Public | Published `0.1.0` |
 | `sekiban-wasm-domain` | `domain/Cargo.toml` | Internal (`publish = false`) | Never published |
 | `sekiban-wasm-projector` | `wasm-projector/Cargo.toml` | Internal (`publish = false`) | Never published |

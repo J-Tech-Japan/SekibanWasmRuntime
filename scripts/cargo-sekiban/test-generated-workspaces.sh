@@ -113,17 +113,49 @@ import sys
 from pathlib import Path
 
 root = Path(sys.argv[1])
-sekiban = ("sekiban-core", "sekiban-derive", "sekiban-wasm", "sekiban-mv", "sekiban-executor")
+pins = {
+    "sekiban-core": "=0.1.0",
+    "sekiban-derive": "=0.1.0",
+    "sekiban-wasm": "=0.1.0",
+    "sekiban-mv": "=0.1.1",
+    "sekiban-executor": "=0.1.0",
+}
 manifests = sorted(root.glob("*/Cargo.toml"))
 text = "\n".join(path.read_text(encoding="utf-8") for path in manifests)
-for crate in sekiban:
-    if not re.search(rf"^\s*{re.escape(crate)}\s*=\s*\"=0\.1\.0\"\s*$", text, re.MULTILINE):
-        raise SystemExit(f"{crate} is not pinned to exact =0.1.0")
+for crate, pin in pins.items():
+    if not re.search(
+        rf"^\s*{re.escape(crate)}\s*=\s*\"{re.escape(pin)}\"\s*$",
+        text,
+        re.MULTILINE,
+    ):
+        raise SystemExit(f"{crate} is not pinned to exact {pin}")
     if re.search(rf"^\s*{re.escape(crate)}\s*=.*path\s*=", text, re.MULTILINE):
         raise SystemExit(f"{crate} has a local path dependency")
 PY
   (cd "$output" && bash scripts/verify-no-local-sekiban-paths.sh) \
     || fail "registry no-local-path guard failed"
+}
+
+# crates.io sekiban-mv 0.1.0 omits abiVersion/capabilities in mv_metadata. Until
+# 0.1.1 is published, patch the generated registry workspace from this checkout
+# so CI can validate the fixed export without blocking on a manual publish.
+maybe_patch_registry_sekiban_mv() {
+  local output="$1"
+  local version="0.1.1"
+  local code
+  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 \
+    -H 'User-Agent: sekiban-wasm-runtime-generation-check (+https://github.com/J-Tech-Japan/SekibanWasmRuntime)' \
+    "https://crates.io/api/v1/crates/sekiban-mv/${version}" || echo "000")"
+  if [[ "$code" == "200" ]]; then
+    log "registry workspace will resolve sekiban-mv ${version} from crates.io"
+    return 0
+  fi
+  log "patching sekiban-mv ${version} from checkout (not yet on crates.io)"
+  cat >> "$output/Cargo.toml" <<PATCH
+
+[patch.crates-io]
+sekiban-mv = { path = "${ROOT}/src/wasm-projectors/rust/sekiban-mv" }
+PATCH
 }
 
 assert_dev_contract() {
@@ -203,6 +235,7 @@ for output in "$REGISTRY" "$DEV"; do
 done
 
 assert_registry_contract "$REGISTRY"
+maybe_patch_registry_sekiban_mv "$REGISTRY"
 assert_dev_contract "$DEV"
 build_wasm_if_available "$REGISTRY"
 build_wasm_if_available "$DEV"
