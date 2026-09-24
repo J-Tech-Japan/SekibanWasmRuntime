@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Sekiban.Dcb.MaterializedView;
 using Sekiban.Dcb.MaterializedView.Postgres;
@@ -72,7 +73,7 @@ public static class WasmMaterializedViewStartupExtensions
                 wasmExecutor,
                 serviceId,
                 registration.Metadata);
-            await executor.InitializeAsync(host, cancellationToken).ConfigureAwait(false);
+            await executor.InitializeAsync(host, serviceId, cancellationToken).ConfigureAwait(false);
         }
 
         if (logger.IsEnabled(LogLevel.Information))
