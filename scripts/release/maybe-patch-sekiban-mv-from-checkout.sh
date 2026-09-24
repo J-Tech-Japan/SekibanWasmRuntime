@@ -12,6 +12,7 @@ fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 MV_CRATE="$ROOT/src/wasm-projectors/rust/sekiban-mv"
+RUST_WORKSPACE="$ROOT/src/wasm-projectors/rust/Cargo.toml"
 VERSION="0.1.1"
 VENDOR_REL="vendor/sekiban-mv"
 VENDOR_DIR="$WORKSPACE/$VENDOR_REL"
@@ -38,6 +39,48 @@ echo "[maybe-patch-sekiban-mv] vendoring sekiban-mv ${VERSION} into ${VENDOR_REL
 rm -rf "$VENDOR_DIR"
 mkdir -p "$(dirname "$VENDOR_DIR")"
 cp -a "$MV_CRATE/." "$VENDOR_DIR/"
+
+python3 - "$VENDOR_DIR/Cargo.toml" "$MV_CRATE/Cargo.toml" "$RUST_WORKSPACE" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+dest, source_manifest, workspace_manifest = map(Path, sys.argv[1:4])
+text = source_manifest.read_text(encoding="utf-8")
+workspace = workspace_manifest.read_text(encoding="utf-8")
+
+package_block = re.search(r"\[package\][\s\S]*?(?=\n\[|$)", text)
+if package_block is None:
+    raise SystemExit("sekiban-mv [package] section missing")
+
+lines = []
+for raw in package_block.group(0).splitlines():
+    line = raw.rstrip()
+    if re.search(r"\.workspace\s*=\s*true", line):
+        key = line.split(".", 1)[0].strip()
+        wp = re.search(
+            rf"^\s*{re.escape(key)}\s*=\s*(.+?)\s*$",
+            workspace,
+            flags=re.MULTILINE,
+        )
+        if wp is None:
+            raise SystemExit(f"workspace.package.{key} missing")
+        lines.append(f"{key} = {wp.group(1)}")
+        continue
+    lines.append(line)
+
+body = "\n".join(lines).rstrip() + "\n\n"
+body += "[dependencies]\n"
+body += 'sekiban-wasm = "=0.1.0"\n'
+for dep_line in text.splitlines():
+    stripped = dep_line.strip()
+    if stripped.startswith("sekiban-wasm"):
+        continue
+    if stripped.startswith("serde") or stripped.startswith("serde_json") or stripped.startswith("uuid"):
+        body += dep_line.strip() + "\n"
+
+dest.write_text(body, encoding="utf-8")
+PY
 
 cat >> "$WORKSPACE/Cargo.toml" <<PATCH
 
