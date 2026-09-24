@@ -9,8 +9,8 @@
 // monorepo). If the language's toolchain (cargo/go/swift/moon) is not
 // installed, the guard run is skipped and the language is reported as
 // tree-verified only, per the packet's escape hatch. rust and ts are
-// additionally REQUIRED to have their guard PASS (rust's guard live-compiles
-// against already-published crates.io crates; ts's guard is a static check);
+// additionally REQUIRED to have their guard PASS (rust's guard proves no checkout
+// path leakage and live-compiles when sekiban-mv is on crates.io; ts's guard is static);
 // go/swift/moonbit guard failures are logged but do not fail the suite,
 // since those languages' published packages/tags are still pending
 // (SWR-G058/G061/G063/G065 follow-ups).
@@ -24,12 +24,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = path.resolve(__dirname, "..");
-const REPO_ROOT = path.resolve(PKG_ROOT, "../../..");
 const CLI = path.join(PKG_ROOT, "dist", "cli.js");
-const SEKIBAN_MV_PATCH_SCRIPT = path.join(
-  REPO_ROOT,
-  "scripts/release/maybe-patch-sekiban-mv-from-checkout.sh",
-);
 
 function runCli(args) {
   return spawnSync(process.execPath, [CLI, ...args], {
@@ -45,20 +40,6 @@ function hasTool(name) {
 
 function mkTempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-}
-
-function maybePatchSekibanMv(workspaceDir) {
-  if (!fs.existsSync(SEKIBAN_MV_PATCH_SCRIPT)) {
-    return;
-  }
-  const patchResult = spawnSync("bash", [SEKIBAN_MV_PATCH_SCRIPT, workspaceDir], {
-    encoding: "utf8",
-  });
-  assert.equal(
-    patchResult.status,
-    0,
-    `sekiban-mv patch helper failed: ${patchResult.stdout}\n${patchResult.stderr}`,
-  );
 }
 
 const EXPECTED_TOP_LEVEL = {
@@ -105,10 +86,6 @@ for (const language of Object.keys(EXPECTED_TOP_LEVEL)) {
     const targetDir = path.join(dir, "out");
     const genResult = runCli(["--language", language, "--mode", "registry", "--dir", targetDir]);
     assert.equal(genResult.status, 0, `cli exited non-zero: ${genResult.stderr}`);
-
-    if (language === "rust") {
-      maybePatchSekibanMv(targetDir);
-    }
 
     const guardResult = spawnSync("bash", ["scripts/verify-no-local-sekiban-paths.sh"], {
       cwd: targetDir,

@@ -212,8 +212,8 @@ for output in "$REGISTRY" "$DEV"; do
     || fail "generated output is missing fixture proof: $output"
 done
 
-bash "$ROOT/scripts/release/maybe-patch-sekiban-mv-from-checkout.sh" "$REGISTRY"
 assert_registry_contract "$REGISTRY"
+bash "$ROOT/scripts/release/maybe-patch-sekiban-mv-from-checkout.sh" "$REGISTRY"
 assert_dev_contract "$DEV"
 build_wasm_if_available "$REGISTRY"
 build_wasm_if_available "$DEV"

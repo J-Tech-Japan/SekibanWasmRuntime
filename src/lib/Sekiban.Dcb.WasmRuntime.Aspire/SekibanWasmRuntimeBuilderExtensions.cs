@@ -58,11 +58,15 @@ public static class SekibanWasmRuntimeBuilderExtensions
         // Concatenate outside the call: WithEnvironment's interpolated-string overload
         // binds to ReferenceExpression, which only accepts resource value providers.
         var aspNetCoreUrls = "http://0.0.0.0:" + options.TargetPort.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var serviceId = Environment.GetEnvironmentVariable("SEKIBAN_SERVICE_ID") is { Length: > 0 } configuredServiceId
+            ? configuredServiceId
+            : "sekiban-wasm-local";
         runtime = runtime
             .WithEnvironment("ASPNETCORE_URLS", aspNetCoreUrls)
             .WithEnvironment("SEKIBAN_PROJECTION_MODE", options.ProjectionMode)
             .WithEnvironment("SEKIBAN_MANIFEST_PATH", options.ManifestPath)
-            .WithEnvironment("WASM_MODULE_PATH", options.WasmModulePath);
+            .WithEnvironment("WASM_MODULE_PATH", options.WasmModulePath)
+            .WithEnvironment("SEKIBAN_SERVICE_ID", serviceId);
 
         // Overrides win over the standard contract above.
         foreach (var (key, value) in options.EnvironmentVariables)

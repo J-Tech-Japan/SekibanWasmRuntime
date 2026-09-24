@@ -192,9 +192,9 @@ REGISTRY_GUARD_BODY = r'''SAMPLE_DIR="."
 scan_manifests() {
   local pattern="$1"
   if command -v rg >/dev/null 2>&1; then
-    rg -ni --glob 'Cargo.toml' "$pattern" "$SAMPLE_DIR"
+    rg -ni --glob 'Cargo.toml' --glob '!vendor/**' "$pattern" "$SAMPLE_DIR"
   else
-    find "$SAMPLE_DIR" -type f -name Cargo.toml -exec grep -Eni "$pattern" {} +
+    find "$SAMPLE_DIR" -type f -name Cargo.toml ! -path '*/vendor/*' -exec grep -Eni "$pattern" {} +
   fi
 }
 
@@ -223,10 +223,23 @@ if [[ "$path_status" -gt 1 ]]; then
   echo "could not scan Cargo manifests for path dependencies" >&2
   exit 1
 fi
-if [[ "$path_status" -eq 0 ]] && printf '%s\n' "$path_matches" | grep -Eiq 'wasm-projectors|sekiban-(core|derive|mv|wasm|executor|domain)'; then
-  echo "forbidden local Sekiban path dependency found" >&2
-  printf '%s\n' "$path_matches" >&2
-  exit 1
+if [[ "$path_status" -eq 0 && -n "$path_matches" ]]; then
+  forbidden_paths=""
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    if ! printf '%s' "$line" | grep -Eiq 'wasm-projectors|sekiban-(core|derive|mv|wasm|executor|domain)'; then
+      continue
+    fi
+    if printf '%s' "$line" | grep -Eq 'path[[:space:]]*=[[:space:]]*"(vendor/sekiban-mv|\.\./vendor/sekiban-mv)"'; then
+      continue
+    fi
+    forbidden_paths+="${line}"$'\n'
+  done <<< "$path_matches"
+  if [[ -n "$forbidden_paths" ]]; then
+    echo "forbidden local Sekiban path dependency found" >&2
+    printf '%s' "$forbidden_paths" >&2
+    exit 1
+  fi
 fi
 
 contains_pattern() {

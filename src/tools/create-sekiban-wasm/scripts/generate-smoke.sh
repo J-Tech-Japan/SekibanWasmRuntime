@@ -160,12 +160,6 @@ for language in $ALL_LANGUAGES; do
     continue
   fi
 
-  if [[ "$language" == "rust" ]]; then
-    bash "$ROOT/scripts/release/maybe-patch-sekiban-mv-from-checkout.sh" "$target_dir" \
-      >/tmp/csw-smoke-rust-patch.log 2>&1 \
-      || fail_hard "rust registry sekiban-mv patch failed: $(cat /tmp/csw-smoke-rust-patch.log)"
-  fi
-
   if (cd "$target_dir" && bash scripts/verify-no-local-sekiban-paths.sh >/tmp/csw-smoke-guard.log 2>&1); then
     if [[ "$language" == "ts" ]]; then
       if (cd "$target_dir/Client" && npm install --no-audit --no-fund >/tmp/csw-smoke-ts-client-ci.log 2>&1 \
