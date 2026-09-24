@@ -6,7 +6,7 @@ runtime container image:
 - Rust Decider domain and WASM package are built from repository-local Rust
   crates under `vendor`.
 - The Aspire AppHost runs
-  `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3` by default
+  `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.7` by default
   with `AddContainer`, Postgres, and read-only mounts for the generated module
   and manifest.
 - The smoke uses the Rust `RemoteSekibanExecutor`, `Command`, and `ListQuery`

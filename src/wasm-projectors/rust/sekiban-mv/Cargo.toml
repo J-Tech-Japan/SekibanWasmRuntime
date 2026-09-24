@@ -1,6 +1,6 @@
 [package]
 name = "sekiban-mv"
-version = "0.1.0"
+version = "0.1.1"
 description = "Materialized-view WASM boundary contracts for Sekiban Rust modules."
 documentation = "https://docs.rs/sekiban-mv"
 categories = ["wasm", "data-structures"]

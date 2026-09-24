@@ -1,7 +1,7 @@
 # Public Container TypeScript AppHost Sample
 
 Hosts the **public** Sekiban WASM Runtime container
-(`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3`) from an
+(`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.7`) from an
 **Aspire TypeScript AppHost** (`apphost.mts`) using the thin
 [`@sekiban/aspire`](../../lib/sekiban-aspire-ts) helper, with Postgres for the
 event store and materialized views.

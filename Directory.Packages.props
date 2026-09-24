@@ -22,19 +22,19 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.5" />
 
     <!-- Microsoft Extensions -->
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.5" />
     <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.4.0" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.3" />
-    <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.5" />
+    <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.5" />
     <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.4.0" />
 
     <!-- Microsoft Orleans -->
-    <PackageVersion Include="Microsoft.Orleans.Clustering.AzureStorage" Version="10.0.1" />
-    <PackageVersion Include="Microsoft.Orleans.Persistence.AzureStorage" Version="10.0.1" />
-    <PackageVersion Include="Microsoft.Orleans.Persistence.Memory" Version="10.0.1" />
-    <PackageVersion Include="Microsoft.Orleans.Server" Version="10.0.1" />
-    <PackageVersion Include="Microsoft.Orleans.Streaming" Version="10.0.1" />
-    <PackageVersion Include="Microsoft.Orleans.Streaming.AzureStorage" Version="10.0.1" />
+    <PackageVersion Include="Microsoft.Orleans.Clustering.AzureStorage" Version="10.3.1" />
+    <PackageVersion Include="Microsoft.Orleans.Persistence.AzureStorage" Version="10.3.1" />
+    <PackageVersion Include="Microsoft.Orleans.Persistence.Memory" Version="10.3.1" />
+    <PackageVersion Include="Microsoft.Orleans.Server" Version="10.3.1" />
+    <PackageVersion Include="Microsoft.Orleans.Streaming" Version="10.3.1" />
+    <PackageVersion Include="Microsoft.Orleans.Streaming.AzureStorage" Version="10.3.1" />
 
     <!-- OpenTelemetry -->
     <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.3" />
@@ -44,19 +44,19 @@
     <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.15.0" />
 
     <!-- Sekiban DCB -->
-    <PackageVersion Include="Sekiban.Dcb.Core" Version="10.19.0" />
-    <PackageVersion Include="Sekiban.Dcb.Core.Model" Version="10.19.0" />
-    <PackageVersion Include="Sekiban.Dcb.Orleans.Core" Version="10.19.0" />
-    <PackageVersion Include="Sekiban.Dcb.Orleans.WithoutResult" Version="10.19.0" />
-    <PackageVersion Include="Sekiban.Dcb.CosmosDb" Version="10.19.0" />
-    <PackageVersion Include="Sekiban.Dcb.ColdStorage" Version="10.19.0" />
-    <PackageVersion Include="Sekiban.Dcb.Postgres" Version="10.19.0" />
-    <PackageVersion Include="Sekiban.Dcb.Sqlite" Version="10.19.0" />
-    <PackageVersion Include="Sekiban.Dcb.WithoutResult" Version="10.19.0" />
-    <PackageVersion Include="Sekiban.Dcb.WithoutResult.Model" Version="10.19.0" />
-    <PackageVersion Include="Sekiban.Dcb.MaterializedView" Version="10.19.0" />
-    <PackageVersion Include="Sekiban.Dcb.MaterializedView.Postgres" Version="10.19.0" />
-    <PackageVersion Include="Sekiban.Dcb.MaterializedView.Orleans" Version="10.19.0" />
+    <PackageVersion Include="Sekiban.Dcb.Core" Version="10.22.0" />
+    <PackageVersion Include="Sekiban.Dcb.Core.Model" Version="10.22.0" />
+    <PackageVersion Include="Sekiban.Dcb.Orleans.Core" Version="10.22.0" />
+    <PackageVersion Include="Sekiban.Dcb.Orleans.WithoutResult" Version="10.22.0" />
+    <PackageVersion Include="Sekiban.Dcb.CosmosDb" Version="10.22.0" />
+    <PackageVersion Include="Sekiban.Dcb.ColdStorage" Version="10.22.0" />
+    <PackageVersion Include="Sekiban.Dcb.Postgres" Version="10.22.0" />
+    <PackageVersion Include="Sekiban.Dcb.Sqlite" Version="10.22.0" />
+    <PackageVersion Include="Sekiban.Dcb.WithoutResult" Version="10.22.0" />
+    <PackageVersion Include="Sekiban.Dcb.WithoutResult.Model" Version="10.22.0" />
+    <PackageVersion Include="Sekiban.Dcb.MaterializedView" Version="10.22.0" />
+    <PackageVersion Include="Sekiban.Dcb.MaterializedView.Postgres" Version="10.22.0" />
+    <PackageVersion Include="Sekiban.Dcb.MaterializedView.Orleans" Version="10.22.0" />
 
     <!-- Dapper (used by MaterializedView read path) -->
     <PackageVersion Include="Dapper" Version="2.1.66" />

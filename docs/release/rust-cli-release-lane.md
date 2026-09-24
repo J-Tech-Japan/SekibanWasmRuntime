@@ -35,7 +35,7 @@ use the evidence to make a separate publication decision later.
 
 The generated projects target the registry-published Rust SDK train at exact
 0.1.0 and the registry-verified runtime image
-ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3. The
+ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.7. The
 SWR-G091 / #293 proof records:
 
 - registry mode: exact dependency pins, no-local-path guard, metadata/check,

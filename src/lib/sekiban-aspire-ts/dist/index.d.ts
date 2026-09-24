@@ -23,7 +23,7 @@ export interface SekibanAppHostBuilder {
 export interface SekibanWasmRuntimeConfig {
     /** Container image. Defaults to the public GHCR image. */
     image?: string;
-    /** Image tag. Defaults to resolveRuntimeImageTag() (SAMPLE_RUNTIME_IMAGE_TAG override, else 1.0.0-preview.3). */
+    /** Image tag. Defaults to resolveRuntimeImageTag() (SAMPLE_RUNTIME_IMAGE_TAG override, else 1.0.0-preview.7). */
     tag?: string;
     /** Host directory bind-mounted read-only at /app/config (runtime manifest). */
     configDirectory: string;
@@ -52,7 +52,7 @@ export interface SekibanWasmRuntimeConfig {
 /** Default public runtime image. */
 export declare const DEFAULT_RUNTIME_IMAGE = "ghcr.io/j-tech-japan/sekiban-wasm-runtime-host";
 /** Default verified public tag. */
-export declare const DEFAULT_RUNTIME_IMAGE_TAG = "1.0.0-preview.3";
+export declare const DEFAULT_RUNTIME_IMAGE_TAG = "1.0.0-preview.7";
 /**
  * Resolve the runtime image tag the same way the repository samples do:
  * the SAMPLE_RUNTIME_IMAGE_TAG environment variable wins, otherwise the

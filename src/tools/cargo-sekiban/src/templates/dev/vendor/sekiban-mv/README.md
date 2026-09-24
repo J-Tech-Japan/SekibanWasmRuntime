@@ -9,10 +9,10 @@ Sekiban runtime host. The intended public API boundary is the materialized-view
 DTO and projector/export surface; host ABI details remain preview implementation
 detail until the first public release is approved.
 
-Release status: this crate is a repo-local release candidate for a future
-crates.io publication. It is versioned as `0.1.0` and pins its internal
-`sekiban-wasm` dependency to the same version while retaining a repository path
-for local development. It has not been published to crates.io. Samples should
-continue using repository path dependencies until publication is approved.
+Release status: `0.1.0` is published on crates.io but its `export_mv!` metadata
+omitted `abiVersion` and `capabilities`, so the runtime host rejects
+`mv_metadata` from modules built against that line. Use `0.1.1` or newer for
+registry-backed Rust WASM modules. The crate pins `sekiban-wasm = "=0.1.0"` and
+retains a repository path for local development.
 
 License: Elastic License 2.0, matching the repository root license.

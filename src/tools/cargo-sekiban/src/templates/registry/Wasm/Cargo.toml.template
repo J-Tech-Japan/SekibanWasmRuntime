@@ -10,6 +10,6 @@ crate-type = ["cdylib"]
 [dependencies]
 __SEKIBAN_PROJECT_KEBAB__-domain = { path = "../Domain" }
 sekiban-core = "=0.1.0"
-sekiban-mv = "=0.1.0"
+sekiban-mv = "=0.1.1"
 sekiban-wasm = "=0.1.0"
 serde_json = "1"

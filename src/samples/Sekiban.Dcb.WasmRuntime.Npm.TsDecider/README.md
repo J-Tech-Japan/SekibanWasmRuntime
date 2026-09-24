@@ -61,7 +61,7 @@ Generated artifacts are staged under
 `scripts/smoke.sh` runs the full public-artifact end-to-end path: it builds
 the WASM module (if needed), starts an Aspire AppHost that provisions
 Postgres and the **public GHCR runtime container**
-(`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host`, default `1.0.0-preview.3`,
+(`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host`, default `1.0.0-preview.7`,
 override with `SAMPLE_RUNTIME_IMAGE_TAG`), runs the typed TypeScript client,
 and then confirms the materialized view caught up in
 `DcbMaterializedViewPostgres`.

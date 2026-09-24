@@ -11,7 +11,7 @@ What it demonstrates:
 - A C# Decider domain (`Sekiban.Dcb.WithoutResult`, the `10.2.x` contract line)
   compiled to a `wasi-wasm` module — using only the **public** package.
 - An Aspire AppHost that runs the verified public tag
-  `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3` through the
+  `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.7` through the
   `Sekiban.Dcb.WasmRuntime.Aspire` package's single `AddSekibanWasmRuntime`
   call (never `AddProject<...Host>`): the package wires the container image, the
   read-only `.wasm`/manifest bind mounts, the runtime environment contract, and

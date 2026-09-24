@@ -61,7 +61,7 @@ Required approval checklist:
 - Confirm release notes are prepared and identify this as the first Rust
   `0.1.0` preview crate train.
 - Confirm the public GHCR runtime host compatibility target for the external
-  smoke, currently `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3`.
+  smoke, currently `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.7`.
 - Confirm no sample or documentation claims the crates are published before the
   publication gate actually runs.
 

@@ -187,21 +187,14 @@ def storage_relative(relative: Path) -> Path:
     return Path(*parts)
 
 
-def rewrite_registry_guard(destination_root: Path) -> None:
-    path = destination_root / "scripts/verify-no-local-sekiban-paths.sh"
-    text = path.read_text(encoding="utf-8")
-    old = re.compile(
-        r'SAMPLE_DIR="\."\n\nif rg .*?\nfi\n\n(?=# The end-to-end smoke)',
-        flags=re.DOTALL,
-    )
-    new = r'''SAMPLE_DIR="."
+REGISTRY_GUARD_BODY = r'''SAMPLE_DIR="."
 
 scan_manifests() {
   local pattern="$1"
   if command -v rg >/dev/null 2>&1; then
-    rg -ni --glob 'Cargo.toml' "$pattern" "$SAMPLE_DIR"
+    rg -ni --glob 'Cargo.toml' --glob '!vendor/**' "$pattern" "$SAMPLE_DIR"
   else
-    find "$SAMPLE_DIR" -type f -name Cargo.toml -exec grep -Eni "$pattern" {} +
+    find "$SAMPLE_DIR" -type f -name Cargo.toml ! -path '*/vendor/*' -exec grep -Eni "$pattern" {} +
   fi
 }
 
@@ -230,10 +223,23 @@ if [[ "$path_status" -gt 1 ]]; then
   echo "could not scan Cargo manifests for path dependencies" >&2
   exit 1
 fi
-if [[ "$path_status" -eq 0 ]] && printf '%s\n' "$path_matches" | grep -Eiq 'wasm-projectors|sekiban-(core|derive|mv|wasm|executor|domain)'; then
-  echo "forbidden local Sekiban path dependency found" >&2
-  printf '%s\n' "$path_matches" >&2
-  exit 1
+if [[ "$path_status" -eq 0 && -n "$path_matches" ]]; then
+  forbidden_paths=""
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    if ! printf '%s' "$line" | grep -Eiq 'wasm-projectors|sekiban-(core|derive|mv|wasm|executor|domain)'; then
+      continue
+    fi
+    if printf '%s' "$line" | grep -Eq 'path[[:space:]]*=[[:space:]]*"(vendor/sekiban-mv|\.\./vendor/sekiban-mv)"'; then
+      continue
+    fi
+    forbidden_paths+="${line}"$'\n'
+  done <<< "$path_matches"
+  if [[ -n "$forbidden_paths" ]]; then
+    echo "forbidden local Sekiban path dependency found" >&2
+    printf '%s' "$forbidden_paths" >&2
+    exit 1
+  fi
 fi
 
 contains_pattern() {
@@ -246,14 +252,49 @@ contains_pattern() {
 }
 
 '''
-    if not old.search(text):
-        raise SyncError(f"registry guard shape changed; cannot rewrite {path}")
-    rewritten = old.sub(lambda _match: new, text, count=1)
-    old_image_check = "if ! rg -q 'ghcr\\.io/j-tech-japan/sekiban-wasm-runtime-host' \"$APPHOST_PROGRAM\"; then"
-    new_image_check = "if ! contains_pattern 'ghcr\\.io/j-tech-japan/sekiban-wasm-runtime-host' \"$APPHOST_PROGRAM\"; then"
-    if old_image_check not in rewritten:
-        raise SyncError(f"registry AppHost image check shape changed; cannot rewrite {path}")
-    write_text(path, rewritten.replace(old_image_check, new_image_check, 1))
+
+
+def rewrite_registry_guard(destination_root: Path) -> None:
+    path = destination_root / "scripts/verify-no-local-sekiban-paths.sh"
+    text = path.read_text(encoding="utf-8")
+    if "scan_manifests()" in text and "contains_pattern()" in text:
+        return
+
+    legacy_rg = re.compile(
+        r'SAMPLE_DIR="\."\n\nif rg .*?\nfi\n\n(?=# The end-to-end smoke)',
+        flags=re.DOTALL,
+    )
+    sample_scan = re.compile(
+        r'SAMPLE_DIR="\."\n\nscan_(?:cargo|manifests)\(\).*?(?=# The end-to-end smoke)',
+        flags=re.DOTALL,
+    )
+    if legacy_rg.search(text):
+        rewritten = legacy_rg.sub(lambda _match: REGISTRY_GUARD_BODY, text, count=1)
+        old_image_check = (
+            "if ! rg -q 'ghcr\\.io/j-tech-japan/sekiban-wasm-runtime-host' \"$APPHOST_PROGRAM\"; then"
+        )
+        new_image_check = (
+            "if ! contains_pattern 'ghcr\\.io/j-tech-japan/sekiban-wasm-runtime-host' \"$APPHOST_PROGRAM\"; then"
+        )
+        if old_image_check not in rewritten:
+            raise SyncError(f"registry AppHost image check shape changed; cannot rewrite {path}")
+        write_text(path, rewritten.replace(old_image_check, new_image_check, 1))
+        return
+
+    if sample_scan.search(text):
+        rewritten = sample_scan.sub(lambda _match: REGISTRY_GUARD_BODY, text, count=1)
+        old_image_check = (
+            "if ! search_quiet 'ghcr\\.io/j-tech-japan/sekiban-wasm-runtime-host' \"$APPHOST_PROGRAM\"; then"
+        )
+        new_image_check = (
+            "if ! contains_pattern 'ghcr\\.io/j-tech-japan/sekiban-wasm-runtime-host' \"$APPHOST_PROGRAM\"; then"
+        )
+        if old_image_check not in rewritten:
+            raise SyncError(f"registry AppHost image check shape changed; cannot rewrite {path}")
+        write_text(path, rewritten.replace(old_image_check, new_image_check, 1))
+        return
+
+    raise SyncError(f"registry guard shape changed; cannot rewrite {path}")
 
 
 def rewrite_dev_workspace(destination_root: Path) -> None:

@@ -97,7 +97,7 @@ the DCB client proof uses registry installs.
    `@sekiban/dcb-core/domain/client@0.2.0`.
 4. Load the produced `.wasm` in the public runtime container
    (`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host`, default tag
-   `1.0.0-preview.3`, overridable via `SAMPLE_RUNTIME_IMAGE_TAG`) with a
+   `1.0.0-preview.7`, overridable via `SAMPLE_RUNTIME_IMAGE_TAG`) with a
    disposable Postgres sidecar, wait for the strict `/ready` check, then use
    the registry-installed DCB client to commit a `WeatherForecastCreated`
    event and read it back through tag-state and list/count queries.
@@ -119,7 +119,7 @@ sqlite.
 
 `@sekiban/dcb-client` 0.2.0 and `@sekiban/as-wasm` 0.1.0 are compatible with:
 
-- **Runtime image** `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3`
+- **Runtime image** `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.7`
   — proven by the extraction smoke above (module load, command commit,
   tag-state, list query).
 - **Rust 0.1.0 crates** — `@sekiban/dcb-client` speaks the same serialized HTTP
@@ -161,7 +161,7 @@ npm --prefix src/samples/Sekiban.Dcb.WasmRuntime.Npm.TsDecider/Client ci && npm 
 env -u SAMPLE_RUNTIME_IMAGE_TAG bash src/samples/Sekiban.Dcb.WasmRuntime.Npm.TsDecider/scripts/smoke.sh
 ```
 
-Verified locally against `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3`
+Verified locally against `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.7`
 with registry-backed DCB client installs: `CreateWeatherForecast` +
 `UpdateWeatherForecastLocation` committed through `createSekibanExecutor`,
 tag-state read back (version 2, location `Osaka`),

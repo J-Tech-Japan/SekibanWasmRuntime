@@ -42,7 +42,7 @@ const materializedViewDb = postgres.addDatabase("DcbMaterializedViewPostgres");
 
 // The smoke script pins a known host port via SAMPLE_RUNTIME_HOST_PORT so it can
 // reach the runtime deterministically; otherwise Aspire assigns one. The image
-// tag honors SAMPLE_RUNTIME_IMAGE_TAG (default 1.0.0-preview.3) inside the helper.
+// tag honors SAMPLE_RUNTIME_IMAGE_TAG (default 1.0.0-preview.7) inside the helper.
 const hostPortEnv = Number.parseInt(process.env.SAMPLE_RUNTIME_HOST_PORT ?? "", 10);
 
 await addSekibanWasmRuntime(builder, "runtime", {

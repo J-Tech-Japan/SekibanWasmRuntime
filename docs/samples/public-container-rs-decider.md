@@ -10,7 +10,7 @@ What it demonstrates:
 - A Rust weather Decider domain and WASM module built from repo-local crates
   under `src/wasm-projectors/rust`.
 - An Aspire AppHost that uses `AddContainer` with
-  `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3` by default,
+  `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.7` by default,
   plus Postgres databases for `SekibanDcb` and `DcbMaterializedViewPostgres`.
 - Stable staging of `public-container-rs-decider.wasm` and
   `sekiban-manifest.json` under

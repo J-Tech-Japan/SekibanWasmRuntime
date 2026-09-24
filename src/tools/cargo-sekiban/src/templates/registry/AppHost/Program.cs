@@ -3,7 +3,7 @@ using System.IO;
 const string RuntimeImage = "ghcr.io/j-tech-japan/sekiban-wasm-runtime-host";
 var runtimeImageTag = Environment.GetEnvironmentVariable("SAMPLE_RUNTIME_IMAGE_TAG") is { Length: > 0 } tagOverride
     ? tagOverride
-    : "1.0.0-preview.3";
+    : "1.0.0-preview.7";
 const string ModuleFileName = "__SEKIBAN_PROJECT_KEBAB__.wasm";
 
 var builder = DistributedApplication.CreateBuilder(args);
@@ -37,7 +37,8 @@ var runtime = builder
     .WithEnvironment("ASPNETCORE_URLS", "http://0.0.0.0:8080")
     .WithEnvironment("SEKIBAN_PROJECTION_MODE", "dual")
     .WithEnvironment("SEKIBAN_MANIFEST_PATH", "/app/config/sekiban-manifest.json")
-    .WithEnvironment("WASM_MODULE_PATH", $"/app/modules/{ModuleFileName}");
+    .WithEnvironment("WASM_MODULE_PATH", $"/app/modules/{ModuleFileName}")
+    .WithEnvironment("SEKIBAN_SERVICE_ID", Environment.GetEnvironmentVariable("SEKIBAN_SERVICE_ID") ?? "sekiban-wasm-local");
 
 if (int.TryParse(Environment.GetEnvironmentVariable("SAMPLE_RUNTIME_HOST_PORT"), out var hostPort) && hostPort > 0)
 {

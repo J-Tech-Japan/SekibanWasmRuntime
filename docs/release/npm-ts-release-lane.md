@@ -98,7 +98,7 @@ Note: `npm --prefix <pkg> pack --dry-run` fails on npm 10.9.x with `ENOENT`
 ## Compatibility
 
 `@sekiban/as-wasm` and `@sekiban/aspire` 0.1.x pair with runtime image
-`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3` and the Rust
+`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.7` and the Rust
 0.1.0 crates — see `sdk-runtime-compatibility.md` (required docs gate) and
 `npm-ts-preview-readiness.md` for the proven evidence. DCB TypeScript consumers
 pin the public `@sekiban/dcb-core/domain/client@0.2.0` matched set from npm.
