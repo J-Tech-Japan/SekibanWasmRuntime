@@ -35,6 +35,8 @@ public static class WasmMaterializedViewExtensions
     public const string DefaultConnectionStringName = "DcbMaterializedViewPostgres";
     public const string ServiceIdConfigurationKey = "Sekiban:ServiceId";
     public const string ServiceIdEnvironmentKey = "SEKIBAN_SERVICE_ID";
+    public const string InitializationModeConfigurationKey = "Sekiban:MaterializedView:InitializationMode";
+    public const string InitializationModeEnvironmentKey = "Sekiban__MaterializedView__InitializationMode";
 
     /// <summary>
     ///     Resolves and normalizes the runtime host's one immutable service identity.
@@ -70,6 +72,35 @@ public static class WasmMaterializedViewExtensions
                 $"{ServiceIdConfigurationKey} or {ServiceIdEnvironmentKey} must contain a valid explicit ServiceId: {exception.Message}",
                 exception);
         }
+    }
+
+    /// <summary>
+    ///     Resolves the WASM materialized-view initialization mode from configuration or environment.
+    /// </summary>
+    public static MvInitializationMode ResolveMaterializedViewInitializationMode(IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        var configured = configuration[InitializationModeConfigurationKey]
+            ?? configuration[InitializationModeEnvironmentKey];
+        if (string.IsNullOrWhiteSpace(configured))
+        {
+            return MvInitializationMode.VerifyAndExecute;
+        }
+
+        if (configured.Equals(nameof(MvInitializationMode.VerifyAndExecute), StringComparison.OrdinalIgnoreCase))
+        {
+            return MvInitializationMode.VerifyAndExecute;
+        }
+
+        if (configured.Equals(nameof(MvInitializationMode.CreateOrEnsure), StringComparison.OrdinalIgnoreCase))
+        {
+            return MvInitializationMode.CreateOrEnsure;
+        }
+
+        throw new InvalidOperationException(
+            $"{InitializationModeConfigurationKey} or {InitializationModeEnvironmentKey} must be " +
+            $"{nameof(MvInitializationMode.VerifyAndExecute)} or {nameof(MvInitializationMode.CreateOrEnsure)}. " +
+            $"The configured value was '{configured}'.");
     }
 
     /// <summary>
@@ -144,8 +175,8 @@ public static class WasmMaterializedViewExtensions
             // WASM guests are deployed against host-owned, pre-provisioned MV infrastructure.
             // Verify that contract first, then execute projector/checkpoint lifecycle DML through
             // the explicit enforced policy without acquiring any DDL ownership. CreateOrEnsure
-            // remains the compatibility default for callers that intentionally choose it.
-            options.InitializationMode = MvInitializationMode.VerifyAndExecute;
+            // remains an explicit compatibility opt-in for local AppHosts that choose it.
+            options.InitializationMode = ResolveMaterializedViewInitializationMode(configuration);
             options.SqlStatementPolicyMode = MvSqlStatementPolicyMode.Enforced;
             options.SqlStatementPolicy = new WasmMvSqlStatementPolicy();
         });

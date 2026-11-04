@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Sekiban.Dcb.ColdEvents;
 using Sekiban.Dcb.CosmosDb;
 using Sekiban.Dcb.Postgres;
+using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Sqlite;
 
 namespace Sekiban.Dcb.WasmRuntime.Host;
@@ -60,7 +61,8 @@ internal static class RuntimeHostStorageConfigurationResolver
         IServiceCollection services,
         IConfiguration configuration,
         RuntimeHostStorageConfiguration storageConfiguration,
-        string contentRootPath)
+        string contentRootPath,
+        IServiceIdProvider? configuredServiceIdProvider = null)
     {
         switch (storageConfiguration.Provider)
         {
@@ -82,6 +84,11 @@ internal static class RuntimeHostStorageConfigurationResolver
         }
 
         ConfigureColdStorage(services, configuration, contentRootPath);
+
+        if (configuredServiceIdProvider is not null)
+        {
+            services.AddSingleton<IServiceIdProvider>(configuredServiceIdProvider);
+        }
     }
 
     private static void ConfigureColdStorage(

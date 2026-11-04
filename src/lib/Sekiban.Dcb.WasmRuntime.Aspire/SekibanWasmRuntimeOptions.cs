@@ -56,8 +56,8 @@ public sealed class SekibanWasmRuntimeOptions
 
     /// <summary>
     /// Extra or overriding environment variables, applied after the standard contract
-    /// (<c>ASPNETCORE_URLS</c>, <c>SEKIBAN_PROJECTION_MODE</c>, <c>SEKIBAN_MANIFEST_PATH</c>,
-    /// <c>WASM_MODULE_PATH</c>) so entries here win.
+    /// (<c>ASPNETCORE_URLS</c>, <c>SEKIBAN_SERVICE_ID</c>, <c>SEKIBAN_PROJECTION_MODE</c>,
+    /// <c>SEKIBAN_MANIFEST_PATH</c>, <c>WASM_MODULE_PATH</c>) so entries here win.
     /// </summary>
     public IDictionary<string, string> EnvironmentVariables { get; } =
         new Dictionary<string, string>(StringComparer.Ordinal);
