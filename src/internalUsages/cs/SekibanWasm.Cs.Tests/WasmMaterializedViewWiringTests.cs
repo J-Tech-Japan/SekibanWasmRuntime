@@ -53,6 +53,82 @@ public sealed class WasmMaterializedViewWiringTests
         Assert.Contains(WasmMaterializedViewExtensions.ServiceIdEnvironmentKey, exception.Message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(null, MvInitializationMode.VerifyAndExecute)]
+    [InlineData("", MvInitializationMode.VerifyAndExecute)]
+    [InlineData("VerifyAndExecute", MvInitializationMode.VerifyAndExecute)]
+    [InlineData("createorensure", MvInitializationMode.CreateOrEnsure)]
+    public void InitializationModeConfiguration_ResolvesKnownValues(string? configured, MvInitializationMode expected)
+    {
+        var values = new Dictionary<string, string?>();
+        if (configured is not null)
+        {
+            values[WasmMaterializedViewExtensions.InitializationModeConfigurationKey] = configured;
+        }
+
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(values).Build();
+
+        Assert.Equal(expected, WasmMaterializedViewExtensions.ResolveMaterializedViewInitializationMode(configuration));
+    }
+
+    [Fact]
+    public void InitializationModeConfiguration_ReadsEnvironmentKey()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [WasmMaterializedViewExtensions.InitializationModeEnvironmentKey] = "CreateOrEnsure"
+            })
+            .Build();
+
+        Assert.Equal(MvInitializationMode.CreateOrEnsure,
+            WasmMaterializedViewExtensions.ResolveMaterializedViewInitializationMode(configuration));
+    }
+
+    [Theory]
+    [InlineData("VerifyOnly")]
+    [InlineData("UnknownMode")]
+    public void InitializationModeConfiguration_RejectsUnsupportedValues(string configured)
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [WasmMaterializedViewExtensions.InitializationModeConfigurationKey] = configured
+            })
+            .Build();
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            WasmMaterializedViewExtensions.ResolveMaterializedViewInitializationMode(configuration));
+
+        Assert.Contains(WasmMaterializedViewExtensions.InitializationModeConfigurationKey, exception.Message, StringComparison.Ordinal);
+        Assert.Contains(WasmMaterializedViewExtensions.InitializationModeEnvironmentKey, exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RuntimeRegistration_SelectsCreateOrEnsureWhenConfigured()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:DcbMaterializedViewPostgres"] = "Host=unused;Database=unused",
+                [WasmMaterializedViewExtensions.InitializationModeConfigurationKey] = "CreateOrEnsure"
+            })
+            .Build();
+
+        Assert.True(services.AddSekibanWasmMaterializedViewRuntime(
+            configuration,
+            "unused.wasm",
+            [new WasmMvApplyHostRegistration("ContractView", 1, ["main"])],
+            "tenant-a",
+            validatedModule: WasmMaterializedViewValidationResult.ForTesting("unused.wasm")));
+
+        using var provider = services.BuildServiceProvider();
+        var options = provider.GetRequiredService<IOptions<MvOptions>>().Value;
+        Assert.Equal(MvInitializationMode.CreateOrEnsure, options.InitializationMode);
+    }
+
     [Fact]
     public async Task RuntimeRegistration_BindsHostedWorkerToExactNormalizedServiceId()
     {

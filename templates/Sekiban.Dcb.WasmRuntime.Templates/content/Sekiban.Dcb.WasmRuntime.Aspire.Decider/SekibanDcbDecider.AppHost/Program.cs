@@ -67,6 +67,12 @@ if (int.TryParse(Environment.GetEnvironmentVariable("SAMPLE_RUNTIME_HOST_PORT"),
     runtimeOptions.HostPort = hostPort;
 }
 
+var configuredServiceId = Environment.GetEnvironmentVariable("SEKIBAN_SERVICE_ID");
+runtimeOptions.EnvironmentVariables["SEKIBAN_SERVICE_ID"] = string.IsNullOrWhiteSpace(configuredServiceId)
+    ? "sekiban-wasm-local"
+    : configuredServiceId;
+runtimeOptions.EnvironmentVariables["Sekiban__MaterializedView__InitializationMode"] = "CreateOrEnsure";
+
 builder.AddSekibanWasmRuntime("runtime", runtimeOptions);
 
 builder.Build().Run();

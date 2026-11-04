@@ -27,11 +27,25 @@ Rust, Go, TypeScript, Swift, and MoonBit guests currently expose the common iden
 metadata but do not yet expose a provider-neutral schema description. The explicit decision for
 this release is **verified-execution deferral** for those guests: `GetSchemaContract` returns
 `null`, the empty fallback is treated as `SchemaContractUnavailable`, and the host fails closed
-before any lifecycle DML. The production WASM runtime explicitly selects `VerifyAndExecute`: it
-verifies host-provisioned schema and registry bindings, then runs projector/checkpoint DML through
-the enforced `WasmMvSqlStatementPolicy` without taking CREATE/ALTER/DROP ownership. `CreateOrEnsure`
-remains available only to callers that intentionally configure the DCB compatibility path. The
-deferral remains until each guest can truthfully describe every registered table, column family,
+before any lifecycle DML unless initialization mode is explicitly opted in. The production WASM
+runtime default is `VerifyAndExecute` (configuration key
+`Sekiban:MaterializedView:InitializationMode`, environment key
+`Sekiban__MaterializedView__InitializationMode`): it verifies host-provisioned schema and registry
+bindings, then runs projector/checkpoint DML through the enforced `WasmMvSqlStatementPolicy`
+without taking CREATE/ALTER/DROP ownership at startup. `CreateOrEnsure` is accepted only through
+those keys; `VerifyOnly` and unknown values are rejected at registration. Local dev AppHosts set
+`CreateOrEnsure` explicitly: the repository dev AppHost, the Aspire decider template AppHost
+(`SekibanWasmRuntimeOptions.EnvironmentVariables`), and both cargo-sekiban generated AppHost
+templates. The public `AddSekibanWasmRuntime` helper does not set initialization mode. The runtime
+does not provision materialized-view schema at host startup.
+
+Event-store, Orleans, and the materialized-view worker share one configured ServiceId
+(`Sekiban:ServiceId` / `SEKIBAN_SERVICE_ID`). Rows previously written under the implicit ServiceId
+`default` (when storage registration overwrote the host provider) are not visible after this
+alignment; the configured id (for example `sekiban-wasm-local` on the dev AppHost default) is the
+partition key going forward. This repository does not copy or rewrite historical `default` rows.
+
+The deferral remains until each guest can truthfully describe every registered table, column family,
 nullability, key, index, and relevant default/generated expression. No package or release is
 published by this repository change.
 

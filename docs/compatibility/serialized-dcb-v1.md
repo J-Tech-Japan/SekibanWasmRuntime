@@ -278,25 +278,95 @@ as 5.4.
 
 ## 6. Error taxonomy
 
+### 6.1 Authority
+
+The public failure-code vocabulary for shared semantics is frozen in
+`@sekiban/dcb-client@0.3.0` at git head
+`f5dc327c7401ebef7ccc66fd01516fb467d26c7d`
+(`packages/dcb-client/src/classification.ts` exported `FAILURE_KINDS`;
+matching safe-message keys in `packages/dcb-client/src/errors.ts`). When a
+runtime-host HTTP body expresses a semantic present in that table, it MUST use
+the exact `FAILURE_KINDS` spelling and MUST NOT invent an alternate.
+
+Host-only canonical addition (not in `FAILURE_KINDS`): `scope.identity_missing`.
+If a host later exposes service-scope conditions over HTTP, the mandatory
+spellings are `scope.mismatch` (403 default) and `scope.identity_missing`
+(platform fault / 503 on dcb-ts). At measured main the runtime host resolves
+required service identity at startup and has no path/deployment identity
+comparison route, so neither scope condition is an HTTP surface today; this
+page reserves the exact spellings only.
+
+### 6.2 Response shape
+
 The response body MUST be JSON and MUST contain an `error` string. A stable
-`code` is required for envelope-shape failures and is recommended for all
-other failures. Message text is diagnostic, not a compatibility key. Raw
-collection-shape rejections use fixed, request-safe descriptors —
-`MissingCollectionMember`, `InvalidCollectionMember`, `AliasCollectionMember`,
-or `AmbiguousCollectionMember` — inside the existing
+`code` is required for envelope-shape failures and for every failure whose
+semantic matches `FAILURE_KINDS`. Message text is diagnostic, not a
+compatibility key. Raw collection-shape rejections use fixed, request-safe
+descriptors — `MissingCollectionMember`, `InvalidCollectionMember`,
+`AliasCollectionMember`, or `AmbiguousCollectionMember` — inside the existing
 `malformed_commit_envelope` message; no request content is copied into the
 response.
+
+### 6.3 Runtime-host inventory (SWR-G093)
+
+| Host surface | `code` | HTTP | Disposition |
+| --- | --- | --- | --- |
+| malformed serialized commit envelope | `malformed_commit_envelope` | 400 | SWR-only wire-grammar diagnostic; not application-command `invalid_command_input` |
+| unsupported serialized commit version | `unsupported_commit_envelope_version` | 400 | SWR-only wire-grammar diagnostic; not client-transport `unsupported_capability` |
+| read-path timeout (tag-state, query, list-query) | `timeout` | 504 | exact `FAILURE_KINDS` semantic |
+| commit-path timeout | `unknown_outcome` | 504 | exact `FAILURE_KINDS` semantic; dispatch may have durably written before timeout |
+| projection intentionally disabled/unavailable (query, list-query) | `projection_unavailable` | 503 | exact `FAILURE_KINDS` semantic |
+| consistency conflict | `consistency_conflict` | 400 | exact `FAILURE_KINDS` semantic |
+| partial write | `partial_write` | 500 or 400 | exact `FAILURE_KINDS` semantic |
+| ambiguous validation / unclassified 400/500 | *(none)* | 400/500 | no `code`; status/message alone is insufficient to choose a public semantic |
+| readiness status payload | *(none)* | 503 | status/checks payload, not an error body |
+| service-scope mismatch | `scope.mismatch` | 403 | reserved; route absent on current host |
+| missing platform identity | `scope.identity_missing` | 503 | reserved; HTTP path absent on current host |
+| generic host fault | `internal_error` | 500 | documented SWR-only diagnostic; not relabeled as shared `transport` |
+
+Read-path and commit-path timeouts both return HTTP 504 but MUST use distinct
+codes: read waits use `timeout`; commit dispatch uses `unknown_outcome`
+because the write may already have happened.
+
+The generic `validation_error` row is not emitted by the runtime host. Where
+evidence exists, route-specific reserved/recommended canonical spellings are:
+
+| Condition (when exposed) | Reserved/recommended `code` | Reference HTTP status |
+| --- | --- | --- |
+| invalid tag, tag-state ID, query, or candidate relationship | `invalid_command_input` or more specific `FAILURE_KINDS` key when exact | 400 |
+| duplicate consistency tag or unknown consistency tag | `duplicate_consistency_entry` or `invalid_consistency` when exact | 400 |
+
+Those reserved rows do not claim the current host emits a `code` for those
+conditions.
+
+### 6.4 Normative code table
 
 | Code/class | Meaning | Reference HTTP status |
 | --- | --- | --- |
 | `malformed_commit_envelope` | Invalid JSON/shape, missing or `null` required collections, aliases or official/alias mixtures, duplicate or case-variant required members, wrong version member, null SUID expectation, or unsupported member type | 400 |
 | `unsupported_commit_envelope_version` | `version` is an unsupported number | 400 |
 | `consistency_conflict` | Exact/empty expectation did not match the authoritative tag head, or a reservation is active | 400 |
-| `validation_error` | Invalid tag, tag-state ID, query, or candidate relationship | 400 |
 | `projection_unavailable` | The requested query projection is intentionally disabled or unavailable | 503 |
-| `timeout` | The storage/projection wait exceeded its bound | 504 |
+| `timeout` | Read-side storage/projection wait exceeded its bound | 504 |
+| `unknown_outcome` | Commit dispatch exceeded its bound; the write may have happened | 504 |
 | `partial_write` | Some durable records exist and some requested records do not | 500 or 400, with the explicit report below |
-| `internal_error` | No more specific public classification is available | 500 |
+| `scope.mismatch` | Path/deployment service identity does not match the configured service | 403 |
+| `scope.identity_missing` | Required platform service identity is absent (host-only canonical spelling) | 503 |
+| `internal_error` | SWR-only: no more specific public classification is available | 500 |
+
+### 6.5 Client features not implemented by this host
+
+The runtime host does not emit `query_params_unsupported`. V1 query and
+list-query routes continue to accept `queryType` and `queryParamsJson` as
+documented in §5.4–5.5. A future rejection of an unsupported parameter shape
+MUST use the exact `query_params_unsupported` spelling from `@sekiban/dcb-client`
+rather than inventing a new code.
+
+The runtime host does not implement
+`POST /api/sekiban/serialized/conditional-commit`. That route is absent (HTTP
+404). `@sekiban/dcb-client@0.3.0` classifies that 404 as unsupported with code
+`conditional_commit_unsupported` via its built-in HTTP result mapping; this host
+does not add a 501 body to imitate that shim.
 
 ## 7. Storage outcome and partial failure
 
@@ -346,4 +416,7 @@ downstream/storage-lane verification.
 This V1 contract does not define projection or materialized-view ABI, WASM
 exports, V2 envelopes, `RemoteSekibanExecutor` behaviour, TypeScript or
 Cloudflare integration, release/package publication, or performance/load
-characteristics.
+characteristics. Typed query authoring (`defineQueryView`, `defineQuery`,
+`defineListQuery`) and conditional commit over
+`POST /api/sekiban/serialized/conditional-commit` are also out of scope for
+this page; §6.5 records how this host treats those client capabilities today.

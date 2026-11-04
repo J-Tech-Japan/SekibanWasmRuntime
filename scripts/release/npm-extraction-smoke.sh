@@ -91,7 +91,7 @@ write_report() {
     printf '# npm Extraction Smoke\n\n'
     printf '%s\n' "- Result: **$result**"
     printf '%s\n' "- Detail: $detail"
-    printf '%s\n' "- Packages: \`@sekiban/as-wasm@$AS_VERSION\` (packed tarball) + \`@sekiban/dcb-core/domain/client@0.2.0\` (registry)"
+    printf '%s\n' "- Packages: \`@sekiban/as-wasm@$AS_VERSION\` (packed tarball) + \`@sekiban/dcb-core/domain/client@0.3.0\` (registry)"
     printf '%s\n' "- Runtime image: \`$RUNTIME_IMAGE\`${RUNTIME_IMAGE_DETAIL:+ ($RUNTIME_IMAGE_DETAIL)}"
     printf '%s\n' "- Service id: \`$SERVICE_ID\`"
     printf '%s\n' "- Container load: $CONTAINER_RESULT${CONTAINER_DETAIL:+ — $CONTAINER_DETAIL}"
@@ -156,7 +156,7 @@ cp "$SMALL_CLIENT/package.json" "$CLIENT_SMOKE_DIR/package.json"
 (cd "$CLIENT_SMOKE_DIR" && npm install --no-audit --no-fund >/dev/null 2>&1) || fail "registry npm install failed for DCB client"
 for pkg in @sekiban/dcb-core @sekiban/dcb-domain @sekiban/dcb-client; do
   resolved="$(node -p "require('$CLIENT_SMOKE_DIR/package-lock.json').packages['node_modules/${pkg}'].version || ''")"
-  [[ "$resolved" == "0.2.0" ]] || fail "$pkg resolved to '$resolved' instead of registry 0.2.0"
+  [[ "$resolved" == "0.3.0" ]] || fail "$pkg resolved to '$resolved' instead of registry 0.3.0"
 done
 (cd "$CLIENT_SMOKE_DIR" && npm run build && npm test) || fail "registry-backed client build/test failed"
 
@@ -261,6 +261,6 @@ if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
     || fail "Docker is available but container runtime proof did not pass ($CONTAINER_RESULT${CONTAINER_DETAIL:+ — $CONTAINER_DETAIL})"
 fi
 
-write_report "PASS" "Packed @sekiban/as-wasm, compiled projector wasm, registry @sekiban/dcb-* 0.2.0 client build/test succeeded, and container runtime check ${CONTAINER_RESULT}."
+write_report "PASS" "Packed @sekiban/as-wasm, compiled projector wasm, registry @sekiban/dcb-* 0.3.0 client build/test succeeded, and container runtime check ${CONTAINER_RESULT}."
 log "PASS (container load: $CONTAINER_RESULT)"
 exit 0

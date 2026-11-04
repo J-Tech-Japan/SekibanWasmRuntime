@@ -55,7 +55,7 @@ async function packageVersion(packageName) {
 }
 
 async function assertExactPackagePin() {
-  const expectedPackageVersion = fixture.dcbDomainPackageVersion ?? "0.2.0";
+  const expectedPackageVersion = fixture.dcbDomainPackageVersion ?? "0.3.0";
   const expectedZod = fixture.zod ?? "4.4.3";
   const installedPackage = JSON.parse(
     await readFile(join(packageRoot, "node_modules/@sekiban/dcb-domain/package.json"), "utf8"),
@@ -143,7 +143,7 @@ async function verifyPinnedUpstream(upstreamRoot) {
 async function publishedPackageProvenance(upstreamRoot, stageRoot) {
   const upstreamPackageRoot = join(upstreamRoot, "packages/dcb-domain");
   const upstreamPackage = JSON.parse(await readFile(join(upstreamPackageRoot, "package.json"), "utf8"));
-  const expectedPackageVersion = fixture.dcbDomainPackageVersion ?? "0.2.0";
+  const expectedPackageVersion = fixture.dcbDomainPackageVersion ?? "0.3.0";
   if (upstreamPackage.version !== expectedPackageVersion) {
     throw new Error([
       "Pinned upstream dcb-domain package version mismatch.",
@@ -364,7 +364,7 @@ async function linkStagedPackage(stagedPackage) {
   const scopeDirectory = join(packageRoot, "node_modules/@sekiban");
   const linkPath = join(scopeDirectory, "dcb-domain");
   await mkdir(scopeDirectory, { recursive: true });
-  const expectedPackageVersion = fixture.dcbDomainPackageVersion ?? "0.2.0";
+  const expectedPackageVersion = fixture.dcbDomainPackageVersion ?? "0.3.0";
   const stagedRealPath = await realpath(stagedPackage);
   try {
     const current = await lstat(linkPath);

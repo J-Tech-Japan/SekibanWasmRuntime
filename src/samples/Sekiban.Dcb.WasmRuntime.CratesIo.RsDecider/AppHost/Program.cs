@@ -35,6 +35,8 @@ var runtime = builder
     .WithBindMount(configDir, "/app/config", isReadOnly: true)
     .WithBindMount(modulesDir, "/app/modules", isReadOnly: true)
     .WithEnvironment("ASPNETCORE_URLS", "http://0.0.0.0:8080")
+    .WithEnvironment("SEKIBAN_SERVICE_ID", Environment.GetEnvironmentVariable("SEKIBAN_SERVICE_ID") ?? "sekiban-wasm-local")
+    .WithEnvironment("Sekiban__MaterializedView__InitializationMode", "CreateOrEnsure")
     .WithEnvironment("SEKIBAN_PROJECTION_MODE", "dual")
     .WithEnvironment("SEKIBAN_MANIFEST_PATH", "/app/config/sekiban-manifest.json")
     .WithEnvironment("WASM_MODULE_PATH", $"/app/modules/{ModuleFileName}")
