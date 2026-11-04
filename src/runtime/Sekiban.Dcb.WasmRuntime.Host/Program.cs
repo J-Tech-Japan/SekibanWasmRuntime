@@ -170,7 +170,8 @@ RuntimeHostStorageConfigurationResolver.ConfigureServices(
     builder.Services,
     builder.Configuration,
     storageConfiguration,
-    builder.Environment.ContentRootPath);
+    builder.Environment.ContentRootPath,
+    serviceIdProvider);
 builder.Services.AddSekibanDcbSharedRuntime();
 builder.Services.AddSingleton<IEventSubscriptionResolver>(_ =>
     new DefaultOrleansEventSubscriptionResolver(
