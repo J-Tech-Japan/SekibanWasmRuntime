@@ -2,7 +2,7 @@ namespace Sekiban.Dcb.WasmRuntime.Host;
 
 /// <summary>
 ///     Stable JSON error bodies for runtime-host HTTP endpoints whose semantics match
-///     <c>@sekiban/dcb-client@0.2.0</c> <c>FAILURE_KINDS</c>.
+///     <c>@sekiban/dcb-client@0.3.0</c> <c>FAILURE_KINDS</c>.
 /// </summary>
 internal static class RuntimeHostErrorResults
 {

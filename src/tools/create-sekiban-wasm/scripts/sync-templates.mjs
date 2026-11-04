@@ -144,7 +144,7 @@ function applyReadmeContentFixes(text, language, mode) {
       )
       .replace(
         "- `tarball` (monorepo only): packs `@sekiban/as-wasm` from `src/lib/sekiban-as-wasm`\n" +
-          "  with `npm pack` while the Client installs published `@sekiban/dcb-*@0.2.0`\n" +
+          "  with `npm pack` while the Client installs published `@sekiban/dcb-*@0.3.0`\n" +
           "  from the registry.",
         "- `tarball`: packs `@sekiban/as-wasm` from a monorepo checkout with `npm pack`.\n" +
           "  The Client uses published `@sekiban/dcb-core`, `@sekiban/dcb-domain`, and\n" +
