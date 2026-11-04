@@ -98,7 +98,7 @@ if (
 }
 if (
   measurements.packageProvenance?.status === undefined ||
-  measurements.packagePin?.dcbDomainPackage !== "@sekiban/dcb-domain@0.2.0" ||
+  measurements.packagePin?.dcbDomainPackage !== "@sekiban/dcb-domain@0.3.0" ||
   measurements.packagePin?.zod !== "4.4.3" ||
   measurements.zodStaticScan?.runtimeFiles === undefined ||
   measurements.componentBundleScan === undefined

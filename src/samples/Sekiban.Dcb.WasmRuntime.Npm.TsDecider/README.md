@@ -19,9 +19,9 @@ Sekiban package dependencies are exact npm requirements:
 
 ```json
 "@sekiban/as-wasm": "0.1.0"              // Wasm/package.json — lane-ready, unpublished in this repo
-"@sekiban/dcb-client": "0.2.0"           // Client/package.json — published on npm
-"@sekiban/dcb-core": "0.2.0"             // transitive via dcb-client
-"@sekiban/dcb-domain": "0.2.0"           // transitive via dcb-client
+"@sekiban/dcb-client": "0.3.0"           // Client/package.json — published on npm
+"@sekiban/dcb-core": "0.3.0"             // transitive via dcb-client
+"@sekiban/dcb-domain": "0.3.0"           // transitive via dcb-client
 ```
 
 `@sekiban/dcb-core`, `@sekiban/dcb-domain`, and `@sekiban/dcb-client` are

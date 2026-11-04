@@ -60,7 +60,7 @@ and `npm run verify:component` asserts the built artifact exposes a four-argumen
 | gitBlob | `78b0c67e5f9e208cccdd7a66f807e8c654542d39` |
 | sha256 | `2f5c15be3f97ca9e0f355e828541795b9b18087add31f2a139dc81fed4c93705` |
 | bytes | `13769` |
-| dcbDomainPackage | `@sekiban/dcb-domain@0.2.0` |
+| dcbDomainPackage | `@sekiban/dcb-domain@0.3.0` |
 | zod | `4.4.3` |
 
 Advance the pin deliberately: update the fixture, re-fetch `src/domain.ts` from
@@ -79,7 +79,7 @@ via `create-instance("TagProbeProjector")` for tag-fidelity integration tests bu
 is deliberately omitted from `get-event-types`, which remains the pinned
 meeting-room surface only.
 
-- `src/tag-fidelity.test.mjs` — Node controls against `@sekiban/dcb-domain@0.2.0`:
+- `src/tag-fidelity.test.mjs` — Node controls against `@sekiban/dcb-domain@0.3.0`:
   - distinctive multi-tag input is preserved in state;
   - `eventTags: []` throws `RUNTIME_EVENT_TAGS_EMPTY`;
   - omitted `eventTags` yields synthetic `probe:__runtime__`, unequal to real tags.
@@ -111,7 +111,7 @@ cargo build --release --manifest-path ../../external/wasmtime-dotnet/native/wasm
 Normal CI deliberately excludes `TypeScriptComponentGuestTests`, which carry
 the xUnit trait `[Trait("Category", "PrivateUpstreamComponent")]`, with
 `--filter 'Category!=PrivateUpstreamComponent'`. The component path depends on
-the pinned upstream checkout and `@sekiban/dcb-domain@0.2.0`. This is an
+the pinned upstream checkout and `@sekiban/dcb-domain@0.3.0`. This is an
 explicit test selection, not a pass-on-missing-artifact fallback: the local
 commands above remain runnable for authorized developers and still fail when the
 component or Preview2 shim is absent.
@@ -119,7 +119,7 @@ component or Preview2 shim is absent.
 `npm run build:component` performs all of the following in scratch space:
 
 - checks the pinned upstream commit, Git blob, byte length, and SHA-256;
-- resolves `@sekiban/dcb-domain@0.2.0` from the public npm registry when available;
+- resolves `@sekiban/dcb-domain@0.3.0` from the public npm registry when available;
 - runs the pinned upstream boundary checker without modifying it;
 - compiles the consumer with zod `4.4.3` and the locked `jco@1.16.1` /
   `componentize-js@0.19.3` toolchain;

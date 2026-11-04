@@ -13,12 +13,12 @@ function applyProbeEvent(eventTags) {
   });
 }
 
-test("@sekiban/dcb-domain@0.2.0 preserves distinctive saved tags in projector state", () => {
+test("@sekiban/dcb-domain@0.3.0 preserves distinctive saved tags in projector state", () => {
   const next = applyProbeEvent(distinctiveTags);
   assert.deepEqual(next.observedTagIds, distinctiveTags);
 });
 
-test("@sekiban/dcb-domain@0.2.0 rejects eventTags: [] with RUNTIME_EVENT_TAGS_EMPTY", () => {
+test("@sekiban/dcb-domain@0.3.0 rejects eventTags: [] with RUNTIME_EVENT_TAGS_EMPTY", () => {
   assert.throws(
     () => applyProbeEvent([]),
     (error) => {
@@ -29,7 +29,7 @@ test("@sekiban/dcb-domain@0.2.0 rejects eventTags: [] with RUNTIME_EVENT_TAGS_EM
   );
 });
 
-test("@sekiban/dcb-domain@0.2.0 synthesizes probe:__runtime__ when eventTags is omitted", () => {
+test("@sekiban/dcb-domain@0.3.0 synthesizes probe:__runtime__ when eventTags is omitted", () => {
   const next = tagProbeProjector.apply(tagProbeProjector.initialState, {
     eventType: "ProbePing",
     payload: {},

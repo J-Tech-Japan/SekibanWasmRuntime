@@ -281,8 +281,8 @@ as 5.4.
 ### 6.1 Authority
 
 The public failure-code vocabulary for shared semantics is frozen in
-`@sekiban/dcb-client@0.2.0` at git head
-`9878fff31b60a478a38480b1eeb38b38f6007d5d`
+`@sekiban/dcb-client@0.3.0` at git head
+`f5dc327c7401ebef7ccc66fd01516fb467d26c7d`
 (`packages/dcb-client/src/classification.ts` exported `FAILURE_KINDS`;
 matching safe-message keys in `packages/dcb-client/src/errors.ts`). When a
 runtime-host HTTP body expresses a semantic present in that table, it MUST use
@@ -354,6 +354,20 @@ conditions.
 | `scope.identity_missing` | Required platform service identity is absent (host-only canonical spelling) | 503 |
 | `internal_error` | SWR-only: no more specific public classification is available | 500 |
 
+### 6.5 Client features not implemented by this host
+
+The runtime host does not emit `query_params_unsupported`. V1 query and
+list-query routes continue to accept `queryType` and `queryParamsJson` as
+documented in §5.4–5.5. A future rejection of an unsupported parameter shape
+MUST use the exact `query_params_unsupported` spelling from `@sekiban/dcb-client`
+rather than inventing a new code.
+
+The runtime host does not implement
+`POST /api/sekiban/serialized/conditional-commit`. That route is absent (HTTP
+404). `@sekiban/dcb-client@0.3.0` classifies that 404 as unsupported with code
+`conditional_commit_unsupported` via its built-in HTTP result mapping; this host
+does not add a 501 body to imitate that shim.
+
 ## 7. Storage outcome and partial failure
 
 The contract does not promise atomicity for every provider. A provider with a
@@ -402,4 +416,7 @@ downstream/storage-lane verification.
 This V1 contract does not define projection or materialized-view ABI, WASM
 exports, V2 envelopes, `RemoteSekibanExecutor` behaviour, TypeScript or
 Cloudflare integration, release/package publication, or performance/load
-characteristics.
+characteristics. Typed query authoring (`defineQueryView`, `defineQuery`,
+`defineListQuery`) and conditional commit over
+`POST /api/sekiban/serialized/conditional-commit` are also out of scope for
+this page; §6.5 records how this host treats those client capabilities today.
