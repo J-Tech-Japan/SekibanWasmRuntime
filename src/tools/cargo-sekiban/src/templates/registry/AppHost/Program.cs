@@ -39,8 +39,7 @@ var runtime = builder
     .WithEnvironment("Sekiban__MaterializedView__InitializationMode", "CreateOrEnsure")
     .WithEnvironment("SEKIBAN_PROJECTION_MODE", "dual")
     .WithEnvironment("SEKIBAN_MANIFEST_PATH", "/app/config/sekiban-manifest.json")
-    .WithEnvironment("WASM_MODULE_PATH", $"/app/modules/{ModuleFileName}")
-    .WithEnvironment("SEKIBAN_SERVICE_ID", Environment.GetEnvironmentVariable("SEKIBAN_SERVICE_ID") ?? "sekiban-wasm-local");
+    .WithEnvironment("WASM_MODULE_PATH", $"/app/modules/{ModuleFileName}");
 
 if (int.TryParse(Environment.GetEnvironmentVariable("SAMPLE_RUNTIME_HOST_PORT"), out var hostPort) && hostPort > 0)
 {

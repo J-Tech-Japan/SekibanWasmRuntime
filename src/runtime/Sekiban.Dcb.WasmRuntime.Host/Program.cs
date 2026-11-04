@@ -260,11 +260,6 @@ if (storageConfiguration.RequiresRelationalMigration)
     await app.MigrateSekibanDcbDatabaseAsync();
 }
 
-if (materializedViewEnabled)
-{
-    await app.ProvisionWasmMaterializedViewSchemaAsync(configuredServiceId, wasmMvRegistrations);
-}
-
 app.MapOpenApi();
 
 // The WASM runtime host is intentionally generic: its only contract is (a) run WASM modules and

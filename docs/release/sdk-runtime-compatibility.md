@@ -25,8 +25,8 @@ The registry-verified current runtime-host tag is `1.0.0-preview.7`. <!-- releas
 | C# scaffolding `Sekiban.Dcb.WasmRuntime.Templates` (`sekiban-wasm-decider`) | 1.0.0-preview.7 (unpublished) | NuGet via `templates-v*` lane (Trusted Publishing pending) | `1.0.0-preview.7` | Prepared/Unpublished | SWR-G090 / #291 + preview.7 marker refresh: locally packed nupkg, isolated-hive generation with `IncludeTests` true/false, generated Domain/AppHost restore/build/test, and Docker-conditional weather smoke; validation never publishes |
 
 Framework baseline: preview.7 aligns the NuGet/runtime-host lanes on
-`1.0.0-preview.7` with Sekiban.Dcb `10.22.0` (`dcb-v10.22.0`). The C# scaffolding
-row tracks the generated Domain pin `10.22.0`. All
+`1.0.0-preview.7` with Sekiban.Dcb `10.23.4` (`dcb-v10.23.4`). The C# scaffolding
+row tracks the generated Domain pin `10.23.4`. All
 rows speak the V1
 serialized commit envelope. The package-ground-truth finding and mixed-version
 behavior are documented in

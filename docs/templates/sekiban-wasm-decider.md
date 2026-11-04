@@ -10,7 +10,7 @@ the **public Sekiban WASM runtime container**
 - Source name (replaced by `-n`): `SekibanDcbDecider`
 - Package source tree: `templates/Sekiban.Dcb.WasmRuntime.Templates/`
 
-The generated Domain pins `Sekiban.Dcb.WithoutResult` `10.22.0`, while the
+The generated Domain pins `Sekiban.Dcb.WithoutResult` `10.23.4`, while the
 generated AppHost pins `Sekiban.Dcb.WasmRuntime.Aspire` `1.0.0-preview.7`.
 These are package dependencies; the independently released runtime container
 default remains the registry-verified `1.0.0-preview.7` image.
