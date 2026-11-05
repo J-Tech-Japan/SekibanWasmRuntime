@@ -9,8 +9,8 @@
 // monorepo). If the language's toolchain (cargo/go/swift/moon) is not
 // installed, the guard run is skipped and the language is reported as
 // tree-verified only, per the packet's escape hatch. rust and ts are
-// additionally REQUIRED to have their guard PASS (rust's guard live-compiles
-// against already-published crates.io crates; ts's guard is a static check);
+// additionally REQUIRED to have their guard PASS (rust's guard proves no checkout
+// path leakage and live-compiles when sekiban-mv is on crates.io; ts's guard is static);
 // go/swift/moonbit guard failures are logged but do not fail the suite,
 // since those languages' published packages/tags are still pending
 // (SWR-G058/G061/G063/G065 follow-ups).

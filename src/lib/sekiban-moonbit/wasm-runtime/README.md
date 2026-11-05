@@ -34,7 +34,7 @@ The host-side counterpart is
 ## Runtime pairing
 
 `sekiban/sekiban-wasm-runtime` 0.1.x targets the public runtime container
-image `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3` and
+image `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.7` and
 implements the same guest ABI as the Rust `sekiban-wasm` 0.1.0 crate, the npm
 `@sekiban/as-wasm` package, and the Go/Swift SDKs — modules built with any of
 these SDKs run side by side on the same runtime image.

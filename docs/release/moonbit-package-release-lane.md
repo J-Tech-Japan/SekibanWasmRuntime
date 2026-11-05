@@ -115,7 +115,7 @@ Consumer-surfaced fixes (SWR-G065), both in
 ## Compatibility
 
 MoonBit SDK 0.1.x pairs with runtime image
-`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3` and speaks
+`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.7` and speaks
 the same guest ABI (wasm-runtime) and serialized HTTP contract (client) as
 the Rust 0.1.0 crates — see `sdk-runtime-compatibility.md`. The MoonBit
 consumer sample against the public container is SWR-G065 (above).

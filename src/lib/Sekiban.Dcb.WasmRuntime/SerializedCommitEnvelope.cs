@@ -225,10 +225,24 @@ public static class SerializedCommitEnvelope
             "malformed_commit_envelope",
             $"Serialized commit envelope is not well-formed ({reason}).");
 
+    /// <summary>
+    ///     Maps upstream DCB 10.22+ discriminator descriptors onto the host-local names exercised by SWR-G087
+    ///     conformance and contract tests (<c>AliasCollectionMember</c>, not <c>AliasedCollectionMember</c>).
+    /// </summary>
+    private static string DescribeDcbShapeError(SerializedCommitShapeError shapeError) =>
+        shapeError switch
+        {
+            SerializedCommitShapeError.AliasedCollectionMember => nameof(CollectionShapeError.AliasCollectionMember),
+            SerializedCommitShapeError.AmbiguousCollectionMemberCasing => nameof(CollectionShapeError.AmbiguousCollectionMember),
+            SerializedCommitShapeError.DuplicateCollectionMember => nameof(CollectionShapeError.AmbiguousCollectionMember),
+            SerializedCommitShapeError.MissingOfficialCollectionMembers => nameof(CollectionShapeError.MissingCollectionMember),
+            _ => shapeError.ToString()
+        };
+
     private static SerializedCommitEnvelopeBindResult Malformed(SerializedCommitShapeError shapeError) =>
         Rejected(
             "malformed_commit_envelope",
-            $"Serialized commit envelope is not well-formed ({shapeError}).");
+            $"Serialized commit envelope is not well-formed ({DescribeDcbShapeError(shapeError)}).");
 
     private static SerializedCommitEnvelopeBindResult Rejected(string code, string message) =>
         new(null, new SerializedCommitEnvelopeError(code, message));

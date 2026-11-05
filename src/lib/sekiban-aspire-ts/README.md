@@ -38,7 +38,7 @@ const materializedViewDb = postgres.addDatabase("DcbMaterializedViewPostgres");
 
 await addSekibanWasmRuntime(builder, "runtime", {
   // image defaults to ghcr.io/j-tech-japan/sekiban-wasm-runtime-host,
-  // tag to SAMPLE_RUNTIME_IMAGE_TAG or 1.0.0-preview.3.
+  // tag to SAMPLE_RUNTIME_IMAGE_TAG or 1.0.0-preview.7.
   configDirectory: "/path/to/config",   // mounted read-only at /app/config
   modulesDirectory: "/path/to/modules", // mounted read-only at /app/modules
   wasmModulePath: "/app/modules/my-projector.wasm",
@@ -65,7 +65,7 @@ client side.
 ## Compatibility
 
 `@sekiban/aspire` 0.1.x targets the runtime container image
-`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3` and the Aspire
+`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.7` and the Aspire
 13.x TypeScript AppHost generated API surface.
 
 ## License

@@ -9,7 +9,7 @@
 /** Default public runtime image. */
 export const DEFAULT_RUNTIME_IMAGE = "ghcr.io/j-tech-japan/sekiban-wasm-runtime-host";
 /** Default verified public tag. */
-export const DEFAULT_RUNTIME_IMAGE_TAG = "1.0.0-preview.3";
+export const DEFAULT_RUNTIME_IMAGE_TAG = "1.0.0-preview.7";
 /**
  * Resolve the runtime image tag the same way the repository samples do:
  * the SAMPLE_RUNTIME_IMAGE_TAG environment variable wins, otherwise the

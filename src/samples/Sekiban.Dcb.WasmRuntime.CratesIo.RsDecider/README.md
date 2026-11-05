@@ -17,7 +17,7 @@ Sekiban package dependencies are exact crates.io requirements:
 sekiban-core = "=0.1.0"
 sekiban-derive = "=0.1.0"
 sekiban-wasm = "=0.1.0"
-sekiban-mv = "=0.1.0"
+sekiban-mv = "=0.1.1"
 sekiban-executor = "=0.1.0"
 ```
 
@@ -56,7 +56,7 @@ list query, executes a count query, and prints JSON smoke evidence.
 `scripts/smoke.sh` runs the full public-artifact end-to-end path: it builds the
 WASM module (if needed), starts an Aspire AppHost that provisions Postgres and
 the **public GHCR runtime container**
-(`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host`, default `1.0.0-preview.3`,
+(`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host`, default `1.0.0-preview.7`,
 override with `SAMPLE_RUNTIME_IMAGE_TAG`), runs the typed Rust client, and then
 confirms the materialized view caught up in `DcbMaterializedViewPostgres`.
 

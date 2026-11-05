@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Domains;
+using Sekiban.Dcb.WasmRuntime;
 
 namespace Sekiban.Dcb.WasmRuntime.Host;
 
@@ -24,7 +25,20 @@ public static class ManifestDomainTypes
             tagTypes: new AotTagTypes(),
             tagProjectorTypes: new ManifestTagProjectorTypes(manifest),
             tagStatePayloadTypes: new AotTagStatePayloadTypes(),
-            multiProjectorTypes: new AotMultiProjectorTypes(),
+            multiProjectorTypes: CreateMultiProjectorTypes(manifest),
             queryTypes: new AotQueryTypes(),
             jsonSerializerOptions: jsonOptions);
+
+    private static ManifestMultiProjectorTypes CreateMultiProjectorTypes(SekibanRuntimeManifest manifest)
+    {
+        var multiProjectorNames = manifest.QueryProjectors.Values
+            .Distinct(StringComparer.Ordinal)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var projectors = manifest.Projectors
+            .Where(projector => multiProjectorNames.Contains(projector.ProjectorName))
+            .Select(projector => (projector.ProjectorName, projector.ProjectorVersion));
+
+        return new ManifestMultiProjectorTypes(projectors);
+    }
 }

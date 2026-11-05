@@ -6,7 +6,7 @@ It runs SekibanWasmRuntime exactly as an external developer would:
 - **public NuGet packages** for the Decider domain (`Sekiban.Dcb.WithoutResult`,
   the same `10.2.x` contract line the runtime image is built on) — **not**
   repo-local library project references;
-- the **public GHCR runtime container** `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3`
+- the **public GHCR runtime container** `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.7`
   (the latest verified runtime-host tag — distinct from the public NuGet package
   versions, which are `1.0.0-preview.1`) — **not**
   `AddProject<...WasmRuntime.Host>`;
@@ -110,11 +110,11 @@ artifacts. The WASM module exports `mv_metadata` / `mv_initialize` / `mv_apply_e
 > shim.** The MV catch-up uses the same preview2 component path as `list-query`,
 > so it needs `libwasmtime_preview2_shim.so` (SWR-G042). The published
 > `1.0.0-preview.2` tag predates that fix and is shim-less. **The verified,
-> recommended public tag is `1.0.0-preview.3`** — a multi-arch, shim-carrying image
+> recommended public tag is `1.0.0-preview.7`** — a multi-arch, shim-carrying image
 > (digest `sha256:8bdebccd…`) that this sample now defaults to. The full smoke
 > passes end-to-end against it (`/health`, schema-aware `/ready`, command commit,
 > tag-state read, `list-query`, and Materialized View catch-up):
-> `SAMPLE_RUNTIME_IMAGE_TAG=1.0.0-preview.3 bash scripts/smoke.sh`. See
+> `SAMPLE_RUNTIME_IMAGE_TAG=1.0.0-preview.7 bash scripts/smoke.sh`. See
 > [`docs/release/runtime-host-preview-3-release-verification.md`](../../../docs/release/runtime-host-preview-3-release-verification.md)
 > (the public-artifact verification evidence) and
 > [`docs/release/runtime-host-preview-3-release-metadata.md`](../../../docs/release/runtime-host-preview-3-release-metadata.md)
@@ -128,10 +128,10 @@ artifacts. The WASM module exports `mv_metadata` / `mv_initialize` / `mv_apply_e
   `linux/amd64` + WASI SDK 29 (see `scripts/build-wasm.sh`). Ensure Docker is
   running; on Linux it can build natively with the WASI SDK on `PATH`.
 - **`docker pull` of the runtime image fails** → confirm
-  `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3` is reachable.
+  `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.7` is reachable.
 - **`no matching manifest for linux/arm64/v8`** on Apple Silicon → this only
   affects **older amd64-only** tags such as `1.0.0-preview.1`. The sample now
-  defaults to **`1.0.0-preview.3`** — the verified multi-arch + preview2-shim tag —
+  defaults to **`1.0.0-preview.7`** — the verified multi-arch + preview2-shim tag —
   so a plain pull works on arm64 with **no** `DOCKER_DEFAULT_PLATFORM=linux/amd64`
   override. Avoid `1.0.0-preview.2` (multi-arch but **shim-less**, so list-query /
   MV fail). Pin a specific published tag with `SAMPLE_RUNTIME_IMAGE_TAG=<tag>`;

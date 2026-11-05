@@ -8,13 +8,60 @@ for the version, changelog, migration-note, and compatibility evidence rules.
 
 ## Unreleased
 
-- Updated every `Sekiban.Dcb.*` package dependency and the matching Sekiban
-  source submodule from 10.7.0 to 10.8.0 for the `1.0.0-preview.3` package
-  refresh.
-- Re-verified the V1 serialized commit envelope against the published
-  Sekiban.Dcb 10.8.0 package. The wire shape is unchanged, while tag reservation
-  now treats an empty expected version as "expect empty"; the C# sample clients
-  therefore propagate the current tag version for updates and deletes.
+_No unreleased public-preview changes beyond the sections below._
+
+## 1.0.0-preview.7
+
+- **SWR-G089 / PR #296:** Retire the unpublished TypeScript host SDK package. TypeScript
+  samples, release smoke, generator metadata, and CI now consume the published
+  `@sekiban/dcb-core`, `@sekiban/dcb-domain`, and `@sekiban/dcb-client` `0.2.0`
+  packages with `createSekibanExecutor` and registry-backed transport tests.
+- **SWR-G092 / PR #298:** Extend the component WIT `apply-event` export with
+  `event-tags`, pass the ordered tag list through
+  `WasmtimeComponentProjectionInstance`, and forward it unchanged in the
+  TypeScript guest. Advance the meeting-room domain pin to `681da42`
+  (`@sekiban/dcb-domain@0.2.0`) with `TagProbeProjector` tag-fidelity evidence.
+- **SWR-G093 / PR #301:** Align machine-readable runtime-host HTTP failure
+  `code` values with the shared `@sekiban/dcb-client` `FAILURE_KINDS` spelling
+  (`timeout`, `unknown_outcome`, `projection_unavailable`).
+- **SWR-G095 / PR #305:** Add the explicit
+  `Sekiban:MaterializedView:InitializationMode` setting
+  (`Sekiban__MaterializedView__InitializationMode`; `VerifyAndExecute` or
+  `CreateOrEnsure`). Production stays `VerifyAndExecute`; only the dev AppHost,
+  the decider template, and the cargo-sekiban AppHosts opt in to
+  `CreateOrEnsure` for schema-less guests. The runtime host does not run MV DDL
+  at startup. The configured `IServiceIdProvider` is now re-registered after
+  storage registration, so the event store uses the configured ServiceId
+  instead of `default`.
+- **SWR-G096 / PR #306:** Re-pin TypeScript consumers to
+  `@sekiban/dcb-core`, `@sekiban/dcb-domain`, and `@sekiban/dcb-client` `0.3.0`.
+  The host does not emit `query_params_unsupported` and has no conditional-commit
+  route.
+- **SWR-G097 / PR #308:** Bump the e2e Playwright dependency to `1.64.1` so
+  chromium installs on Ubuntu 26.04 runners.
+- **DCB baseline 10.23.4:** Update every centrally managed `Sekiban.Dcb.*`
+  package dependency, align `submodules/Sekiban` to tag `dcb-v10.23.4`, and
+  raise `Microsoft.Orleans.*` to `10.3.1` plus `Microsoft.Extensions.*` to
+  `10.0.5` for the DCB 10.23 transitive graph. No data or schema migration is
+  required for 10.23.x. The local serialized-commit raw
+  gate (SWR-G087 / F-007) remains fail-closed on explicit-`null` collection
+  members despite the upstream 10.20.0+ presence gate.
+- **GHCR runtime-host catch-up:** Move release-lane defaults and consumer docs
+  to `ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.7` so the
+  image lane matches the NuGet preview.7 package line after operator publish.
+
+### Migration notes for 1.0.0-preview.7
+
+- **ServiceId:** events are now written and read under the configured ServiceId
+  (`SEKIBAN_SERVICE_ID`; the Aspire helper defaults to `sekiban-wasm-local`).
+  Rows written by earlier previews under ServiceId `default` are not visible
+  after upgrading. The host refuses `default` as its ServiceId at startup, so
+  there is no compatibility switch: start from a fresh store, or re-key the
+  existing rows to the configured ServiceId out of band before upgrading.
+- **Materialized views:** a guest that does not return a schema contract needs
+  `Sekiban__MaterializedView__InitializationMode=CreateOrEnsure` in local
+  development. Production deployments keep the default `VerifyAndExecute` and
+  provision MV tables and registry rows out of band.
 
 ## 1.0.0-preview.1
 

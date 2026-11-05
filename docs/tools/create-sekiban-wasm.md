@@ -71,7 +71,7 @@ for the flag explicitly.
 
 Every generated project also provisions the **public GHCR runtime
 container** (`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host`, default tag
-`1.0.0-preview.3`, override with `SAMPLE_RUNTIME_IMAGE_TAG`) through a
+`1.0.0-preview.7`, override with `SAMPLE_RUNTIME_IMAGE_TAG`) through a
 sample-owned Aspire AppHost, exactly like its source sample.
 
 ## Portability adjustments at pack time

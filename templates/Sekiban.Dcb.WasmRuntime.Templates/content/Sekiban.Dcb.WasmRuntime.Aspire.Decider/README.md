@@ -39,7 +39,7 @@ dotnet run --project SekibanDcbDecider.AppHost
 bash scripts/smoke.sh
 ```
 
-The runtime image tag defaults to `1.0.0-preview.3`; override with
+The runtime image tag defaults to `1.0.0-preview.7`; override with
 `SAMPLE_RUNTIME_IMAGE_TAG`.
 
 The smoke script exercises health/readiness, commit, tag-latest-sortable,

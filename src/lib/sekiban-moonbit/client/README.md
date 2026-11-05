@@ -29,7 +29,7 @@ guest-side projector SDK is
 ## Runtime pairing
 
 `sekiban/sekiban-client` 0.1.x targets the public runtime container image
-`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3`:
+`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.7`:
 
 ```bash
 docker run -p 8080:8080 \
@@ -37,7 +37,7 @@ docker run -p 8080:8080 \
   -e SEKIBAN_MANIFEST_PATH=/app/config/sekiban-manifest.json \
   -e WASM_MODULE_PATH=/app/modules/my-projector.wasm \
   -e "ConnectionStrings__SekibanDcb=<postgres connection string>" \
-  ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3
+  ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.7
 ```
 
 It speaks the same serialized HTTP contract as the Rust `sekiban-executor`

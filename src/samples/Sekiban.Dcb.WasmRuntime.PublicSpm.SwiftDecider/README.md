@@ -7,7 +7,7 @@ path-based package references (guarded by
 `scripts/verify-no-local-sekiban-paths.sh`) — imports only the fixed public
 products `SekibanWasm` / `SekibanMv`, and proves the four consumer checks
 against the **public GHCR runtime container**
-(`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3`):
+(`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.7`):
 
 1. **Command execution** — `WeatherForecastCreated` +
    `WeatherForecastLocationUpdated` commits through the serialized endpoint.

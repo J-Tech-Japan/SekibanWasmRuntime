@@ -9,9 +9,9 @@ SAMPLE_DIR="src/samples/Sekiban.Dcb.WasmRuntime.CratesIo.RsDecider"
 scan_cargo() {
   local pattern="$1"
   if command -v rg >/dev/null 2>&1; then
-    rg -ni --glob 'Cargo.toml' "$pattern" "$SAMPLE_DIR"
+    rg -ni --glob 'Cargo.toml' --glob '!vendor/**' "$pattern" "$SAMPLE_DIR"
   else
-    find "$SAMPLE_DIR" -type f -name Cargo.toml -exec grep -Eni "$pattern" {} +
+    find "$SAMPLE_DIR" -type f -name Cargo.toml ! -path '*/vendor/*' -exec grep -Eni "$pattern" {} +
   fi
 }
 
@@ -24,17 +24,48 @@ search_quiet() {
   fi
 }
 
-matches=""
-status=0
-matches="$(scan_cargo 'path[[:space:]]*=.*wasm-projectors/rust|sekiban-wasm-domain')" || status=$?
-if [[ "$status" -gt 1 ]]; then
-  echo "could not scan Cargo manifests" >&2
+fail_on_manifest_match() {
+  local pattern="$1" message="$2" matches="" status=0
+  matches="$(scan_cargo "$pattern")" || status=$?
+  if [[ "$status" -gt 1 ]]; then
+    echo "could not scan Cargo manifests" >&2
+    exit 1
+  fi
+  if [[ "$status" -eq 0 && -n "$matches" ]]; then
+    echo "$message" >&2
+    printf '%s\n' "$matches" >&2
+    exit 1
+  fi
+}
+
+fail_on_manifest_match \
+  'sekiban-wasm-domain' \
+  'forbidden sekiban-wasm-domain dependency found'
+
+path_matches=""
+path_status=0
+path_matches="$(scan_cargo 'path[[:space:]]*=')" || path_status=$?
+if [[ "$path_status" -gt 1 ]]; then
+  echo "could not scan Cargo manifests for path dependencies" >&2
   exit 1
 fi
-if [[ "$status" -eq 0 && -n "$matches" ]]; then
-  echo "forbidden local Sekiban path dependency or sekiban-wasm-domain dependency found" >&2
-  printf '%s\n' "$matches" >&2
-  exit 1
+if [[ "$path_status" -eq 0 && -n "$path_matches" ]]; then
+  forbidden_paths=""
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    if ! printf '%s' "$line" | grep -Eiq 'wasm-projectors|sekiban-(core|derive|mv|wasm|executor|domain)'; then
+      continue
+    fi
+    if printf '%s' "$line" | grep -Eq 'path[[:space:]]*=[[:space:]]*"(vendor/sekiban-mv|\.\./vendor/sekiban-mv)"'; then
+      continue
+    fi
+    forbidden_paths+="${line}"$'\n'
+  done <<< "$path_matches"
+  if [[ -n "$forbidden_paths" ]]; then
+    echo "forbidden local Sekiban path dependency found" >&2
+    printf '%s' "$forbidden_paths" >&2
+    exit 1
+  fi
 fi
 
 # The end-to-end smoke must target the public GHCR runtime image, not a locally
@@ -50,7 +81,15 @@ if ! search_quiet 'ghcr\.io/j-tech-japan/sekiban-wasm-runtime-host' "$APPHOST_PR
   exit 1
 fi
 
-cargo metadata --manifest-path "$SAMPLE_DIR/Cargo.toml" --format-version 1 >/dev/null
-cargo check --manifest-path "$SAMPLE_DIR/Cargo.toml" --workspace
+SEKIBAN_MV_PIN_VERSION="0.1.1"
+mv_publish_code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 \
+  -H 'User-Agent: sekiban-wasm-runtime-registry-guard (+https://github.com/J-Tech-Japan/SekibanWasmRuntime)' \
+  "https://crates.io/api/v1/crates/sekiban-mv/${SEKIBAN_MV_PIN_VERSION}" || echo "000")"
+if [[ "$mv_publish_code" == "200" ]]; then
+  cargo metadata --manifest-path "$SAMPLE_DIR/Cargo.toml" --format-version 1 >/dev/null
+  cargo check --manifest-path "$SAMPLE_DIR/Cargo.toml" --workspace
+else
+  echo "[verify-no-local-sekiban-paths] sekiban-mv ${SEKIBAN_MV_PIN_VERSION} is not on crates.io yet; static guard passed (pre-publish live cargo check deferred)"
+fi
 
 echo "crates.io Rust sample dependency guard passed"

@@ -15,7 +15,7 @@ public sealed class SekibanWasmRuntimeOptions
     public string Image { get; set; } = "ghcr.io/j-tech-japan/sekiban-wasm-runtime-host";
 
     /// <summary>Runtime image tag. Defaults to the verified public preview tag.</summary>
-    public string Tag { get; set; } = "1.0.0-preview.3";
+    public string Tag { get; set; } = "1.0.0-preview.7";
 
     /// <summary>
     /// Host directory bind-mounted read-only to <c>/app/config</c> (runtime manifest).

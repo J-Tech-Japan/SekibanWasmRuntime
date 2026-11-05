@@ -246,7 +246,7 @@ docker buildx imagetools inspect ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:
 
 Preview 2 (`1.0.0-preview.2`) is multi-arch but **shim-less** (it predates the
 WASI preview2 shim fix), so `list-query` / materialized-view paths fail against
-it — do not recommend it. **Use `1.0.0-preview.3` — the verified, recommended
+it — do not recommend it. **Use `1.0.0-preview.7` — the verified, recommended
 public runtime tag** (multi-arch + preview2 shim). It is published as a
 `linux/amd64` + `linux/arm64` manifest list (digest `sha256:8bdebccd…`), both
 images carry `/app/libwasmtime.so` **and** `/app/libwasmtime_preview2_shim.so`,

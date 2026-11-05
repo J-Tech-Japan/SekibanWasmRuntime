@@ -87,7 +87,7 @@ A complete projector built on this package lives in the repository at
 ## Compatibility
 
 `@sekiban/as-wasm` 0.1.x targets the Sekiban WASM Runtime host image
-`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3` and implements
+`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.7` and implements
 the same guest ABI (alloc/dealloc string marshalling and the `WasmMv*`
 materialized-view statement protocol) that the Rust `sekiban-wasm` /
 `sekiban-mv` 0.1.0 crates implement.

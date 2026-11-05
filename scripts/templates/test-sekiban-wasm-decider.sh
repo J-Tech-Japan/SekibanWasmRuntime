@@ -64,9 +64,14 @@ if [[ -n "${TEMPLATE_TEST_PACKAGE_VERSION:-}" ]]; then
   log "using template package version override ${TEMPLATE_TEST_PACKAGE_VERSION}"
 fi
 
-log "packing $PACKAGE_ID and Sekiban.Dcb.WasmRuntime.Aspire"
+# Generated AppHosts pin Sekiban.Dcb.WasmRuntime.Aspire to the lane package version
+# (currently 1.0.0-preview.7). Until that version is on NuGet, pack it locally at the
+# same version the template expects so restore/build does not hit NU1102.
+ASPIRE_PACK_VERSION="${TEMPLATE_TEST_ASPIRE_PACKAGE_VERSION:-${RUNTIME_PACKAGE_VERSION:-1.0.0-preview.7}}"
+
+log "packing $PACKAGE_ID and Sekiban.Dcb.WasmRuntime.Aspire@${ASPIRE_PACK_VERSION}"
 dotnet pack "$TEMPLATE_PROJ" -c Release -o "$PKG_DIR" --nologo "${TEMPLATE_PACK_ARGS[@]+"${TEMPLATE_PACK_ARGS[@]}"}" >/dev/null || fail "template pack failed"
-dotnet pack "$ASPIRE_PROJ" -c Release -o "$PKG_DIR" --nologo >/dev/null || fail "Aspire package pack failed"
+dotnet pack "$ASPIRE_PROJ" -c Release -o "$PKG_DIR" --nologo "-p:Version=${ASPIRE_PACK_VERSION}" >/dev/null || fail "Aspire package pack failed"
 
 TEMPLATE_NUPKG="$(ls "$PKG_DIR"/$PACKAGE_ID.*.nupkg | head -1)"
 [[ -s "$TEMPLATE_NUPKG" ]] || fail "no template nupkg produced"

@@ -7,7 +7,10 @@ the validated bytes, so replacing the configured path between validation and exe
 switch the module under test.
 
 The versioned boundary is `sekiban-wasm-mv/1`. The only capability currently accepted is
-`query-rows`. Metadata and the deployment manifest must converge on the exact set of
+`query-rows`. Rust guests must emit both fields from the WASM `mv_metadata` export, not
+only from the deployment manifest: crates.io `sekiban-mv` `0.1.0` omitted
+`abiVersion`/`capabilities` in the export payload, so registry consumers must pin
+`sekiban-mv = "=0.1.1"` (or newer) after that patch release is published. Metadata and the deployment manifest must converge on the exact set of
 `(viewName, viewVersion)` identities and the exact order-insensitive set of logical tables. Empty,
 duplicate, missing, extra, malformed, or unsupported identities are rejected before worker,
 grain, database, or event work starts. Core modules are hashed as-is; component artifacts are

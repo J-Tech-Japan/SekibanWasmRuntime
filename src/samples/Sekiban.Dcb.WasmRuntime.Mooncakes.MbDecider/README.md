@@ -5,7 +5,7 @@ its committed `moon.mod.json` manifests declare `sekiban/sekiban-wasm-runtime`
 and `sekiban/sekiban-client` as **mooncakes.io registry dependencies** — no
 local path resolution (guarded by `scripts/verify-no-local-sekiban-paths.sh`) —
 and it proves the four consumer checks against the **public GHCR runtime
-container** (`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.3`):
+container** (`ghcr.io/j-tech-japan/sekiban-wasm-runtime-host:1.0.0-preview.7`):
 
 1. **Command execution** — `WeatherForecastCreated` +
    `WeatherForecastLocationUpdated` commits through the typed
