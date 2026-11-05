@@ -55,8 +55,9 @@ _No unreleased public-preview changes beyond the sections below._
 - **ServiceId:** events are now written and read under the configured ServiceId
   (`SEKIBAN_SERVICE_ID`; the Aspire helper defaults to `sekiban-wasm-local`).
   Rows written by earlier previews under ServiceId `default` are not visible
-  after upgrading. Either set `SEKIBAN_SERVICE_ID=default` to keep reading them,
-  or start from a fresh store.
+  after upgrading. The host refuses `default` as its ServiceId at startup, so
+  there is no compatibility switch: start from a fresh store, or re-key the
+  existing rows to the configured ServiceId out of band before upgrading.
 - **Materialized views:** a guest that does not return a schema contract needs
   `Sekiban__MaterializedView__InitializationMode=CreateOrEnsure` in local
   development. Production deployments keep the default `VerifyAndExecute` and
