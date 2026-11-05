@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -7,7 +8,9 @@ using Microsoft.Extensions.Options;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.InMemory;
 using Sekiban.Dcb.MaterializedView;
+using Sekiban.Dcb.MaterializedView.Postgres;
 using Sekiban.Dcb.MaterializedView.Sqlite;
+using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.WasmRuntime.Host.MaterializedView;
 using SekibanWasm.Cs.Domain;
 using Xunit;
@@ -102,6 +105,86 @@ public sealed class WasmMaterializedViewWiringTests
 
         Assert.Contains(WasmMaterializedViewExtensions.InitializationModeConfigurationKey, exception.Message, StringComparison.Ordinal);
         Assert.Contains(WasmMaterializedViewExtensions.InitializationModeEnvironmentKey, exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RuntimeRegistration_ResolvesPostgresMvExecutorWhenInitializationModeIsUnset()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton<IEventStoreFactory>(
+            new InMemoryEventStoreFactory(DomainType.GetDomainTypes().EventTypes));
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:DcbMaterializedViewPostgres"] = "Host=unused;Database=unused"
+            })
+            .Build();
+
+        Assert.True(services.AddSekibanWasmMaterializedViewRuntime(
+            configuration,
+            "unused.wasm",
+            [new WasmMvApplyHostRegistration("ContractView", 1, ["main"])],
+            "tenant-a",
+            validatedModule: WasmMaterializedViewValidationResult.ForTesting("unused.wasm")));
+
+        using var provider = services.BuildServiceProvider();
+        var executor = provider.GetRequiredService<IMvExecutor>();
+        Assert.Equal(typeof(PostgresMvExecutor), executor.GetType());
+    }
+
+    [Fact]
+    public void RuntimeRegistration_InstallsCreateOrEnsureGateWithSiblingInterfacesAndHostedServices()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton<IEventStoreFactory>(
+            new InMemoryEventStoreFactory(DomainType.GetDomainTypes().EventTypes));
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:DcbMaterializedViewPostgres"] = "Host=unused;Database=unused",
+                [WasmMaterializedViewExtensions.InitializationModeConfigurationKey] = "CreateOrEnsure"
+            })
+            .Build();
+
+        Assert.True(services.AddSekibanWasmMaterializedViewRuntime(
+            configuration,
+            "unused.wasm",
+            [new WasmMvApplyHostRegistration("ContractView", 1, ["main"])],
+            "tenant-a",
+            validatedModule: WasmMaterializedViewValidationResult.ForTesting("unused.wasm")));
+
+        var applyHost = new ContractHost();
+        services.Replace(ServiceDescriptor.Singleton<IMvApplyHostFactory>(new ContractHostFactory(applyHost)));
+
+        using var provider = services.BuildServiceProvider();
+        var executor = provider.GetRequiredService<IMvExecutor>();
+        Assert.NotEqual(typeof(PostgresMvExecutor), executor.GetType());
+        Assert.IsAssignableFrom<IMvActivationExecutor>(executor);
+        Assert.IsAssignableFrom<IMvInitializationVerifier>(executor);
+        Assert.Contains(
+            executor.GetType().GetInterfaces(),
+            static iface => iface.Name == "IMvOrleansCatchUpExecutor");
+
+        Assert.Contains(
+            services,
+            descriptor =>
+                descriptor.ServiceType == typeof(IHostedService) &&
+                descriptor.ImplementationFactory is not null);
+        Assert.Contains(
+            services,
+            descriptor =>
+                descriptor.ServiceType == typeof(IHostedService) &&
+                descriptor.ImplementationType?.Name == "MaterializedViewGrainActivator");
+
+        var workerDescriptor = Assert.Single(
+            services,
+            descriptor =>
+                descriptor.ServiceType == typeof(IHostedService) &&
+                descriptor.ImplementationFactory is not null);
+        var worker = Assert.IsType<MvCatchUpWorker>(workerDescriptor.ImplementationFactory!(provider));
+        Assert.NotNull(worker);
     }
 
     [Fact]

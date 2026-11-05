@@ -161,6 +161,8 @@ public static class WasmMaterializedViewExtensions
         // so enable it once globally when MV is active. Safe even if callers also set it.
         DefaultTypeMap.MatchNamesWithUnderscores = true;
 
+        var initializationMode = ResolveMaterializedViewInitializationMode(configuration);
+
         services.AddSingleton(new WasmMaterializedViewRuntimeOptions
         {
             ModulePath = defaultModulePath,
@@ -176,7 +178,7 @@ public static class WasmMaterializedViewExtensions
             // Verify that contract first, then execute projector/checkpoint lifecycle DML through
             // the explicit enforced policy without acquiring any DDL ownership. CreateOrEnsure
             // remains an explicit compatibility opt-in for local AppHosts that choose it.
-            options.InitializationMode = ResolveMaterializedViewInitializationMode(configuration);
+            options.InitializationMode = initializationMode;
             options.SqlStatementPolicyMode = MvSqlStatementPolicyMode.Enforced;
             options.SqlStatementPolicy = new WasmMvSqlStatementPolicy();
         });
@@ -192,6 +194,22 @@ public static class WasmMaterializedViewExtensions
             configuration,
             connectionStringName: connectionStringName,
             registerHostedWorker: false);
+
+        if (initializationMode == MvInitializationMode.CreateOrEnsure)
+        {
+            services.Replace(ServiceDescriptor.Singleton<IMvExecutor>(sp =>
+            {
+                var inner = SekibanDcbMaterializedViewExtensions.CreateMaterializedViewExecutor<PostgresMvExecutor>(
+                    sp,
+                    connectionString,
+                    static (factory, registry, options, logger, connection) =>
+                        new PostgresMvExecutor(factory, registry, options, logger, connection),
+                    static (eventStore, serviceIdProvider, registry, options, logger, connection) =>
+                        new PostgresMvExecutor(eventStore, serviceIdProvider, registry, options, logger, connection));
+                return CreateOrEnsureMvInitializationGate.Wrap(inner);
+            }));
+        }
+
         // Use Sekiban's released service-bound worker contract. This immutable
         // binding is what scopes event-source reads and registry positions.
         services.AddSekibanDcbMaterializedViewWorkerForService(serviceId);

@@ -39,6 +39,13 @@ those keys; `VerifyOnly` and unknown values are rejected at registration. Local 
 templates. The public `AddSekibanWasmRuntime` helper does not set initialization mode. The runtime
 does not provision materialized-view schema at host startup.
 
+Under `CreateOrEnsure`, the host serializes `IMvExecutor.InitializeAsync` in the process so
+the catch-up worker and the Orleans grain activator cannot run `CREATE TABLE IF NOT EXISTS`
+at the same time. The gate does not issue DDL and does not change who sets the opt-in. It
+covers one process only; a second runtime process against the same fresh database can still
+race. That cross-process fix is [Sekiban issue 1362](https://github.com/J-Tech-Japan/Sekiban/issues/1362).
+When that ships, delete this gate. `VerifyAndExecute` does not install it.
+
 Event-store, Orleans, and the materialized-view worker share one configured ServiceId
 (`Sekiban:ServiceId` / `SEKIBAN_SERVICE_ID`). Rows previously written under the implicit ServiceId
 `default` (when storage registration overwrote the host provider) are not visible after this
