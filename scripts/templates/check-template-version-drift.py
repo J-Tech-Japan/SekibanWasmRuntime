@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 
-EXPECTED_DCB_VERSION = "10.23.4"
+EXPECTED_DCB_VERSION = "10.24.0"
 EXPECTED_RUNTIME_PACKAGE_VERSION = "1.0.0-preview.7"
 
 DOMAIN_PROJECT = Path(

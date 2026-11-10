@@ -35,7 +35,7 @@ from pathlib import Path
 
 path = Path(sys.argv[1])
 path.write_text(
-    path.read_text(encoding="utf-8").replace('Version="10.23.4"', 'Version="10.18.0"'),
+    path.read_text(encoding="utf-8").replace('Version="10.24.0"', 'Version="10.18.0"'),
     encoding="utf-8",
 )
 PY

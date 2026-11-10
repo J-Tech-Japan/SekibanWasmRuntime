@@ -8,7 +8,11 @@ for the version, changelog, migration-note, and compatibility evidence rules.
 
 ## Unreleased
 
-_No unreleased public-preview changes beyond the sections below._
+- **SWR-G099:** Centrally managed `Sekiban.Dcb.*` dependencies and the
+  `submodules/Sekiban` gitlink move to Sekiban.Dcb `10.24.0` / tag
+  `dcb-v10.24.0`; `Microsoft.Orleans.*` moves to `10.4.2`. The DCB public API
+  and event-data layout are unchanged, so no migration is required. The SWR
+  package line stays `1.0.0-preview.7`.
 
 ## 1.0.0-preview.7
 
