@@ -22,9 +22,17 @@ for the version, changelog, migration-note, and compatibility evidence rules.
   so a consumer that pins any of those three below `10.0.15` fails restore
   with NU1605. Sqlite and EF Relational are host and in-repo pins, not
   dependencies of the public nupkgs. The 10.24.2 multi-projection grain
-  fixes ship inside the library; this repository does not set
-  `GrainCollectionOptions.ActivationTimeout` or `FirstQueryCatchUpMaxWaitMs`.
+  fixes ship inside the library. This repository does not set
+  `FirstQueryCatchUpMaxWaitMs`.
   No event-data migration. The SWR package line stays `1.0.0-preview.7`.
+- **SWR-G101:** The runtime host sets `GrainCollectionOptions.ActivationTimeout`
+  to 5 minutes by default so a large multi-projection snapshot restore can
+  finish under Sekiban.Dcb 10.24.2. Override with a positive number of seconds
+  in `Sekiban:Orleans:ActivationTimeoutSeconds` or
+  `SEKIBAN_WASM_ORLEANS_ACTIVATION_TIMEOUT_SECONDS`; any other value stays
+  300. `CollectionAge` stays 5 minutes. `FirstQueryCatchUpMaxWaitMs` stays
+  unset. The SWR package line stays `1.0.0-preview.7`. Published `1.0.0-preview.7`
+  artifacts do not include this default.
 
 ## 1.0.0-preview.7
 

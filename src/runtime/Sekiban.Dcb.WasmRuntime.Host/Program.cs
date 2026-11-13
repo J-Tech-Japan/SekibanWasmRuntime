@@ -133,11 +133,14 @@ builder.UseOrleans(silo =>
     silo.AddMemoryGrainStorage("PubSubStore");
     silo.AddMemoryStreams("SekibanQueue");
     silo.AddMemoryStreams("EventStreamProvider");
-    // Deactivate idle grains faster to release WASM projection hosts sooner.
-    // Default is 120 minutes; 5 minutes is sufficient for benchmark workloads.
+    // Idle collection stays 5 minutes. Orleans 10.4.2's default CollectionAge is
+    // 15 minutes; this host keeps 5 so WASM projection hosts are released sooner.
+    // ActivationTimeout defaults to 5 minutes so a large multi-projection snapshot
+    // restore can finish under Sekiban.Dcb 10.24.2 (a cancelled restore no longer
+    // falls back to a full replay).
     silo.Configure<GrainCollectionOptions>(options =>
     {
-        options.CollectionAge = TimeSpan.FromMinutes(5);
+        RuntimeHostOrleansOptions.ApplyGrainCollectionOptions(options, builder.Configuration);
     });
 });
 
