@@ -19,7 +19,7 @@ runtime_image_version="${RUNTIME_IMAGE_VERSION:-$package_version}"
 
 python3 scripts/release/check-consumer-version-accuracy.py \
   --package-version "$package_version" \
-  --dcb-version 10.24.0 \
+  --dcb-version 10.24.2 \
   --runtime-image-version "$runtime_image_version" \
   --document "$fixture" \
   --skip-package-artifact >/dev/null
@@ -39,7 +39,7 @@ PY
 
 if output=$(python3 scripts/release/check-consumer-version-accuracy.py \
   --package-version "$package_version" \
-  --dcb-version 10.24.0 \
+  --dcb-version 10.24.2 \
   --runtime-image-version "$runtime_image_version" \
   --document "$fixture" \
   --skip-package-artifact 2>&1); then

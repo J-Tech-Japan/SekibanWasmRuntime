@@ -10,7 +10,7 @@ dotnet new install Sekiban.Dcb.WasmRuntime.Templates
 ```
 
 The generated app uses the current runtime package line `1.0.0-preview.7`. <!-- release-lane: current-package-version -->
-That line is on the current Sekiban.Dcb baseline `10.24.0`. <!-- release-lane: current-dcb-version -->
+The template source in this repository pins the current Sekiban.Dcb baseline `10.24.2`; the published `1.0.0-preview.7` template predates it (see `docs/release/sdk-runtime-compatibility.md`). <!-- release-lane: current-dcb-version -->
 
 ## sekiban-wasm-decider
 

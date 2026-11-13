@@ -8,11 +8,23 @@ for the version, changelog, migration-note, and compatibility evidence rules.
 
 ## Unreleased
 
-- **SWR-G099:** Centrally managed `Sekiban.Dcb.*` dependencies and the
-  `submodules/Sekiban` gitlink move to Sekiban.Dcb `10.24.0` / tag
-  `dcb-v10.24.0`; `Microsoft.Orleans.*` moves to `10.4.2`. The DCB public API
-  and event-data layout are unchanged, so no migration is required. The SWR
-  package line stays `1.0.0-preview.7`.
+- **SWR-G100:** Centrally managed `Sekiban.Dcb.*` dependencies and the
+  `submodules/Sekiban` gitlink move to Sekiban.Dcb `10.24.2`, peeled commit
+  `81a2c5988e46f02f9a921d215572b7b63b92adb0` (tag `dcb-v10.24.2`).
+  `Microsoft.Orleans.*` stays `10.4.2`. Direct central pins that otherwise
+  fail restore with NU1605 move to the 10.24.2 floor: `Microsoft.Data.Sqlite`,
+  `Microsoft.EntityFrameworkCore.Relational`,
+  `Microsoft.Extensions.DependencyInjection.Abstractions`,
+  `Microsoft.Extensions.Logging.Abstractions`, and
+  `Microsoft.Extensions.Options` from `10.0.5` to `10.0.15`.
+  Of those, the three `Microsoft.Extensions.*` packages are direct
+  dependencies of the public package `Sekiban.Dcb.WasmRuntime.Wasmtime`,
+  so a consumer that pins any of those three below `10.0.15` fails restore
+  with NU1605. Sqlite and EF Relational are host and in-repo pins, not
+  dependencies of the public nupkgs. The 10.24.2 multi-projection grain
+  fixes ship inside the library; this repository does not set
+  `GrainCollectionOptions.ActivationTimeout` or `FirstQueryCatchUpMaxWaitMs`.
+  No event-data migration. The SWR package line stays `1.0.0-preview.7`.
 
 ## 1.0.0-preview.7
 
