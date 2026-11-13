@@ -78,8 +78,10 @@ The current Sekiban.Dcb baseline is `10.24.2`. <!-- release-lane: current-dcb-ve
 | `Sekiban.Dcb.WasmRuntime.Remote` | `RemoteSekibanExecutor` — typed client over the serialized HTTP contract |
 | `Sekiban.Dcb.WasmRuntime.Aspire` | `AddSekibanWasmRuntime(name, opts)` for a C# Aspire AppHost |
 
-All three sit on Sekiban.Dcb `10.24.2`. `Sekiban.Cloud.Client 1.0.0-preview.1` is
-also on NuGet but predates that baseline.
+The repository source of all three sits on Sekiban.Dcb `10.24.2`; the published
+`1.0.0-preview.7` packages predate that baseline (see
+`docs/release/sdk-runtime-compatibility.md`). `Sekiban.Cloud.Client 1.0.0-preview.1`
+is also on NuGet and predates it too.
 
 ### Rust — crates.io
 

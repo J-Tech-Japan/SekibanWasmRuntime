@@ -28,8 +28,8 @@ Framework baseline: preview.7 aligns the NuGet/runtime-host lanes on
 `1.0.0-preview.7` with Sekiban.Dcb `10.23.4` (`dcb-v10.23.4`). The working tree
 now depends on Sekiban.Dcb `10.24.2` (peeled commit
 `81a2c5988e46f02f9a921d215572b7b63b92adb0`, tag `dcb-v10.24.2`); the package version stays
-`1.0.0-preview.7`. The C# scaffolding row tracks the generated Domain pin
-`10.24.2`. All
+`1.0.0-preview.7`. The published C# scaffolding template is on the preview.7
+baseline above; the working-tree generated Domain pin is `10.24.2`. All
 rows speak the V1
 serialized commit envelope. The package-ground-truth finding and mixed-version
 behavior are documented in
