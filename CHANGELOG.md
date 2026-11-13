@@ -33,6 +33,20 @@ for the version, changelog, migration-note, and compatibility evidence rules.
   300. `CollectionAge` stays 5 minutes. `FirstQueryCatchUpMaxWaitMs` stays
   unset. The SWR package line stays `1.0.0-preview.7`. Published `1.0.0-preview.7`
   artifacts do not include this default.
+- **SWR-G102:** The working tree raises `Microsoft.AspNetCore.OpenApi`
+  from `10.0.3` to `10.0.15`, which restores `Microsoft.OpenApi` `2.13.0`.
+  The six projects that were restoring `MessagePack` `2.5.192` through
+  `StreamJsonRpc` `2.22.23` take a direct `MessagePack` `2.5.307`
+  reference. One of them is the public project
+  `Sekiban.Dcb.WasmRuntime.Aspire`, so a pack of this working tree
+  depends on `MessagePack` `2.5.307` and a consumer that pins a lower
+  `MessagePack` fails restore with NU1605. Aspire stays `13.2.2`.
+  `Aspire.Hosting` `13.2.2`, `Aspire.Hosting.AppHost` `13.2.0`, and
+  `Aspire.Dashboard.Sdk.linux-arm64` `13.2.0` advisories remain.
+  DCB stays `10.24.2` and Orleans stays `10.4.2`. The runtime host
+  `Program.cs` is unchanged. The SWR package line stays
+  `1.0.0-preview.7`. This describes the working tree, not the packages
+  already published as `1.0.0-preview.7`.
 
 ## 1.0.0-preview.7
 
