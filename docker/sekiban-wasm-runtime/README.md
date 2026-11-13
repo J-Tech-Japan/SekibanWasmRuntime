@@ -102,6 +102,7 @@ Mount both read-only (`:ro`) for a local runtime; the host only reads them.
 | `ConnectionStrings__DcbMaterializedViewPostgres` | _(unset)_ | Postgres connection string for the materialized-view registry + state tables. The MV runtime activates only when the manifest declares `materializedViews`, the mode is `dual` / `materialized-view-only`, **and** this is set. MV reads are caller-owned (no host MV read API). |
 | `SEKIBAN_WASMTIME_STATIC_MEMORY_MAX_MB` | Wasmtime default | Upper bound (MB) for a Wasmtime instance's static linear-memory reservation. |
 | `KEEP_TAG_PROJECTORS` | `false` | Keep tag-only projectors active in the MultiProjection grain when `true`. |
+| `SEKIBAN_WASM_ORLEANS_ACTIVATION_TIMEOUT_SECONDS` | `300` | Orleans `GrainCollectionOptions.ActivationTimeout`, in seconds. Positive integers only; anything else stays 300. `Sekiban__Orleans__ActivationTimeoutSeconds` is the configuration-key form and wins when both are set. A value larger than the query response timeout (default 300, `SEKIBAN_QUERY_RESPONSE_TIMEOUT_SECONDS`) lets the caller time out first. |
 
 See [Memory Profiles](#memory-profiles) for how these settings map to small /
 standard / large local memory profiles.
@@ -136,6 +137,13 @@ clustering, grain storage, and streams are intentionally **in-memory** for local
 runtime use, so projection caches and grain state do not survive a container
 restart. This is the expected local-runtime assumption, not a limitation to work
 around.
+
+The multi-projection snapshot payload is not that grain record. It lives in
+the configured `IMultiProjectionStateStore` (Postgres by default, otherwise
+Sqlite or Cosmos). After a restart, and again after the 5-minute idle
+collection, `MultiProjectionGrain` restores it during activation.
+`GrainCollectionOptions.ActivationTimeout` bounds that restore. The default
+is 5 minutes.
 
 ## Memory Profiles
 
